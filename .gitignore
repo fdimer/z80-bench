@@ -1,0 +1,5 @@
+z80-bench-standalone.html
+*.com
+node_modules/
+.DS_Store
+Thumbs.db
