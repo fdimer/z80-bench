@@ -25,6 +25,7 @@ To get a single self-contained file instead, run `python build.py`, which writes
   - "Copy bytes to Hex tab" turns assembled code into an annotated hex listing.
 - **Memory**: 1–64 KB installed. Above the top, reads return FFh or mirror the installed memory. Bytes are editable in the memory view.
 - **Stepping**: one T-state, one instruction, or run at 5 Hz, 50 Hz, 1 kHz or full speed. Breakpoints are set by clicking the disassembly.
+- **Register stops**: click **stop** beside any register and give a hex value; the run halts at the end of the instruction that changes the register to that value, in every run mode.
 - **Bus timing**: waveform of /M1 /MREQ /IORQ /RD /WR /RFSH, plus address and data, for the current instruction.
 - **I/O**: OUT writes are shown as 8-LED latches with a log. You can set the value IN returns for each port.
 
