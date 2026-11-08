@@ -4,7 +4,7 @@
 import pathlib
 here = pathlib.Path(__file__).parent
 page = (here / 'z80-bench.html').read_text(encoding='utf-8')
-for name in ('z80core.js', 'z80asm.js'):
+for name in ('z80core.js', 'z80asm.js', 'z80sio.js'):
     tag = f'<script src="src/{name}"></script>'
     assert tag in page, tag
     page = page.replace(tag, '<script>\n' + (here / 'src' / name).read_text(encoding='utf-8') + '</script>')

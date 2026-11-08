@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Z80 Bench</title>
+<title>Z80 Bench (SIO branch)</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -268,11 +268,30 @@ table.mem tr { height: 20px; }
 .dbgfoot { display: flex; justify-content: flex-end; margin-top: 8px; }
 .dbgfoot button { padding: 4px 10px; font-size: 12.5px; }
 table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
+/* Z80 SIO/2 and terminal */
+.siostate { margin-top: 12px; display: grid; gap: 8px; font-size: 12.5px; }
+.siostate .chn { background: var(--panel2); border-radius: 4px; padding: 8px 10px; }
+.siostate .hd { font-weight: 600; margin-bottom: 3px; }
+.siostate .hd span { font-weight: 400; color: var(--muted); }
+.siostate .kv { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); line-height: 1.55; }
+.siostate .kv b { color: var(--ink); font-weight: 500; }
+.siostate .warnx { color: var(--warn); }
+.sioex { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.sioex select { padding: 4px 6px; font-size: 13px; }
+.sioex button { padding: 5px 12px; }
+.term { font-family: var(--font-mono); font-size: 13px; line-height: 1.35; background: #0e1316; color: #cdeec5; border-radius: 4px; padding: 8px 10px; height: 300px; overflow: auto; white-space: pre; outline: none; border: 2px solid #0e1316; cursor: text; }
+.term:focus { border-color: var(--sel); }
+.term .cur { background: #cdeec5; color: #0e1316; }
+.term:not(:focus) .cur { background: transparent; box-shadow: inset 0 0 0 1px #6f8f69; color: inherit; }
+.termbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 8px; }
+.termbar select { padding: 3px 6px; font-size: 12.5px; }
+.termbar button { padding: 4px 10px; font-size: 12.5px; }
+.termnote { font-size: 12px; color: var(--muted); font-family: var(--font-mono); margin-top: 6px; min-height: 1.3em; }
 </style>
 
 <div class="wrap">
   <header class="top">
-    <h1>Z80 Bench <span>· CPU and bus debugger</span></h1>
+    <h1>Z80 Bench <span>· CPU and bus debugger · SIO/2 branch</span></h1>
     <div id="status" class="status">Ready</div>
     <div class="counters">
       <span>T-states <b id="cntT">0</b></span>
@@ -346,6 +365,21 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <div class="vscroll" id="disView" tabindex="0" aria-label="Disassembly"><div class="vspace"><div class="vrows dis" id="dis"></div></div></div>
       </section>
 
+      <section class="panel" id="pSio">
+        <h2>Z80 SIO/2 <span class="aside" id="sioPorts">ports 80h–83h</span></h2>
+        <div class="chipwrap"><svg class="chip" id="sioChip" viewBox="0 0 380 540" role="group" aria-label="Z80 SIO/2 pinout"></svg></div>
+        <div class="legend"><span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z)</span><span><i class="li"></i>Input: click to toggle</span></div>
+        <div class="siostate" id="sioState"></div>
+        <div class="sioex">
+          <select id="sioExample" aria-label="Example program">
+            <option value="poll">Example: polled echo on channel A</option>
+            <option value="im2">Example: interrupt-driven echo (IM 2)</option>
+          </select>
+          <button id="sioLoadEx" type="button">Load example</button>
+        </div>
+        <p class="hint">Wired as on the RC2014: A0 (inverted) drives C/D and A1 drives B/A, so 80h is channel A control, 81h A data, 82h B control, 83h B data. The serial clocks /TxC and /RxC are tied to the system clock (7.3728 MHz on an RC2014), so ×64 mode gives 115,200 baud. /CTS and /DCD are inputs you can toggle; /INT joins the Z80's /INT line, and IEI is tied high.</p>
+      </section>
+
     </div>
 
     <div class="col">
@@ -360,6 +394,22 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         </div>
         <div class="vscroll" id="memView" tabindex="0" aria-label="Memory"><div class="vspace"><table class="mem vrows" id="mem"></table></div></div>
         <p class="hint">Scroll through all 64 KB. Click a byte to edit it. Blue marks the instruction being executed, amber marks bytes written by the last instruction, underline marks the top of the stack. With Follow PC ticked, each step brings the current instruction back into view; untick it to keep watching another area.</p>
+      </section>
+
+      <section class="panel" id="pTerm">
+        <h2>Terminal
+          <span class="aside seg" role="tablist" aria-label="SIO channel">
+            <button id="termA" role="tab" aria-selected="true">Channel A</button><button id="termB" role="tab" aria-selected="false">Channel B</button>
+          </span></h2>
+        <div class="term" id="term" tabindex="0" role="textbox" aria-label="Serial terminal: type to send to the SIO" aria-multiline="true"></div>
+        <div class="termnote" id="termNote"></div>
+        <div class="termbar">
+          <label class="inline" for="termEnter">Enter sends <select id="termEnter"><option value="cr">CR</option><option value="crlf">CR LF</option><option value="lf">LF</option></select></label>
+          <label class="inline" title="Treat a received CR as carriage return plus new line; a following LF is then ignored"><input type="checkbox" id="termCrNl" checked> CR starts a new line</label>
+          <label class="inline"><input type="checkbox" id="termFlow"> Wait for /RTS</label>
+          <button id="termClear" type="button">Clear screen</button>
+        </div>
+        <p class="hint">Click the terminal and type, or paste text. Characters reach RxD at the channel's line rate as the CPU runs, framed with the receiver's settings. Whatever the program sends on TxD appears here. Tick <b>Wait for /RTS</b> for hardware flow control: the terminal only sends while the channel's /RTS is low.</p>
       </section>
     </div>
 
@@ -435,6 +485,10 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <label class="inline" for="portVal">returns <input id="portVal" type="text" class="mono" value="5A" size="3" maxlength="2"></label>
           <button id="btnPort">Set input port</button>
         </div>
+        <div class="row">
+          <label class="inline"><input type="checkbox" id="sioOn" checked> Z80 SIO/2 fitted at ports</label>
+          <label class="inline" for="sioBase"><input id="sioBase" type="text" class="mono" value="80" size="3" maxlength="2">h–<span id="sioTop">83</span>h</label>
+        </div>
         <div class="msg" id="portList"></div>
       </section>
     </div>
@@ -443,6 +497,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 
 <script src="src/z80core.js"></script>
 <script src="src/z80asm.js"></script>
+<script src="src/z80sio.js"></script>
 <script>
 (() => {
 const $ = id => document.getElementById(id);
@@ -485,11 +540,15 @@ const portOut = new Map();
 const ioLog = [];
 let lastWrites = new Set();
 
+const sio = new Z80SIO();
+let sioOn = true, sioBase = 0x80, userVec = 0xFF;
+const sioSel = p => ((p & 2) | ((p & 1) ^ 1));         // RC2014: A1 -> B/A, A0 inverted -> C/D
+const isSio = p => sioOn && ((p & 0xFF) & 0xFC) === sioBase;
 const bus = {
   read(a) { if (a < memSize) return mem[a]; return mirror ? mem[a % memSize] : 0xFF; },
   write(a, v) { disDirty = true; if (a < memSize) mem[a] = v; else if (mirror) mem[a % memSize] = v; },
-  input(p) { const lo = p & 0xFF; const v = portIn.has(lo) ? portIn.get(lo) : inDefault; ioLog.push({ dir: 'IN', p, v, t: tTotal }); trimLog(); return v; },
-  output(p, v) { portOut.set(p & 0xFF, v); ioLog.push({ dir: 'OUT', p, v, t: tTotal }); trimLog(); }
+  input(p) { const lo = p & 0xFF; const v = isSio(lo) ? sio.read(sioSel(lo)) : portIn.has(lo) ? portIn.get(lo) : inDefault; ioLog.push({ dir: 'IN', p, v, t: tTotal }); trimLog(); return v; },
+  output(p, v) { if (isSio(p)) sio.write(sioSel(p & 0xFF), v); else portOut.set(p & 0xFF, v); ioLog.push({ dir: 'OUT', p, v, t: tTotal }); trimLog(); }
 };
 function trimLog() { if (ioLog.length > 60) ioLog.splice(0, ioLog.length - 60); }
 const cpu = new Z80(bus);
@@ -515,14 +574,14 @@ const PIN_TITLE = {
 const pinEls = {};
 const SVGNS = 'http://www.w3.org/2000/svg';
 function svg(tag, attrs, parent) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
-function buildChip() {
-  const s = $('chip');
+function buildChip() { drawChip($('chip'), PINS, 'Z80', 'CPU', ACTIVE_LOW, PIN_TITLE, pinClick, pinEls); }
+function drawChip(s, PINLIST, TITLE, SUB, AL, TIPS, onClick, els, NM) {
   const top = 26, pitch = 24, bx = 128, bw = 124, bh = 20 * pitch + 12;
   svg('rect', { class: 'body-rect', x: bx, y: top - 6, width: bw, height: bh, rx: 5 }, s);
   svg('path', { d: `M ${bx + bw / 2 - 12} ${top - 6} a 12 12 0 0 0 24 0`, fill: 'var(--bg)' }, s);
-  const t1 = svg('text', { class: 'chiptitle', x: bx + bw / 2, y: top + 228, 'text-anchor': 'middle', 'font-size': 26 }, s); t1.textContent = 'Z80';
-  const t2 = svg('text', { class: 'chipsub', x: bx + bw / 2, y: top + 248, 'text-anchor': 'middle' }, s); t2.textContent = 'CPU';
-  for (const [n, name, kind] of PINS) {
+  const t1 = svg('text', { class: 'chiptitle', x: bx + bw / 2, y: top + 228, 'text-anchor': 'middle', 'font-size': 26 }, s); t1.textContent = TITLE;
+  const t2 = svg('text', { class: 'chipsub', x: bx + bw / 2, y: top + 248, 'text-anchor': 'middle' }, s); t2.textContent = SUB;
+  for (const [n, name, kind] of PINLIST) {
     const left = n <= 20;
     const idx = left ? n - 1 : 40 - n;
     const y = top + idx * pitch + 6;
@@ -536,15 +595,16 @@ function buildChip() {
     const sv = svg('text', { class: 'sv', x: sx + 13, y: y + 0.5 }, g);
     const num = svg('text', { class: 'num', x: left ? bx + 7 : bx + bw - 7, y, 'text-anchor': left ? 'start' : 'end' }, g); num.textContent = n;
     const nm = svg('text', { class: 'nm', x: left ? sx - 8 : sx + 34, y, 'text-anchor': left ? 'end' : 'start' }, g);
-    if (ACTIVE_LOW.has(name)) { const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = name; }
+    if (NM && NM[name]) { nm.append(NM[name][0]); const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = NM[name][1]; }
+    else if (AL.has(name)) { const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = name; }
     else nm.textContent = name;
-    const title = svg('title', {}, g); title.textContent = PIN_TITLE[name] || (name + (kind === 'b' ? ' (data bus, bidirectional)' : kind === 'o' ? ' (output)' : ''));
+    const title = svg('title', {}, g); title.textContent = TIPS[name] || (name + (kind === 'b' ? ' (data bus, bidirectional)' : kind === 'o' ? ' (output)' : ''));
     if (kind === 'i') {
       g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
-      g.addEventListener('click', () => pinClick(name));
-      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pinClick(name); } });
+      g.addEventListener('click', () => onClick(name));
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(name); } });
     }
-    pinEls[name] = { g, sv, prev: null };
+    els[name] = { g, sv, prev: null };
   }
 }
 function pinClick(name) {
@@ -553,7 +613,7 @@ function pinClick(name) {
   const was = pins[k];
   pins[k] = was ? 0 : 1; pinSync();
   if (k === 'nmi' && was === 1) cpu.nmiPending = true;
-  if (k === 'int') cpu.intLine = pins.int === 0;
+  if (k === 'int') syncInt();
   if (k === 'reset' && pins.reset === 1) setStatus('Reset released: the CPU starts at 0000h on the next clock');
   else if (k === 'reset') { setStatus('/RESET is low: the CPU resets on the next clock', true); }
   else describeInputs();
@@ -632,17 +692,17 @@ function beginInstruction() {
   const pc = cpu.pc;
   const text = cpu.halted ? null : disasm(bus.read, pc).text;
   memBefore = memWatches.size ? memVals() : null;
-  const cyc = cpu.step();
+  const sReq = syncInt(); const cyc = cpu.step(); sioAfter(cyc, sReq);
   timeline = expand(cyc); ti = 0; lastTimeline = timeline;
   lastWrites = new Set(cyc.filter(c => c.k === 'MW').map(c => c.a));
   curInstr = { pc, text: cpu.lastEvent === 'NMI' ? 'NMI response → 0066h' : cpu.lastEvent === 'INT' ? 'Interrupt response (IM ' + pre.im + ')' : (cyc[0] && cyc[0].halt) ? 'HALT state (NOP fetch)' : text, tlen: timeline.length };
 }
 // one clock: returns 'mid' | 'done' | 'wait' | 'busreq' | 'reset'
-function tick() { const r = tick0(); if (pinWatches.size || busWatches.size) pinCheck(); return r; }
+function tick() { const r = tick0(); if (sioOn && !inReset) sio.clock(1); if (pinWatches.size || busWatches.size) pinCheck(); return r; }
 function tick0() {
   tTotal++;
   if (pins.reset === 0) {
-    cpu.reset(); cpu.intLine = pins.int === 0;
+    cpu.reset(); sio.reset(); syncInt();
     timeline = null; pre = null; waitT = null; curT = RESET_T; busReleased = false; inReset = true;
     lastTimeline = null; curInstr = null;
     return 'reset';
@@ -757,8 +817,8 @@ function frame(now) {
       }
       const pc = cpu.pc;
       const wb = watches.size ? regVals(cpu) : null, mb = memWatches.size ? memVals() : null;
-      const cyc = cpu.step();
-      tTotal += cycleT(cyc); instrCount++; last = cyc;
+      const sReq = syncInt(); const cyc = cpu.step(); sioAfter(cyc, sReq);
+      tTotal += cycleT(cyc); instrCount++; last = cyc; if (sioOn) sio.clock(cycleT(cyc));
       if (checkBoundary()) { finishFast(last, pc); return; }
       if (wb) { const wn = watchHit(wb); if (wn != null) { finishFast(last, pc); watchStop(wn); return; } }
       if (mb) { const mh = memHit(mb); if (mh) { finishFast(last, pc); watchStop(mh); return; } }
@@ -784,7 +844,7 @@ function finishFast(cyc, pc) {
 function disasmSafe(pc) { try { return disasm(bus.read, pc).text; } catch (e) { return '?'; } }
 function resetCPU() {
   if (running) stopRun();
-  cpu.reset(); cpu.intLine = pins.int === 0;
+  cpu.reset(); sio.reset(); syncInt();
   timeline = null; pre = null; waitT = null; lastTimeline = null; curInstr = null; lastWrites = new Set();
   curT = Object.assign({}, BASE, { a: 0, t: '–' });
   tTotal = 0; instrCount = 0; pinSync();
@@ -809,6 +869,7 @@ function pinValue(name) {
     case 'M1': return T.m1; case 'MREQ': return T.mreq; case 'IORQ': return T.iorq; case 'RD': return T.rd; case 'WR': return T.wr; case 'RFSH': return T.rfsh;
     case 'HALT': return inReset ? 1 : (regsView().halted ? 0 : 1);
     case 'BUSACK': return busReleased ? 0 : 1;
+    case 'INT': return pins.int === 0 || (sioOn && sio.intRequest()) ? 0 : 1;
     default: return pins[name.toLowerCase()];
   }
 }
@@ -967,7 +1028,7 @@ function renderIO() {
 function render() {
   const pcNow = regsView().pc, focus = pcNow !== lastFocusPc || tTotal !== lastFocusT;
   lastFocusPc = pcNow; lastFocusT = tTotal;
-  renderPins(); renderRegs(); renderStops(); renderDebug(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
+  renderPins(); renderRegs(); renderStops(); renderDebug(); renderSIO(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
   $('cntPC').textContent = h4(pcNow) + 'h';
   $('cntT').textContent = tTotal.toLocaleString('en-AU');
   $('cntI').textContent = instrCount.toLocaleString('en-AU');
@@ -1269,7 +1330,7 @@ function importFile(file) {
 }
 
 // ---------- events ----------
-function hexField(id, fn) { $(id).addEventListener('change', () => { const v = parseInt($(id).value, 16); if (!isNaN(v)) fn(v & 0xFF); $(id).value = h2(id === 'intVec' ? cpu.intVector : inDefault); render(); }); }
+function hexField(id, fn) { $(id).addEventListener('change', () => { const v = parseInt($(id).value, 16); if (!isNaN(v)) fn(v & 0xFF); $(id).value = h2(id === 'intVec' ? userVec : inDefault); render(); }); }
 function bind() {
   $('btnReset').onclick = resetCPU;
   $('btnClock').onclick = pulseClock;
@@ -1293,7 +1354,7 @@ function bind() {
   $('modeHex').onclick = () => setMode('hex');
   $('memSize').onchange = () => { memSize = +$('memSize').value; disDirty = true; render(); };
   $('unmapped').onchange = () => { mirror = $('unmapped').value === 'mirror'; disDirty = true; render(); };
-  hexField('intVec', v => { cpu.intVector = v; });
+  hexField('intVec', v => { userVec = v; });
   hexField('inDefault', v => { inDefault = v; });
   $('btnPort').onclick = () => {
     const p = parseInt($('portNo').value, 16), v = parseInt($('portVal').value, 16);
@@ -1326,7 +1387,7 @@ function bind() {
     inp.addEventListener('blur', () => commit(true));
   });
   document.addEventListener('keydown', e => {
-    if (e.target.closest('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.closest('input, textarea, select, .term') || e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key.toLowerCase();
     if (k === 'c') { e.preventDefault(); pulseClock(); }
     else if (k === 's') { e.preventDefault(); stepInstruction(); }
@@ -1334,7 +1395,7 @@ function bind() {
   });
   // snapshot register values at the start of each user action so changes highlight
   for (const id of ['btnClock', 'btnStep', 'btnRun']) $(id).addEventListener('pointerdown', snapshotPrevRegs, true);
-  document.addEventListener('keydown', e => { if (!e.target.closest('input, textarea, select') && 'csr'.includes(e.key.toLowerCase())) snapshotPrevRegs(); }, true);
+  document.addEventListener('keydown', e => { if (!e.target.closest('input, textarea, select, .term') && 'csr'.includes(e.key.toLowerCase())) snapshotPrevRegs(); }, true);
   $('chip').addEventListener('pointerdown', e => { if (e.target.closest('[data-pin="CLK"]')) snapshotPrevRegs(); }, true);
 }
 
@@ -1491,6 +1552,279 @@ for (const id of ['dbgAddr', 'dbgMemVal', 'dbgBusVal']) $(id).addEventListener('
 $('dbgList').addEventListener('click', e => { const b = e.target.closest('button[data-key]'); if (!b) return; b.classList.contains('x') ? dbgRemove(b.dataset.key) : dbgGo(b.dataset.key); });
 $('dbgClear').onclick = () => { breakpoints.clear(); afterBps.clear(); watches.clear(); memWatches.clear(); pinWatches.clear(); busWatches.clear(); hitReg = null; dbgHit = null; render(); };
 dbgFields();
+
+// ---------- Z80 SIO/2: interrupts, pins, register view, terminal ----------
+function syncInt() {
+  const s = sioOn && sio.intRequest();
+  cpu.intLine = pins.int === 0 || s;
+  cpu.intVector = s ? sio.vector() : userVec;   // the SIO is first in the daisy chain (IEI tied high)
+  return s;
+}
+function sioAfter(cyc, req) {
+  if (!sioOn) return;
+  if (req && cpu.lastEvent === 'INT') sio.ack();          // interrupt acknowledge: the request goes under service
+  for (const c of cyc) if (c.k === 'M1') sio.m1(c.d);     // watch opcode fetches for RETI (ED 4D)
+}
+const SIO_PINS = [
+  [1,'D1','b'],[2,'D3','b'],[3,'D5','b'],[4,'D7','b'],[5,'INT','o'],[6,'IEI','c'],[7,'IEO','o'],[8,'M1','c'],[9,'+5V','p'],[10,'W/RDYA','o'],
+  [11,'SYNCA','c'],[12,'RxDA','c'],[13,'RxCA','c'],[14,'TxCA','c'],[15,'TxDA','o'],[16,'DTRA','o'],[17,'RTSA','o'],[18,'CTSA','i'],[19,'DCDA','i'],[20,'CLK','c'],
+  [21,'RESET','c'],[22,'DCDB','i'],[23,'CTSB','i'],[24,'RTSB','o'],[25,'DTRB','o'],[26,'TxDB','o'],[27,'TxCB','c'],[28,'RxCB','c'],[29,'RxDB','c'],[30,'W/RDYB','o'],
+  [31,'GND','g'],[32,'RD','c'],[33,'C/D','c'],[34,'B/A','c'],[35,'CE','c'],[36,'IORQ','c'],[37,'D6','b'],[38,'D4','b'],[39,'D2','b'],[40,'D0','b']
+];
+const SIO_AL = new Set(['INT','M1','W/RDYA','SYNCA','RxCA','TxCA','DTRA','RTSA','CTSA','DCDA','RESET','DCDB','CTSB','RTSB','DTRB','TxCB','RxCB','W/RDYB','RD','CE','IORQ']);
+const SIO_NM = { 'B/A': ['B/', 'A'], 'C/D': ['C/', 'D'] };
+const SIO_TIPS = {
+  CTSA: 'Clear to send, channel A (input, active low). Click to toggle. With auto enables, the transmitter only sends while it is low.',
+  DCDA: 'Data carrier detect, channel A (input, active low). Click to toggle. With auto enables, the receiver only works while it is low.',
+  CTSB: 'Clear to send, channel B (input, active low). Click to toggle.', DCDB: 'Data carrier detect, channel B (input, active low). Click to toggle.',
+  INT: 'Interrupt request (open drain, active low), wired to the Z80 /INT', IEI: 'Interrupt enable in: tied high, so the SIO is first in the daisy chain', IEO: 'Interrupt enable out: low while the SIO has an interrupt pending or under service',
+  'W/RDYA': 'Wait/ready A (not emulated, stays high)', 'W/RDYB': 'Wait/ready B (not emulated, stays high)', SYNCA: 'Sync A: unused in asynchronous mode, pulled high',
+  RxCA: 'Receive clock A: tied to the system clock', TxCA: 'Transmit clock A: tied to the system clock', RxCB: 'Receive clock B: tied to the system clock', TxCB: 'Transmit clock B: tied to the system clock',
+  RxDA: 'Receive data A: driven by the terminal', RxDB: 'Receive data B: driven by the terminal', TxDA: 'Transmit data A', TxDB: 'Transmit data B',
+  'C/D': 'Control/data select (high = control), from A0 inverted', 'B/A': 'Channel select (high = B), from A1', CE: 'Chip enable from the address decoder: low for I/O cycles to the SIO ports'
+};
+const sioEls = {};
+function sioPinClick(name) {
+  const c = sio.ch[name.endsWith('A') ? 0 : 1], k = name.startsWith('CTS') ? 'cts' : 'dcd';
+  c.setInput(k, c[k] ? 0 : 1); syncInt(); render();
+}
+function sioPinValue(name) {
+  const T = curT, A = T.a === null || T.a === 'z' ? null : T.a;
+  if (/^D\d$/.test(name)) return pinValue(name);
+  const ch = sio.ch[/B$/.test(name) ? 1 : 0];
+  switch (name) {
+    case '+5V': return 'p'; case 'GND': return 'g';
+    case 'INT': return sioOn && sio.intRequest() ? 0 : 1; case 'IEI': return 1; case 'IEO': return sio.ieo();
+    case 'M1': case 'RD': case 'IORQ': return pinValue(name); case 'RESET': return pins.reset;
+    case 'CLK': case 'RxCA': case 'TxCA': case 'RxCB': case 'TxCB': return clk;
+    case 'CE': return T.iorq === 0 && T.m1 !== 0 && A !== null && isSio(A) ? 0 : 1;
+    case 'C/D': return A === null ? 'z' : (A & 1) ^ 1; case 'B/A': return A === null ? 'z' : (A >> 1) & 1;
+    case 'W/RDYA': case 'W/RDYB': case 'SYNCA': return 1;
+    case 'TxDA': case 'TxDB': return ch.txd(); case 'RxDA': case 'RxDB': return ch.rxd();
+    case 'RTSA': case 'RTSB': return ch.rtsPin(); case 'DTRA': case 'DTRB': return ch.dtrPin();
+    case 'CTSA': case 'CTSB': return ch.cts; case 'DCDA': case 'DCDB': return ch.dcd;
+  }
+  return 'z';
+}
+const SIO_CLOCK = 7372800;
+function sioDescribe(c) {
+  const par = c.wr[4] & 1 ? (c.wr[4] & 2 ? 'E' : 'O') : 'N', stop = c.stop();
+  const baud = Math.round(SIO_CLOCK / c.bitClocks());
+  const rxm = ['off', 'first char', 'all chars', 'all chars'][c.rxIntMode()];
+  const ints = [c.wr[1] & 0x18 ? 'Rx ' + rxm : '', c.wr[1] & 2 ? 'Tx' : '', c.wr[1] & 1 ? 'ext/status' : ''].filter(Boolean).join(', ') || 'none';
+  const pend = [];
+  const base = c.id * 3;
+  if (sio.pending(base)) pend.push(c.specialIP ? 'special Rx' : 'Rx'); if (sio.pending(base + 1)) pend.push('Tx'); if (sio.pending(base + 2)) pend.push('ext/status');
+  const ius = ['Rx', 'Tx', 'ext/status'].filter((n, k) => sio.ius & (1 << (base + k)));
+  const sh = c.txShift ? `${h2(c.txShift.v)}h, bit ${c.txShift.idx + 1} of ${c.txShift.bits.length}` : 'idle';
+  const used = (c.wr[3] & 1) || (c.wr[5] & 8);
+  const head = used ? `${c.rxBits()}${par}${stop} ×${c.mult()} = ${baud.toLocaleString('en-AU')} baud · Tx ${c.wr[5] & 8 ? 'on' : 'off'} · Rx ${c.wr[3] & 1 ? 'on' : 'off'}${c.autoEn() ? ' · auto enables' : ''}` : 'not in use: receiver and transmitter off';
+  return `<div class="chn"><div class="hd">Channel ${c.id ? 'B' : 'A'} <span>· ${head}</span>${used && c.syncMode() ? ' <span class="warnx">· sync mode selected (not emulated)</span>' : ''}</div>
+    <div class="kv">WR1 <b>${h2(c.wr[1])}</b> WR3 <b>${h2(c.wr[3])}</b> WR4 <b>${h2(c.wr[4])}</b> WR5 <b>${h2(c.wr[5])}</b> · RR0 <b>${h2(c.rr0())}</b> RR1 <b>${h2(c.rr1())}</b>${c.ptr ? ' · pointer <b>WR/RR' + c.ptr + '</b>' : ''}<br>
+    Rx FIFO <b>${c.fifo.length ? c.fifo.map(h2).join(' ') : 'empty'}</b>${c.errs & 0x20 ? ' <span class="warnx">overrun</span>' : ''} · Tx buffer <b>${c.txBuf === null ? 'empty' : h2(c.txBuf) + 'h'}</b> · shifting <b>${sh}</b><br>
+    Interrupts <b>${ints}</b> · pending <b>${pend.join(', ') || 'none'}</b>${ius.length ? ' · under service <b>' + ius.join(', ') + '</b>' : ''}</div></div>`;
+}
+let sioSig = '';
+function renderSIO() {
+  $('pSio').hidden = $('pTerm').hidden = !sioOn;
+  if (!sioOn) return;
+  for (const [, name] of SIO_PINS) {
+    const v = sioPinValue(name), el = sioEls[name];
+    const cls = v === 'z' ? 'vz' : v === 'p' ? 'vp' : v === 'g' ? 'vg' : v ? 'v1' : 'v0';
+    const changed = el.prev !== null && el.prev !== v && v !== 'p' && v !== 'g';
+    el.g.classList.remove('v1', 'v0', 'vz', 'vp', 'vg', 'changed'); el.g.classList.add(cls);
+    if (changed && !running) el.g.classList.add('changed');
+    el.sv.textContent = v === 'z' ? 'Z' : v === 'p' ? '+' : v === 'g' ? '⏚' : v; el.prev = v;
+  }
+  const sav = sio.ch[1].wr[1] & 4;
+  const html = sioDescribe(sio.ch[0]) + sioDescribe(sio.ch[1]) +
+    `<div class="kv">Vector WR2 <b>${h2(sio.wr2)}h</b>${sav ? ' · status affects vector · RR2 <b>' + h2(sio.rr2()) + 'h</b>' : ''} · /INT <b>${sio.intRequest() ? 'low (requesting, vector ' + h2(sio.vector()) + 'h)' : 'high'}</b> · IEO <b>${sio.ieo()}</b></div>`;
+  if (html !== sioSig) { sioSig = html; $('sioState').innerHTML = html; }
+  renderTerm();
+}
+
+// terminal: one screen per channel
+const TERM_COLS = 80, TERM_ROWS = 400;
+const terms = [0, 1].map(() => ({ lines: [''], row: 0, col: 0, dirty: true, cr: false }));
+let termCh = 0;
+function termPut(c, v) {
+  const T = terms[c]; T.dirty = true; v &= 0x7F;
+  const nl = () => { T.row++; if (T.row >= T.lines.length) T.lines.push(''); if (T.lines.length > TERM_ROWS) { T.lines.shift(); T.row--; } };
+  const crNl = $('termCrNl').checked, afterCr = T.cr; T.cr = v === 13;
+  if (v === 13) { T.col = 0; if (crNl) nl(); }
+  else if (v === 10) { if (!(crNl && afterCr)) nl(); }
+  else if (v === 8) T.col = Math.max(0, T.col - 1);
+  else if (v === 12) { T.lines = ['']; T.row = 0; T.col = 0; }
+  else if (v >= 32 && v < 127) {
+    if (T.col >= TERM_COLS) { nl(); T.col = 0; }
+    const l = T.lines[T.row].padEnd(T.col); T.lines[T.row] = l.slice(0, T.col) + String.fromCharCode(v) + l.slice(T.col + 1); T.col++;
+  }
+}
+sio.onTx = (c, v) => termPut(c, v);
+function renderTerm() {
+  const c = sio.ch[termCh], q = c.lineQ.length + (c.rxFrame ? 1 : 0);
+  const note = (q ? `${q} character${q === 1 ? '' : 's'} waiting to reach RxD${sio.flow[termCh] && c.rtsPin() ? ' (holding: /RTS is high)' : running ? '' : ' (they go out as the CPU runs)'}` : '') ;
+  if ($('termNote').textContent !== note) $('termNote').textContent = note;
+  const T = terms[termCh]; if (!T.dirty) return; T.dirty = false;
+  const el = $('term'), atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+  el.innerHTML = T.lines.map((l, r) => r === T.row ? esc(l.slice(0, T.col)) + '<span class="cur">' + esc(l[T.col] || ' ') + '</span>' + esc(l.slice(T.col + 1)) : esc(l)).join('\n');
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+function termSend(codes) { sio.ch[termCh].lineQ.push(...codes); render(); }
+function enterCodes() { return { cr: [13], crlf: [13, 10], lf: [10] }[$('termEnter').value]; }
+function setTermCh(c) {
+  termCh = c; $('termA').setAttribute('aria-selected', c === 0); $('termB').setAttribute('aria-selected', c === 1);
+  $('termFlow').checked = sio.flow[c]; terms[c].dirty = true; render();
+}
+$('termA').onclick = () => setTermCh(0); $('termB').onclick = () => setTermCh(1);
+$('termFlow').onchange = () => { sio.flow[termCh] = $('termFlow').checked; render(); };
+$('termClear').onclick = () => { terms[termCh] = { lines: [''], row: 0, col: 0, dirty: true, cr: false }; render(); };
+$('term').addEventListener('keydown', e => {
+  if (e.metaKey || (e.ctrlKey && e.key.toLowerCase() === 'v')) return;   // let paste through
+  let codes = null;
+  if (e.key === 'Enter') codes = enterCodes();
+  else if (e.key === 'Backspace') codes = [8];
+  else if (e.key === 'Tab') codes = [9];
+  else if (e.key === 'Escape') codes = [27];
+  else if (e.ctrlKey && /^[a-z]$/i.test(e.key)) codes = [e.key.toUpperCase().charCodeAt(0) & 0x1F];
+  else if (e.key.length === 1 && e.key.charCodeAt(0) < 128 && !e.ctrlKey && !e.altKey) codes = [e.key.charCodeAt(0)];
+  if (!codes) return;
+  e.preventDefault(); termSend(codes);
+});
+$('term').addEventListener('paste', e => {
+  e.preventDefault();
+  const s = (e.clipboardData || window.clipboardData).getData('text').replace(/\r\n?/g, '\n');
+  const codes = []; for (const ch of s) { if (ch === '\n') codes.push(...enterCodes()); else if (ch.charCodeAt(0) < 128) codes.push(ch.charCodeAt(0)); }
+  termSend(codes);
+});
+// settings
+function setSioBase() {
+  const v = parseInt($('sioBase').value, 16);
+  if (!isNaN(v)) sioBase = v & 0xFC;
+  $('sioBase').value = h2(sioBase); $('sioTop').textContent = h2(sioBase + 3);
+  $('sioPorts').textContent = `ports ${h2(sioBase)}h–${h2(sioBase + 3)}h`;
+  render();
+}
+$('sioBase').addEventListener('change', setSioBase);
+$('sioOn').onchange = () => { sioOn = $('sioOn').checked; syncInt(); window.dispatchEvent(new Event('resize')); render(); };
+// examples
+const SIO_EXAMPLES = {
+  poll: `; Z80 SIO/2 polled echo, RC2014 wiring
+; Channel A at 80h (control) / 81h (data), 115200 8N1 from a
+; 7.3728 MHz clock in x64 mode. Prints a greeting, then echoes
+; whatever you type in the terminal.
+SIOA_C  EQU  80h
+SIOA_D  EQU  81h
+        ORG  0
+start:  ld   sp,1000h
+        ld   hl,init        ; write the set-up table to channel A
+        ld   b,INITLEN
+        ld   c,SIOA_C
+        otir
+        ld   hl,hello
+greet:  ld   a,(hl)
+        or   a
+        jr   z,echo
+        call putc
+        inc  hl
+        jr   greet
+echo:   in   a,(SIOA_C)     ; RR0
+        bit  0,a            ; received character available?
+        jr   z,echo
+        in   a,(SIOA_D)
+        call putc
+        jr   echo
+
+putc:   push af
+txwait: in   a,(SIOA_C)     ; RR0
+        bit  2,a            ; transmit buffer empty?
+        jr   z,txwait
+        pop  af
+        out  (SIOA_D),a
+        ret
+
+init:   db   18h            ; WR0: channel reset
+        db   04h,0C4h       ; WR4: x64 clock, 1 stop bit, no parity
+        db   03h,0C1h       ; WR3: receive 8 bits, receiver on
+        db   05h,0EAh       ; WR5: DTR, transmit 8 bits, transmitter on, RTS
+INITLEN EQU  $-init
+hello:  db   "Hello from the Z80 SIO/2",13,10
+        db   "Type something and it comes back.",13,10,0
+`,
+  im2: `; Z80 SIO/2 interrupt-driven echo, interrupt mode 2
+; RC2014 wiring: channel A 80h/81h, channel B control 82h.
+; The SIO supplies the vector; with "status affects vector"
+; each of its eight conditions has its own entry in the table.
+SIOA_C  EQU  80h
+SIOA_D  EQU  81h
+SIOB_C  EQU  82h
+        ORG  0
+        jp   start
+
+        ORG  100h           ; vector table: I = 01h, WR2 = 00h
+vectors:
+        dw   ignore         ; 00h  B transmit buffer empty
+        dw   ignore         ; 02h  B external/status
+        dw   ignore         ; 04h  B receive character
+        dw   ignore         ; 06h  B special receive condition
+        dw   ignore         ; 08h  A transmit buffer empty
+        dw   ignore         ; 0Ah  A external/status
+        dw   a_rx           ; 0Ch  A receive character
+        dw   a_special      ; 0Eh  A special receive condition
+
+start:  ld   sp,1000h
+        ld   hl,init_a
+        ld   b,INITA_LEN
+        ld   c,SIOA_C
+        otir
+        ld   hl,init_b
+        ld   b,INITB_LEN
+        ld   c,SIOB_C
+        otir
+        ld   a,vectors/256
+        ld   i,a
+        im   2
+        ei
+main:   halt                ; sleep until the SIO interrupts
+        jr   main
+
+a_rx:   push af
+        in   a,(SIOA_D)     ; reading the character clears the request
+        out  (SIOA_D),a     ; echo it (fine at typing speed)
+        pop  af
+        ei
+        reti                ; the SIO sees ED 4D on the bus and ends service
+
+a_special:
+        push af
+        in   a,(SIOA_D)     ; discard the bad character
+        ld   a,30h          ; WR0: error reset
+        out  (SIOA_C),a
+        pop  af
+        ei
+        reti
+
+ignore: ei
+        reti
+
+init_a: db   18h            ; WR0: channel reset
+        db   04h,0C4h       ; WR4: x64, 1 stop bit, no parity
+        db   03h,0C1h       ; WR3: receive 8 bits, receiver on
+        db   05h,0EAh       ; WR5: DTR, transmit 8 bits, transmitter on, RTS
+        db   01h,18h        ; WR1: interrupt on every received character
+INITA_LEN EQU $-init_a
+init_b: db   18h            ; WR0: channel reset
+        db   02h,00h        ; WR2: vector base 00h
+        db   01h,04h        ; WR1: status affects vector
+INITB_LEN EQU $-init_b
+`
+};
+$('sioLoadEx').onclick = () => {
+  $('asmIn').value = SIO_EXAMPLES[$('sioExample').value]; $('loadAddr').value = '0000';
+  setMode('asm'); loadProgram(true);
+  $('term').focus();
+};
+drawChip($('sioChip'), SIO_PINS, 'SIO/2', 'Z80', SIO_AL, SIO_TIPS, sioPinClick, sioEls, SIO_NM);
 
 // ---------- collapsible side panels ----------
 for (const sec of document.querySelectorAll('.side .panel')) {
