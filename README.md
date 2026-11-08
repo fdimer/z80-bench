@@ -27,6 +27,9 @@ To get a single self-contained file instead, run `python build.py`, which writes
 - **Stepping**: one T-state, one instruction, or run at 5 Hz, 50 Hz, 1 kHz, 5 kHz, 10 kHz or full speed.
 - **Breakpoints**: click a line in the disassembly to cycle between *break at* (filled dot: stops before the instruction runs), *break after* (ring: stops once it has run, wherever it went next) and off.
 - **Register stops**: click **stop** beside any register and give a hex value; the run halts at the end of the instruction that changes the register to that value, in every run mode.
+- **Debug pane**: lists every breakpoint and stop, with a × to remove each and a click to jump to it. From it you can also add:
+  - *memory stops*: halt after the instruction that changes the byte at an address, or changes it to a given value
+  - *pin stops*: halt on the clock where a pin changes, goes high or goes low (while one is set, full speed runs clock by clock, so it is slower)
 - **Bus timing**: waveform of /M1 /MREQ /IORQ /RD /WR /RFSH, plus address and data, for the current instruction.
 - **I/O**: OUT writes are shown as 8-LED latches with a log. You can set the value IN returns for each port.
 
