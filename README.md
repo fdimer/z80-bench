@@ -25,7 +25,7 @@ To get a single self-contained file instead, run `python build.py`, which writes
   - "Copy bytes to Hex tab" turns assembled code into an annotated hex listing.
 - **Memory**: 1–64 KB installed. Above the top, reads return FFh or mirror the installed memory. Bytes are editable in the memory view.
 - **Stepping**: one T-state, one instruction, or run at 5 Hz, 50 Hz, 1 kHz, 5 kHz, 10 kHz or full speed.
-- **Breakpoints**: click a line in the disassembly to cycle between *break at* (filled dot: stops before the instruction runs), *break after* (ring: stops once it has run, wherever it went next) and off.
+- **Breakpoints**: click a line in the disassembly to cycle between *break at* (filled dot: stops before the instruction runs), *break after* (ring: stops when the PC leaves that address, so an instruction that repeats in place, such as LDIR or a jump to itself, runs to completion first) and off.
 - **Register stops**: click **stop** beside any register and give a hex value; the run halts at the end of the instruction that changes the register to that value, in every run mode.
 - **Debug pane**: lists every breakpoint and stop, with a × to remove each and a click to jump to it. From it you can also add:
   - *memory stops*: halt after the instruction that changes the byte at an address, or changes it to a given value
