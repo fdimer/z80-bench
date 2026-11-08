@@ -75,7 +75,7 @@ select, input[type=text] { font-family: var(--font-ui); font-size: 14px; backgro
 input.mono { font-size: 13px; }
 label.inline { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }
 
-.grid { display: grid; grid-template-columns: minmax(340px, 400px) minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.grid { display: grid; grid-template-columns: minmax(330px, 390px) minmax(0, 1fr) minmax(0, 1.15fr); gap: 14px; align-items: start; }
 @media (max-width: 1180px) { .grid { grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); } .col3 { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; } }
 @media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } .col3 { display: flex; align-items: stretch; } }
 .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -209,6 +209,18 @@ textarea.drop { border-color: var(--sel); box-shadow: 0 0 0 2px var(--sel-soft);
 .iolog div b { color: var(--ink); font-weight: 500; }
 .empty { color: var(--muted); font-size: 12.5px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* scrolling views */
+.vscroll { position: relative; overflow: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); overscroll-behavior: contain; }
+.vscroll .vspace { position: relative; }
+.vscroll .vrows { position: absolute; left: 0; top: 0; }
+#disView { height: 418px; } #memView { height: 344px; }
+table.mem td { padding: 1px 2px; } table.mem td.b { min-width: 20px; } table.mem td.b.gap { padding-left: 6px; } table.mem td.asc { padding-left: 8px; letter-spacing: 0; } table.mem td.ma { padding-right: 6px; }
+#disView .vrows { right: 0; }
+.dis-row { height: 22px; box-sizing: border-box; }
+.dis-row.gaprow { cursor: default; }
+table.mem tr { height: 20px; }
+.counters .pcv b { color: var(--sel); font-weight: 600; }
 </style>
 
 <div class="wrap">
@@ -217,6 +229,7 @@ textarea.drop { border-color: var(--sel); box-shadow: 0 0 0 2px var(--sel-soft);
     <div id="status" class="status">Ready</div>
     <div class="counters">
       <span>T-states <b id="cntT">0</b></span>
+      <span class="pcv">PC <b id="cntPC">0000h</b></span>
       <span>Instructions <b id="cntI">0</b></span>
     </div>
   </header>
@@ -251,21 +264,25 @@ textarea.drop { border-color: var(--sel); box-shadow: 0 0 0 2px var(--sel-soft);
         </dl>
         <p class="hint">Clicking CLK pulses one clock. /INT is level-sensitive, /NMI triggers on a falling edge. Holding /WAIT low inserts wait states; /BUSREQ low floats the buses at the end of the current machine cycle; /RESET low holds the CPU in reset.</p>
       </section>
+
+      <section class="panel">
+        <h2>I/O ports <span class="aside">last value written by OUT</span></h2>
+        <div class="latches" id="latches"></div>
+        <div class="iolog" id="iolog"></div>
+      </section>
     </div>
 
     <div class="col">
       <section class="panel">
-        <h2>Memory
-          <span class="aside" id="memInfo"></span></h2>
-        <div class="memhead">
-          <label class="inline" for="memFrom">From <input id="memFrom" type="text" class="mono" value="0000" maxlength="4"></label>
-          <button id="memPrev" aria-label="Previous 256 bytes">◂</button>
-          <button id="memNext" aria-label="Next 256 bytes">▸</button>
-          <button id="memPC">Show PC</button>
-          <button id="memSP">Show SP</button>
+        <h2>Registers <span class="aside" id="regNote"></span></h2>
+        <div class="regs" id="regs"></div>
+        <div class="flags" id="flags"><span class="lbl">F</span></div>
+        <div class="cpuinfo">
+          <span>IFF1 <b id="iff1">0</b></span>
+          <span>IFF2 <b id="iff2">0</b></span>
+          <label class="inline" for="imSel">IM <select id="imSel"><option>0</option><option>1</option><option>2</option></select></label>
+          <span>State <b id="cpuState">running</b></span>
         </div>
-        <div class="memgrid-wrap"><table class="mem" id="mem"></table></div>
-        <p class="hint">Click a byte to edit it. Blue marks the next instruction, amber marks bytes written by the last instruction, underline marks the top of the stack.</p>
       </section>
 
       <section class="panel">
@@ -274,13 +291,6 @@ textarea.drop { border-color: var(--sel); box-shadow: 0 0 0 2px var(--sel-soft);
         <div class="timing-wrap"><table class="timing" id="timing"></table></div>
       </section>
 
-      <section class="panel">
-        <h2>Disassembly <span class="aside">click a line to set a breakpoint</span></h2>
-        <div class="dis" id="dis"></div>
-      </section>
-    </div>
-
-    <div class="col col3">
       <section class="panel">
         <h2>Program
           <span class="aside seg" role="tablist" aria-label="Input format">
@@ -331,23 +341,25 @@ textarea.drop { border-color: var(--sel); box-shadow: 0 0 0 2px var(--sel-soft);
         </div>
         <div class="msg" id="portList"></div>
       </section>
+    </div>
 
+    <div class="col col3">
       <section class="panel">
-        <h2>Registers <span class="aside" id="regNote"></span></h2>
-        <div class="regs" id="regs"></div>
-        <div class="flags" id="flags"><span class="lbl">F</span></div>
-        <div class="cpuinfo">
-          <span>IFF1 <b id="iff1">0</b></span>
-          <span>IFF2 <b id="iff2">0</b></span>
-          <label class="inline" for="imSel">IM <select id="imSel"><option>0</option><option>1</option><option>2</option></select></label>
-          <span>State <b id="cpuState">running</b></span>
-        </div>
+        <h2>Disassembly <span class="aside">scroll to browse · click a line to set a breakpoint</span></h2>
+        <div class="vscroll" id="disView" tabindex="0" aria-label="Disassembly"><div class="vspace"><div class="vrows dis" id="dis"></div></div></div>
       </section>
 
       <section class="panel">
-        <h2>I/O ports <span class="aside">last value written by OUT</span></h2>
-        <div class="latches" id="latches"></div>
-        <div class="iolog" id="iolog"></div>
+        <h2>Memory
+          <span class="aside" id="memInfo"></span></h2>
+        <div class="memhead">
+          <label class="inline" for="memFrom">Go to <input id="memFrom" type="text" class="mono" value="0000" maxlength="4"></label>
+          <button id="memPC">Show PC</button>
+          <button id="memSP">Show SP</button>
+          <label class="inline"><input type="checkbox" id="memFollow" checked> Follow PC</label>
+        </div>
+        <div class="vscroll" id="memView" tabindex="0" aria-label="Memory"><div class="vspace"><table class="mem vrows" id="mem"></table></div></div>
+        <p class="hint">Scroll through all 64 KB. Click a byte to edit it. Blue marks the instruction being executed, amber marks bytes written by the last instruction, underline marks the top of the stack. With Follow PC ticked, each step brings the current instruction back into view; untick it to keep watching another area.</p>
       </section>
     </div>
   </div>
@@ -399,7 +411,7 @@ let lastWrites = new Set();
 
 const bus = {
   read(a) { if (a < memSize) return mem[a]; return mirror ? mem[a % memSize] : 0xFF; },
-  write(a, v) { if (a < memSize) mem[a] = v; else if (mirror) mem[a % memSize] = v; },
+  write(a, v) { disDirty = true; if (a < memSize) mem[a] = v; else if (mirror) mem[a % memSize] = v; },
   input(p) { const lo = p & 0xFF; const v = portIn.has(lo) ? portIn.get(lo) : inDefault; ioLog.push({ dir: 'IN', p, v, t: tTotal }); trimLog(); return v; },
   output(p, v) { portOut.set(p & 0xFF, v); ioLog.push({ dir: 'OUT', p, v, t: tTotal }); trimLog(); }
 };
@@ -823,35 +835,19 @@ function renderTiming() {
   $('tnow').innerHTML = curInstr ? `<b>${h4(curInstr.pc)}h  ${esc(curInstr.text)}</b> · ${where}` : where;
 }
 function esc(s) { return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
-function renderDis() {
+function renderMem(focus) {
   const s = regsView();
-  const pc = s.pc;
-  const lines = 18;
-  let rows = [], a = disStart, found = false;
-  for (let i = 0; i < lines; i++) { const d = disasm(bus.read, a); rows.push({ a, d }); if (a === pc) found = true; a = (a + d.len) & 0xFFFF; }
-  if (!found) {
-    disStart = pc; rows = []; a = pc;
-    for (let i = 0; i < lines; i++) { const d = disasm(bus.read, a); rows.push({ a, d }); a = (a + d.len) & 0xFFFF; }
-  } else {
-    const idx = rows.findIndex(r => r.a === pc);
-    if (idx > lines - 5) { disStart = rows[idx - 3].a; return renderDis(); }
-  }
-  const exec = midInstruction() ? pre.pc : -1;
-  $('dis').innerHTML = rows.map(({ a, d }) => {
-    const bytes = []; for (let i = 0; i < d.len; i++) bytes.push(h2(bus.read((a + i) & 0xFFFF)));
-    const unm = a >= memSize && !mirror;
-    const cls = ['dis-row', breakpoints.has(a) ? 'isbp' : '', a === exec ? 'exec' : (a === pc && exec < 0 ? 'pc' : '')].join(' ');
-    return `<div class="${cls}" data-a="${a}" tabindex="0" role="button" aria-label="Toggle breakpoint at ${h4(a)}h"><span class="bp"></span><span class="ad">${h4(a)}</span><span class="by">${bytes.join(' ')}</span><span class="mn${unm ? ' unm' : ''}">${esc(d.text)}${unm ? '  (no memory)' : ''}</span></div>`;
-  }).join('');
-}
-function renderMem() {
-  const s = regsView();
-  const tab = $('mem');
+  const view = $('memView');
+  view.firstElementChild.style.height = 4096 * MEM_ROW + 'px';
+  if (memPending !== null) { view.scrollTop = (memPending >> 4) * MEM_ROW; memPending = null; }
+  else if (focus && $('memFollow').checked) ensureVisible(view, s.pc >> 4, MEM_ROW);
   const pcSet = new Set();
   const d = disasm(bus.read, s.pc); for (let i = 0; i < d.len; i++) pcSet.add((s.pc + i) & 0xFFFF);
+  const first = Math.max(0, Math.floor(view.scrollTop / MEM_ROW) - 1);
+  const last = Math.min(4096, first + Math.ceil(view.clientHeight / MEM_ROW) + 3);
   let html = '';
-  for (let r = 0; r < 16; r++) {
-    const base = (memFrom + r * 16) & 0xFFFF;
+  for (let r = first; r < last; r++) {
+    const base = r * 16;
     html += `<tr><td class="ma">${h4(base)}</td>`;
     let asc = '';
     for (let c = 0; c < 16; c++) {
@@ -864,8 +860,8 @@ function renderMem() {
     }
     html += `<td class="asc">${esc(asc)}</td></tr>`;
   }
-  tab.innerHTML = html;
-  if (document.activeElement !== $('memFrom')) $('memFrom').value = h4(memFrom);
+  const tab = $('mem'); tab.style.top = first * MEM_ROW + 'px'; tab.innerHTML = html;
+  if (document.activeElement !== $('memFrom')) $('memFrom').value = h4(Math.floor(view.scrollTop / MEM_ROW) * 16);
   $('memInfo').textContent = (memSize / 1024) + ' KB installed';
 }
 function renderIO() {
@@ -880,9 +876,65 @@ function renderIO() {
   $('portList').textContent = pl ? 'Input ports: ' + pl + '  (click Set with an empty value to remove)' : '';
 }
 function render() {
-  renderPins(); renderRegs(); renderTiming(); renderDis(); renderMem(); renderIO();
+  const pcNow = regsView().pc, focus = pcNow !== lastFocusPc || tTotal !== lastFocusT;
+  lastFocusPc = pcNow; lastFocusT = tTotal;
+  renderPins(); renderRegs(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
+  $('cntPC').textContent = h4(pcNow) + 'h';
   $('cntT').textContent = tTotal.toLocaleString('en-AU');
   $('cntI').textContent = instrCount.toLocaleString('en-AU');
+}
+
+
+// ---------- scrolling memory and disassembly views ----------
+const MEM_ROW = 20, DIS_ROW = 22;
+const peekB = a => bus.read(a & 0xFFFF);
+const MAPPED = a => a < memSize || mirror;
+let disLines = [], disDirty = true, disBuiltAt = 0, lastFocusPc = -1, lastFocusT = -1, memPending = null;
+// linear disassembly of all mapped memory, re-aligned so the PC always starts a line
+function buildDis(pc) {
+  const L = [];
+  let a = 0;
+  while (a < 0x10000) {
+    if (!MAPPED(a)) { const s = a; while (a < 0x10000 && !MAPPED(a)) a++; L.push({ a: s, gap: a - s }); continue; }
+    let len = disasm(peekB, a).len;
+    if (pc > a && pc < a + len) { L.push({ a, len: pc - a, data: true }); a = pc; continue; }
+    if (a + len > 0x10000) len = 0x10000 - a;
+    L.push({ a, len }); a += len;
+  }
+  disLines = L; disDirty = false; disBuiltAt = performance.now();
+}
+function lineIndex(addr) { let lo = 0, hi = disLines.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (disLines[mid].a <= addr) lo = mid; else hi = mid - 1; } return lo; }
+function ensureVisible(view, idx, rowH) {
+  const top = idx * rowH;
+  if (top < view.scrollTop || top + rowH > view.scrollTop + view.clientHeight) view.scrollTop = Math.max(0, top - Math.round(view.clientHeight / 3));
+}
+function memScrollTo(addr) { memPending = addr & 0xFFFF; }
+function renderDis(focus) {
+  const pc = regsView().pc;
+  const stale = disDirty && (!running || performance.now() - disBuiltAt > 300);
+  if (!disLines.length || stale || (MAPPED(pc) && disLines[lineIndex(pc)].a !== pc)) buildDis(pc);
+  const view = $('disView');
+  view.firstElementChild.style.height = disLines.length * DIS_ROW + 'px';
+  if (focus) ensureVisible(view, lineIndex(pc), DIS_ROW);
+  const first = Math.max(0, Math.floor(view.scrollTop / DIS_ROW) - 2);
+  const last = Math.min(disLines.length, first + Math.ceil(view.clientHeight / DIS_ROW) + 5);
+  const exec = midInstruction() && pre ? pre.pc : -1;
+  let html = '';
+  for (let i = first; i < last; i++) {
+    const ln = disLines[i], a = ln.a;
+    if (ln.gap) {
+      const here = pc >= a && pc < a + ln.gap;
+      html += `<div class="dis-row gaprow${here ? ' pc' : ''}"><span class="bp"></span><span class="ad">${h4(a)}</span><span class="by"></span><span class="mn unm">no memory up to ${h4(a + ln.gap - 1)}h${here ? ' (PC is here)' : ''}</span></div>`;
+      continue;
+    }
+    const bytes = []; for (let k = 0; k < ln.len; k++) bytes.push(h2(peekB(a + k)));
+    const d = ln.data ? null : disasm(peekB, a);
+    const text = ln.data ? 'DB ' + bytes.map(b => b + 'h').join(',') : d.text;
+    const bad = d && (d.bad || d.text === 'NOP*');
+    const cls = ['dis-row', breakpoints.has(a) ? 'isbp' : '', a === exec ? 'exec' : (a === pc && exec < 0 ? 'pc' : '')].join(' ');
+    html += `<div class="${cls}" data-a="${a}" tabindex="-1" role="button" aria-label="Toggle breakpoint at ${h4(a)}h"><span class="bp"></span><span class="ad">${h4(a)}</span><span class="by">${bytes.join(' ')}</span><span class="mn${ln.data || bad ? ' unm' : ''}">${esc(text)}</span></div>`;
+  }
+  const rows = $('dis'); rows.style.top = first * DIS_ROW + 'px'; rows.innerHTML = html;
 }
 
 // ---------- loader ----------
@@ -967,7 +1019,7 @@ function loadChunks(chunks, note, tail) {
     c.bytes.forEach((v, i) => { const a = (c.addr + i) & 0xFFFF; if (a >= memSize) outside++; mem[a] = v; });
     total += c.bytes.length; ranges.push(h4(c.addr) + '–' + h4((c.addr + c.bytes.length - 1) & 0xFFFF));
   }
-  if ($('resetAfter').checked) { resetCPU(); cpu.pc = chunks[0].addr; disStart = cpu.pc; memFrom = chunks[0].addr & 0xFFF0; setStatus('Program loaded, CPU reset, PC = ' + h4(cpu.pc) + 'h'); }
+  if ($('resetAfter').checked) { resetCPU(); cpu.pc = chunks[0].addr; disStart = cpu.pc; memScrollTo(chunks[0].addr); disDirty = true; setStatus('Program loaded, CPU reset, PC = ' + h4(cpu.pc) + 'h'); }
   portOut.clear(); ioLog.length = 0;
   msg.className = outside ? 'msg err' : 'msg ok';
   msg.textContent = (note || '') + `Loaded ${total} byte${total === 1 ? '' : 's'} at ${ranges.join(', ')}.` + (outside ? ` ${outside} byte(s) fall above installed memory and won't be visible to the CPU; raise Installed memory in the System panel.` : '') + (tail || '');
@@ -1150,8 +1202,8 @@ function bind() {
   $('hexIn').addEventListener('input', () => { hexFromAsm = null; });
   $('modeAsm').onclick = () => setMode('asm');
   $('modeHex').onclick = () => setMode('hex');
-  $('memSize').onchange = () => { memSize = +$('memSize').value; render(); };
-  $('unmapped').onchange = () => { mirror = $('unmapped').value === 'mirror'; render(); };
+  $('memSize').onchange = () => { memSize = +$('memSize').value; disDirty = true; render(); };
+  $('unmapped').onchange = () => { mirror = $('unmapped').value === 'mirror'; disDirty = true; render(); };
   hexField('intVec', v => { cpu.intVector = v; });
   hexField('inDefault', v => { inDefault = v; });
   $('btnPort').onclick = () => {
@@ -1161,23 +1213,26 @@ function bind() {
     render();
   };
   $('imSel').onchange = () => { cpu.im = +$('imSel').value; render(); };
+  let scrollRaf = 0;
+  const onScroll = fn => () => { if (scrollRaf) return; scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; fn(); }); };
+  $('disView').addEventListener('scroll', onScroll(() => renderDis(false)));
+  $('memView').addEventListener('scroll', onScroll(() => renderMem(false)));
+  window.addEventListener('resize', onScroll(() => { renderDis(false); renderMem(false); }));
   $('dis').addEventListener('click', e => {
     const row = e.target.closest('.dis-row'); if (!row) return;
-    const a = +row.dataset.a; breakpoints.has(a) ? breakpoints.delete(a) : breakpoints.add(a); renderDis();
+    if (row.dataset.a === undefined) return; const a = +row.dataset.a; breakpoints.has(a) ? breakpoints.delete(a) : breakpoints.add(a); renderDis(false);
   });
   $('dis').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('.dis-row')) { e.preventDefault(); e.target.click(); } });
-  $('memFrom').addEventListener('change', () => { const v = parseInt($('memFrom').value, 16); if (!isNaN(v)) memFrom = v & 0xFFF0; renderMem(); });
-  $('memPrev').onclick = () => { memFrom = (memFrom - 256) & 0xFFFF; renderMem(); };
-  $('memNext').onclick = () => { memFrom = (memFrom + 256) & 0xFFFF; renderMem(); };
-  $('memPC').onclick = () => { memFrom = regsView().pc & 0xFFF0; renderMem(); };
-  $('memSP').onclick = () => { memFrom = regsView().sp & 0xFFF0; renderMem(); };
+  $('memFrom').addEventListener('change', () => { const v = parseInt($('memFrom').value.replace(/^\$/, ''), 16); if (!isNaN(v)) memScrollTo(v); renderMem(false); });
+  $('memPC').onclick = () => { memScrollTo(regsView().pc); renderMem(false); };
+  $('memSP').onclick = () => { memScrollTo(regsView().sp); renderMem(false); };
   $('mem').addEventListener('click', e => {
     const td = e.target.closest('td.b'); if (!td || td.classList.contains('un') || td.querySelector('input')) return;
     const a = +td.dataset.a;
     const inp = document.createElement('input'); inp.value = h2(bus.read(a)); inp.maxLength = 2; inp.setAttribute('aria-label', 'Byte at ' + h4(a) + 'h');
     td.textContent = ''; td.appendChild(inp); inp.focus(); inp.select();
     let done = false;
-    const commit = save => { if (done) return; done = true; const v = parseInt(inp.value, 16); if (save && !isNaN(v)) bus.write(a, v & 0xFF); render(); };
+    const commit = save => { if (done) return; done = true; const v = parseInt(inp.value, 16); if (save && !isNaN(v)) bus.write(a, v & 0xFF); disDirty = true; render(); };
     inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') commit(true); else if (ev.key === 'Escape') commit(false); });
     inp.addEventListener('blur', () => commit(true));
   });
