@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: pinout and program on the left, disassembly and system next, memory, then a collapsible column with registers and bus timing. */
+/* Layout: pinout and program on the left, disassembly next, memory, then a collapsible column with registers, bus timing and system. */
 :root {
   --bg: #e7eaee;
   --panel: #f8f9fb;
@@ -305,37 +305,6 @@ table.mem tr { height: 20px; }
         <div class="vscroll" id="disView" tabindex="0" aria-label="Disassembly"><div class="vspace"><div class="vrows dis" id="dis"></div></div></div>
       </section>
 
-      <section class="panel">
-        <h2>System</h2>
-        <div class="fieldgrid">
-          <label for="memSize">Installed memory</label>
-          <select id="memSize">
-            <option value="1024">1 KB (0000–03FF)</option>
-            <option value="2048">2 KB (0000–07FF)</option>
-            <option value="4096" selected>4 KB (0000–0FFF)</option>
-            <option value="8192">8 KB (0000–1FFF)</option>
-            <option value="16384">16 KB (0000–3FFF)</option>
-            <option value="32768">32 KB (0000–7FFF)</option>
-            <option value="49152">48 KB (0000–BFFF)</option>
-            <option value="65536">64 KB (0000–FFFF)</option>
-          </select>
-          <label for="unmapped">Above top of memory</label>
-          <select id="unmapped">
-            <option value="ff">Reads return FFh, writes ignored</option>
-            <option value="mirror">Mirrors installed memory</option>
-          </select>
-          <label for="intVec">Data bus during INT ack</label>
-          <input id="intVec" type="text" class="mono" value="FF" size="3" maxlength="2" title="Byte the interrupting device places on the bus. IM 0: an RST opcode. IM 2: low byte of the vector table address.">
-          <label for="inDefault">IN reads return</label>
-          <input id="inDefault" type="text" class="mono" value="FF" size="3" maxlength="2" title="Byte returned by IN for ports with no value set below">
-        </div>
-        <div class="row">
-          <label class="inline" for="portNo">Port <input id="portNo" type="text" class="mono" value="02" size="3" maxlength="2"></label>
-          <label class="inline" for="portVal">returns <input id="portVal" type="text" class="mono" value="5A" size="3" maxlength="2"></label>
-          <button id="btnPort">Set input port</button>
-        </div>
-        <div class="msg" id="portList"></div>
-      </section>
     </div>
 
     <div class="col">
@@ -370,6 +339,38 @@ table.mem tr { height: 20px; }
         <h2>Bus timing <button class="fold" type="button" aria-expanded="true" title="Collapse">»</button><span class="aside">current instruction</span></h2>
         <div class="tnow" id="tnow">–</div>
         <div class="timing-wrap"><table class="timing" id="timing"></table></div>
+      </section>
+
+      <section class="panel" id="pSystem">
+        <h2>System<button class="fold" type="button" aria-expanded="true" title="Collapse">»</button></h2>
+        <div class="fieldgrid">
+          <label for="memSize">Installed memory</label>
+          <select id="memSize">
+            <option value="1024">1 KB (0000–03FF)</option>
+            <option value="2048">2 KB (0000–07FF)</option>
+            <option value="4096" selected>4 KB (0000–0FFF)</option>
+            <option value="8192">8 KB (0000–1FFF)</option>
+            <option value="16384">16 KB (0000–3FFF)</option>
+            <option value="32768">32 KB (0000–7FFF)</option>
+            <option value="49152">48 KB (0000–BFFF)</option>
+            <option value="65536">64 KB (0000–FFFF)</option>
+          </select>
+          <label for="unmapped">Above top of memory</label>
+          <select id="unmapped">
+            <option value="ff">Reads return FFh, writes ignored</option>
+            <option value="mirror">Mirrors installed memory</option>
+          </select>
+          <label for="intVec">Data bus during INT ack</label>
+          <input id="intVec" type="text" class="mono" value="FF" size="3" maxlength="2" title="Byte the interrupting device places on the bus. IM 0: an RST opcode. IM 2: low byte of the vector table address.">
+          <label for="inDefault">IN reads return</label>
+          <input id="inDefault" type="text" class="mono" value="FF" size="3" maxlength="2" title="Byte returned by IN for ports with no value set below">
+        </div>
+        <div class="row">
+          <label class="inline" for="portNo">Port <input id="portNo" type="text" class="mono" value="02" size="3" maxlength="2"></label>
+          <label class="inline" for="portVal">returns <input id="portVal" type="text" class="mono" value="5A" size="3" maxlength="2"></label>
+          <button id="btnPort">Set input port</button>
+        </div>
+        <div class="msg" id="portList"></div>
       </section>
     </div>
   </div>
