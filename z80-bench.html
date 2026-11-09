@@ -279,19 +279,18 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .osbstate .kv { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); line-height: 1.55; }
 .osbstate .kv b { color: var(--ink); font-weight: 500; }
 .osbstate .on { color: var(--ok); } .osbstate .off { color: var(--muted); }
-@media (min-width: 1181px) {
-  .grid > :nth-child(1) { grid-column: 1; grid-row: 1 / span 2; }
-  .grid > :nth-child(2) { grid-column: 2 / 4; grid-row: 1; }
-  .grid > :nth-child(3) { grid-column: 2; grid-row: 2; }
-  .grid > :nth-child(4) { grid-column: 3; grid-row: 2; }
-  .grid > :nth-child(5) { grid-column: 4; grid-row: 1 / span 2; }
-}
-.chiprow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.toprows { display: flex; flex-direction: column; gap: 14px; margin-bottom: 14px; }
+.chiprow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.chiprow svg.chip { width: 100%; max-width: none; }
+.z80read { grid-template-columns: auto 1fr auto 1fr auto 1fr; max-width: 900px; margin: 12px auto 0; }
+#pScreen .osbscreen { max-width: 1000px; margin: 0 auto; }
+#pScreen .osbbar, #pScreen .msg, #pScreen .hint { max-width: 1000px; margin-left: auto; margin-right: auto; }
+@media (max-width: 1100px) { .chiprow { grid-template-columns: repeat(2, minmax(0, 1fr)); } .z80read { grid-template-columns: auto 1fr; } }
 .chiprow figure { margin: 0; min-width: 0; }
 .chiprow svg.chip { max-width: 100%; }
 .chiprow figcaption { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 4px; line-height: 1.35; }
 .chiprow figcaption b { color: var(--ink); font-weight: 600; }
-@media (max-width: 760px) { .chiprow { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .chiprow { grid-template-columns: minmax(0, 1fr); } }
 </style>
 
 <div class="wrap">
@@ -323,21 +322,42 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
     </label>
   </div>
 
-  <div class="grid">
-    <div class="col">
-      <section class="panel">
-        <h2>Pinout <span class="aside">40-pin DIP · top view</span></h2>
-        <div class="chipwrap"><svg class="chip" id="chip" viewBox="0 0 380 540" role="group" aria-label="Z80 pinout"></svg></div>
-        <div class="legend">
-          <span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z)</span><span><i class="li"></i>Input: click to toggle</span>
+  <div class="toprows">
+      <section class="panel" id="pChips">
+        <h2>Chips <span class="aside">40-pin DIPs, top view · live pinouts, updated every clock</span></h2>
+        <div class="chiprow">
+          <figure><svg class="chip" id="chip" viewBox="0 0 380 540" role="group" aria-label="Z80 pinout"></svg><figcaption><b>UC9 · Z80A CPU</b><br>3.99 MHz (23.9616 MHz ÷ 6)</figcaption></figure>
+          <figure><svg class="chip" id="chipPia0" viewBox="0 0 380 540" role="group" aria-label="System PIA UD12 pinout"></svg><figcaption><b>UD12 · MC6821 system PIA</b><br>ports 00h–03h · bank select, VBLANK, speaker, disk select</figcaption></figure>
+          <figure><svg class="chip" id="chipPia1" viewBox="0 0 380 540" role="group" aria-label="IEEE-488 PIA UD8 pinout"></svg><figcaption><b>UD8 · MC6821 IEEE-488 PIA</b><br>ports 10h–13h · nothing attached</figcaption></figure>
+          <figure><svg class="chip" id="chipSio" viewBox="0 0 380 540" role="group" aria-label="Z80A SIO/2 UD4 pinout"></svg><figcaption><b>UD4 · Z80A SIO/2</b><br>ports 0Ch–0Fh · modem (A) and printer (B) ports</figcaption></figure>
         </div>
-        <dl class="busread">
+        <div class="legend"><span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z)</span><span><i class="li"></i>Input: click to toggle</span></div>
+        <dl class="busread z80read">
           <dt>Machine cycle</dt><dd id="brCycle">–</dd>
           <dt>Address bus</dt><dd id="brAddr">–</dd>
           <dt>Data bus</dt><dd id="brData">–</dd>
         </dl>
         <p class="hint">Clicking CLK pulses one clock. /INT is level-sensitive, /NMI triggers on a falling edge. Holding /WAIT low inserts wait states; /BUSREQ low floats the buses at the end of the current machine cycle; /RESET low holds the CPU in reset.</p>
+        <p class="hint">Wiring from the OCC2 schematic. The PIAs' E is the board's "68 ENABLE", high during an I/O cycle to that chip; R/W follows /WR; RS0 and RS1 are A0 and A1; CS0 and CS1 are tied high and /CS2 comes from the 74LS138 decoder. On UD12, port A drives the bank lines, CB1 is VBLANK and CB2 the 50/60 Hz select. The SIO's /TxC and /RxC come from the 8253 baud-rate timer, which is not emulated, so they stay idle. Click a highlighted input to drive it by hand.</p>
       </section>
+
+      <section class="panel" id="pScreen">
+        <h2>Screen <span class="aside" id="osbScrInfo"></span></h2>
+        <canvas id="osbScreen" class="osbscreen" width="640" height="480" tabindex="0" aria-label="Osborne Executive screen: click it and type to use the keyboard"></canvas>
+        <div class="row osbbar">
+          <button id="osbLoadRom" class="primary" type="button">Load ROM…</button><input type="file" id="osbRomFile" accept=".bin,.rom,.ud18,.2764" hidden>
+          <button id="osbRestart" type="button" title="Reset the machine and run in real time">Power on / restart</button>
+          <label class="inline"><input type="checkbox" id="osbAlpha" checked> Alpha Lock</label>
+          <span class="osbkeys" id="osbKeys"></span>
+        </div>
+        <div class="msg" id="osbMsg"></div>
+        <p class="hint">Click the screen and type: your keyboard drives the Executive's key matrix through the ROM's own 60 Hz scan. Caps Lock toggles Alpha Lock, and Backspace acts as the ← key. The ROM is not included: load your own 8 KB image (execv12, CRC 70798C2F). Your browser keeps it, so you only load it once. The blue marker shows the electron beam while you step.</p>
+      </section>
+  </div>
+
+  <div class="grid">
+    <div class="col">
+      <section class="panel">
 
       <section class="panel">
         <h2>Program
@@ -362,31 +382,6 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <h2>I/O ports <span class="aside">last value written by OUT</span></h2>
         <div class="latches" id="latches"></div>
         <div class="iolog" id="iolog"></div>
-      </section>
-    </div>
-    <div class="col screencol">
-      <section class="panel" id="pScreen">
-        <h2>Screen <span class="aside" id="osbScrInfo"></span></h2>
-        <canvas id="osbScreen" class="osbscreen" width="640" height="480" tabindex="0" aria-label="Osborne Executive screen: click it and type to use the keyboard"></canvas>
-        <div class="row osbbar">
-          <button id="osbLoadRom" class="primary" type="button">Load ROM…</button><input type="file" id="osbRomFile" accept=".bin,.rom,.ud18,.2764" hidden>
-          <button id="osbRestart" type="button" title="Reset the machine and run in real time">Power on / restart</button>
-          <label class="inline"><input type="checkbox" id="osbAlpha" checked> Alpha Lock</label>
-          <span class="osbkeys" id="osbKeys"></span>
-        </div>
-        <div class="msg" id="osbMsg"></div>
-        <p class="hint">Click the screen and type: your keyboard drives the Executive's key matrix through the ROM's own 60 Hz scan. Caps Lock toggles Alpha Lock, and Backspace acts as the ← key. The ROM is not included: load your own 8 KB image (execv12, CRC 70798C2F). Your browser keeps it, so you only load it once. The blue marker shows the electron beam while you step.</p>
-      </section>
-
-      <section class="panel" id="pChips">
-        <h2>Peripheral chips <span class="aside">live pinouts, updated every clock</span></h2>
-        <div class="chiprow">
-          <figure><svg class="chip" id="chipPia0" viewBox="0 0 380 540" role="group" aria-label="System PIA UD12 pinout"></svg><figcaption><b>UD12 · MC6821 system PIA</b><br>ports 00h–03h · bank select, VBLANK, speaker, disk select</figcaption></figure>
-          <figure><svg class="chip" id="chipPia1" viewBox="0 0 380 540" role="group" aria-label="IEEE-488 PIA UD8 pinout"></svg><figcaption><b>UD8 · MC6821 IEEE-488 PIA</b><br>ports 10h–13h · nothing attached</figcaption></figure>
-          <figure><svg class="chip" id="chipSio" viewBox="0 0 380 540" role="group" aria-label="Z80A SIO/2 UD4 pinout"></svg><figcaption><b>UD4 · Z80A SIO/2</b><br>ports 0Ch–0Fh · modem (A) and printer (B) ports</figcaption></figure>
-        </div>
-        <div class="legend"><span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z)</span><span><i class="li"></i>Input: click to toggle</span></div>
-        <p class="hint">Wiring from the OCC2 schematic. The PIAs' E is the board's "68 ENABLE", high during an I/O cycle to that chip; R/W follows /WR; RS0 and RS1 are A0 and A1; CS0 and CS1 are tied high and /CS2 comes from the 74LS138 decoder. On UD12, port A drives the bank lines, CB1 is VBLANK and CB2 the 50/60 Hz select. The SIO's /TxC and /RxC come from the 8253 baud-rate timer, which is not emulated, so they stay idle. Click a highlighted input to drive it by hand.</p>
       </section>
     </div>
 
