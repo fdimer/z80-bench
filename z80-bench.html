@@ -198,6 +198,7 @@ table.mem input { width: 24px; font-family: var(--font-mono); font-size: 12px; p
 /* loader */
 textarea { width: 100%; min-height: 210px; resize: vertical; font-size: 12.5px; line-height: 1.5; background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; }
 .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 10px; }
+.tapeinfo { font-size: 12px; color: var(--muted, #666); }
 .msg { font-size: 12.5px; margin-top: 8px; font-family: var(--font-mono); min-height: 1.4em; }
 .msg.err { color: var(--warn); } .msg.ok { color: var(--ok); }
 .fieldgrid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; }
@@ -326,9 +327,15 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <label class="inline" for="zxRam">RAM <select id="zxRam"><option value="1024" selected>1K (as supplied)</option><option value="16384">16K RAM pack</option></select></label>
           <span class="osbkeys mono" id="zxKeysDown"></span>
         </div>
+        <div class="row">
+          <button id="zxTapeIn" type="button">Insert tape…</button><input type="file" id="zxTapeFile" accept=".o,.80" hidden>
+          <span class="mono tapeinfo" id="zxTapeInfo">No tape</span>
+          <button id="zxDumpBin" type="button">Dump RAM (.bin)</button>
+          <button id="zxDumpTxt" type="button">RAM listing (.txt)</button>
+        </div>
         <div class="msg" id="zxMsg"></div>
         <div class="zxkb" id="zxKb" aria-label="ZX80 keyboard"></div>
-        <p class="hint">Click the picture and type, or use the keyboard above: keywords (white, top) come from the key pressed at the K cursor, red symbols need SHIFT, which latches for one key. Enter is NEWLINE and Backspace is RUBOUT (SHIFT+0). The picture is built the way a TV would, from the ZX80's own sync pulses, so it blanks while BASIC is busy, as on the real machine. The ROM is not included: load your own 4 KB image; your browser keeps it.</p>
+        <p class="hint">Click the picture and type, or use the keyboard above: keywords (white, top) come from the key pressed at the K cursor, red symbols need SHIFT, which latches for one key. Enter is NEWLINE and Backspace is RUBOUT (SHIFT+0). Tape: insert a .o program file, then type LOAD (W, then NEW LINE); SAVE (E, then NEW LINE) downloads the program as a .o file. Both are instant. RAM listing gives the system variables, the BASIC program as text and a hex dump. The picture is built the way a TV would, from the ZX80's own sync pulses, so it blanks while BASIC is busy, as on the real machine. The ROM is not included: load your own 4 KB image; your browser keeps it.</p>
       </section>
   </div>
 
@@ -674,6 +681,7 @@ function describe(c0, pc) {
   return disasm(bus.read, pc).text;
 }
 function beginInstruction() {
+  zx.tapeTrap();
   pre = cpu.snapshot();
   const pc = cpu.pc;
   const text = cpu.halted ? null : disasm(bus.read, pc).text;
@@ -803,6 +811,7 @@ function frame(now) {
         if (r === 'wait' || r === 'busreq' || r === 'reset') { stall = r; break; }
         continue;
       }
+      zx.tapeTrap();
       const pc = cpu.pc;
       const wb = watches.size ? regVals(cpu) : null, mb = memWatches.size ? memVals() : null;
       zx.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(); zx.afterStep(cyc);
@@ -1567,21 +1576,32 @@ function renderZx() { drawZx(); renderZxState(); }
 // legends from the ROM's own tables: keyword in K mode (letter code + C0h) and SHIFTed symbol (key table at 006Ch)
 const ZX_LAYOUT = [
   [['1', '', 'NOT'], ['2', '', 'AND'], ['3', '', 'THEN'], ['4', '', 'TO'], ['5', '', '←'], ['6', '', '↓'], ['7', '', '↑'], ['8', '', '→'], ['9', '', 'HOME'], ['0', '', 'RUBOUT']],
-  [['Q', 'NEW', '▘'], ['W', 'LOAD', '▝'], ['E', 'SAVE', '▀'], ['R', 'RUN', '▖'], ['T', 'CONT', '▒'], ['Y', 'REM', '"'], ['U', 'IF', '$'], ['I', 'INPUT', '('], ['O', 'PRINT', ')'], ['P', '', '*']],
-  [['A', 'LIST', '▒'], ['S', 'STOP', '▛'], ['D', 'DIM', '▌'], ['F', 'FOR', '▞'], ['G', 'GO TO', '▒'], ['H', 'POKE', '**'], ['J', 'RAND', '-'], ['K', 'LET', '+'], ['L', '', '='], ['NewLine', '', 'EDIT']],
+  [['Q', 'NEW', '▌'], ['W', 'LOAD', '▄'], ['E', 'SAVE', '▘'], ['R', 'RUN', '▝'], ['T', 'CONT', '▒'], ['Y', 'REM', '"'], ['U', 'IF', '$'], ['I', 'INPUT', '('], ['O', 'PRINT', ')'], ['P', '', '*']],
+  [['A', 'LIST', '▒'], ['S', 'STOP', '▞'], ['D', 'DIM', '▖'], ['F', 'FOR', '▗'], ['G', 'GO TO', '▒'], ['H', 'POKE', '**'], ['J', 'RAND', '-'], ['K', 'LET', '+'], ['L', '', '='], ['NewLine', '', 'EDIT']],
   [['Shift', '', ''], ['Z', '', ':'], ['X', 'CLEAR', ';'], ['C', 'CLS', '?'], ['V', 'GO SUB', '/'], ['B', 'RETURN', 'OR'], ['N', 'NEXT', '<'], ['M', '', '>'], ['.', '', ','], ['Space', '', '£']]
 ];
 const zxHeld = new Set(); let zxShiftLatch = false;
 function zxShow() { $('zxKeysDown').textContent = zxHeld.size || zxShiftLatch ? 'keys: ' + [...(zxShiftLatch ? ['Shift (latched)'] : []), ...zxHeld].join(' + ') : '';
   for (const b of document.querySelectorAll('#zxKb button')) { b.classList.toggle('down', zxHeld.has(b.dataset.k)); b.classList.toggle('latched', b.dataset.k === 'Shift' && zxShiftLatch); } }
-function zxDown(k) { zxHeld.add(k); zx.key(k, true); zxShow(); }
-function zxUp(k) { zxHeld.delete(k); zx.key(k, false); zxShow(); }
+// a key is held for at least 80 ms of ZX80 time, or a quick tap would be released before the ROM scans the keyboard
+const ZX_MIN_HOLD = ZX.CPU_HZ * 0.08, zxDownAt = new Map();
+function zxDown(k) { zxHeld.add(k); zxDownAt.set(k, zx.t); zx.key(k, true); zxShow(); }
+function zxUp(k, then) {
+  if (!zxHeld.has(k)) return;
+  const since = zxDownAt.get(k) ?? -Infinity, waitStart = performance.now();
+  const release = () => {
+    if (!zxHeld.has(k)) return;
+    if (running && zx.t - since < ZX_MIN_HOLD && performance.now() - waitStart < 1500) { setTimeout(release, 15); return; }
+    zxHeld.delete(k); zx.key(k, false); zxShow(); if (then) then();
+  };
+  release();
+}
 $('zxKb').innerHTML = ZX_LAYOUT.map(row => '<div class="krow">' + row.map(([k, kw, sh]) => `<button type="button" data-k="${k}" title="${k}${kw ? ' · keyword ' + kw : ''}${sh ? ' · SHIFT ' + sh : ''}"><span class="kw">${esc(kw) || '&nbsp;'}</span>${k === 'NewLine' ? 'NEW LINE' : k === 'Space' ? 'SPACE' : k === 'Shift' ? 'SHIFT' : k}${'<small>' + (esc(sh) || '&nbsp;') + '</small>'}</button>`).join('') + '</div>').join('');
 for (const b of document.querySelectorAll('#zxKb button')) {
   const k = b.dataset.k;
   if (k === 'Shift') { b.addEventListener('click', () => { zxShiftLatch = !zxShiftLatch; zx.key('Shift', zxShiftLatch); zxShow(); }); continue; }
   b.addEventListener('pointerdown', e => { e.preventDefault(); zxDown(k); });
-  const up = () => { if (!zxHeld.has(k)) return; zxUp(k); if (zxShiftLatch) setTimeout(() => { zxShiftLatch = false; zx.key('Shift', false); zxShow(); }, 120); };
+  const up = () => { if (!zxHeld.has(k)) return; const latched = zxShiftLatch; zxUp(k, () => { if (latched && zxShiftLatch) setTimeout(() => { zxShiftLatch = false; zx.key('Shift', false); zxShow(); }, 60); }); };
   b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up);
 }
 const ZX_CODE = { Enter: 'NewLine', NumpadEnter: 'NewLine', ShiftLeft: 'Shift', ShiftRight: 'Shift', Space: 'Space', Period: '.' };
@@ -1613,6 +1633,35 @@ function zxPowerOn() {
 $('zxLoadRom').onclick = () => $('zxRomFile').click();
 $('zxRomFile').onchange = () => { const f = $('zxRomFile').files[0]; $('zxRomFile').value = ''; if (f) f.arrayBuffer().then(buf => { if (zxUseRom(new Uint8Array(buf), false)) zxPowerOn(); }); };
 $('zxRestart').onclick = zxPowerOn;
+// ---------- tape and RAM dump ----------
+function zxDownload(name, data, type) {
+  const url = URL.createObjectURL(new Blob([data], { type })); const a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+function zxStamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
+let zxTapeName = '';
+function zxTapeShow() { $('zxTapeInfo').textContent = zx.tape ? `Tape in: ${zxTapeName} (${zx.tape.length} bytes)` : 'No tape'; }
+zx.onTape = (kind, arg) => {
+  const msg = $('zxMsg');
+  if (kind === 'save') { const name = `zx80-program-${zxStamp()}.o`; zxDownload(name, arg, 'application/octet-stream'); msg.className = 'msg ok'; msg.textContent = `SAVE: ${arg.length} bytes written to ${name} (look in your downloads).`; }
+  else if (kind === 'load') { msg.className = 'msg ok'; msg.textContent = `LOAD: ${arg} bytes loaded from ${zxTapeName}. Type LIST (A) or RUN (R).`; zxTapeName = ''; disDirty = true; }
+  else if (kind === 'idle') { if (/listening/.test(msg.textContent)) msg.textContent = ''; }
+  else if (kind === 'wait') { msg.className = 'msg'; msg.textContent = 'LOAD is listening for a tape: insert a .o file (or press SPACE for BREAK).'; }
+  else { msg.className = 'msg err'; msg.textContent = arg; zxTapeName = ''; }
+  zxTapeShow();
+};
+$('zxTapeIn').onclick = () => $('zxTapeFile').click();
+$('zxTapeFile').onchange = () => {
+  const f = $('zxTapeFile').files[0]; $('zxTapeFile').value = ''; if (!f) return;
+  if (/\.(p|81|p81|tzx|tap|wav)$/i.test(f.name)) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = `${f.name} is not a ZX80 .o file (.p files are for the ZX81).`; return; }
+  f.arrayBuffer().then(buf => {
+    zx.insertTape(new Uint8Array(buf)); zxTapeName = f.name; zxTapeShow();
+    $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = zx.tapeWaiting ? `${f.name} inserted: loading…` : `${f.name} inserted. Type LOAD (W, then NEW LINE).`;
+    zscr.focus();
+  });
+};
+$('zxDumpBin').onclick = () => { zxDownload(`zx80-ram-${zx.ramSize / 1024}k-${zxStamp()}.bin`, zx.ram.slice(0, zx.ramSize), 'application/octet-stream'); $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = `RAM dumped: ${zx.ramSize} bytes, 4000h-${(0x3FFF + zx.ramSize).toString(16).toUpperCase()}h (byte 0 of the file is address 4000h).`; };
+$('zxDumpTxt').onclick = () => { zxDownload(`zx80-ram-${zxStamp()}.txt`, zx.ramReport(), 'text/plain;charset=utf-8'); $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = 'RAM listing saved: system variables, memory areas, the BASIC program and a hex dump.'; };
 $('zxRam').onchange = () => { zx.ramSize = +$('zxRam').value; disDirty = true; if (zxRom) zxPowerOn(); else render(); };
 
 // ---------- collapsible side panels ----------
