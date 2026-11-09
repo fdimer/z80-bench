@@ -1634,16 +1634,40 @@ $('zxLoadRom').onclick = () => $('zxRomFile').click();
 $('zxRomFile').onchange = () => { const f = $('zxRomFile').files[0]; $('zxRomFile').value = ''; if (f) f.arrayBuffer().then(buf => { if (zxUseRom(new Uint8Array(buf), false)) zxPowerOn(); }); };
 $('zxRestart').onclick = zxPowerOn;
 // ---------- tape and RAM dump ----------
-function zxDownload(name, data, type) {
+// Files leave through the claude.ai viewer's save prompt when this page runs there (it accepts .txt and .zip, so
+// binary files go inside a .zip); anywhere else, through an ordinary browser download.
+const zxSaver = window.claude && typeof window.claude.use === 'function' ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+function zxZip(name, bytes) {   // one stored (uncompressed) file
+  const n = new TextEncoder().encode(name), crc = zxCrc(bytes), len = bytes.length;
+  const le = (v, w) => Array.from({ length: w }, (_, i) => (v >>> (8 * i)) & 0xFF);
+  const common = [...le(20, 2), 0, 0, 0, 0, 0, 0, 0x21, 0, ...le(crc, 4), ...le(len, 4), ...le(len, 4), ...le(n.length, 2), 0, 0];
+  const local = [0x50, 0x4B, 3, 4, ...common], central = [0x50, 0x4B, 1, 2, 20, 0, ...common, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const cdOff = local.length + n.length + len, cdLen = central.length + n.length;
+  const end = [0x50, 0x4B, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, ...le(cdLen, 4), ...le(cdOff, 4), 0, 0];
+  return new Blob([new Uint8Array(local), n, bytes, new Uint8Array(central), n, new Uint8Array(end)]);
+}
+async function zxDownload(name, data, type) {   // resolves to the name given to the viewer, or null if they declined
+  const saver = await zxSaver;
+  if (saver) {
+    let fname = name, body = data;
+    if (!/\.txt$/i.test(name)) { fname = name + '.zip'; body = zxZip(name, data); }
+    try { await saver.save({ filename: fname, data: body }); return fname; }
+    catch (e) { if (e && e.code === 'declined') return null; throw e; }
+  }
   const url = URL.createObjectURL(new Blob([data], { type })); const a = document.createElement('a');
   a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return name;
+}
+function zxSaved(p, ok) {
+  p.then(n => { const m = $('zxMsg'); if (n) { m.className = 'msg ok'; m.textContent = ok(n); } else { m.className = 'msg'; m.textContent = 'Not saved: the download was declined.'; } })
+   .catch(e => { const m = $('zxMsg'); m.className = 'msg err'; m.textContent = 'Could not save the file' + (e && e.message ? ': ' + e.message : '.'); });
 }
 function zxStamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
 let zxTapeName = '';
 function zxTapeShow() { $('zxTapeInfo').textContent = zx.tape ? `Tape in: ${zxTapeName} (${zx.tape.length} bytes)` : 'No tape'; }
 zx.onTape = (kind, arg) => {
   const msg = $('zxMsg');
-  if (kind === 'save') { const name = `zx80-program-${zxStamp()}.o`; zxDownload(name, arg, 'application/octet-stream'); msg.className = 'msg ok'; msg.textContent = `SAVE: ${arg.length} bytes written to ${name} (look in your downloads).`; }
+  if (kind === 'save') { const n = arg.length; zxSaved(zxDownload(`zx80-program-${zxStamp()}.o`, arg, 'application/octet-stream'), f => `SAVE: ${n} bytes written to ${f} (look in your downloads).`); }
   else if (kind === 'load') { msg.className = 'msg ok'; msg.textContent = `LOAD: ${arg} bytes loaded from ${zxTapeName}. Type LIST (A) or RUN (R).`; zxTapeName = ''; disDirty = true; }
   else if (kind === 'idle') { if (/listening/.test(msg.textContent)) msg.textContent = ''; }
   else if (kind === 'wait') { msg.className = 'msg'; msg.textContent = 'LOAD is listening for a tape: insert a .o file (or press SPACE for BREAK).'; }
@@ -1660,8 +1684,8 @@ $('zxTapeFile').onchange = () => {
     zscr.focus();
   });
 };
-$('zxDumpBin').onclick = () => { zxDownload(`zx80-ram-${zx.ramSize / 1024}k-${zxStamp()}.bin`, zx.ram.slice(0, zx.ramSize), 'application/octet-stream'); $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = `RAM dumped: ${zx.ramSize} bytes, 4000h-${(0x3FFF + zx.ramSize).toString(16).toUpperCase()}h (byte 0 of the file is address 4000h).`; };
-$('zxDumpTxt').onclick = () => { zxDownload(`zx80-ram-${zxStamp()}.txt`, zx.ramReport(), 'text/plain;charset=utf-8'); $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = 'RAM listing saved: system variables, memory areas, the BASIC program and a hex dump.'; };
+$('zxDumpBin').onclick = () => { const sz = zx.ramSize; zxSaved(zxDownload(`zx80-ram-${sz / 1024}k-${zxStamp()}.bin`, zx.ram.slice(0, sz), 'application/octet-stream'), f => `RAM dumped to ${f}: ${sz} bytes, 4000h-${(0x3FFF + sz).toString(16).toUpperCase()}h (byte 0 of the file is address 4000h).`); };
+$('zxDumpTxt').onclick = () => zxSaved(zxDownload(`zx80-ram-${zxStamp()}.txt`, zx.ramReport(), 'text/plain;charset=utf-8'), f => `RAM listing saved to ${f}: system variables, memory areas, the BASIC program and a hex dump.`);
 $('zxRam').onchange = () => { zx.ramSize = +$('zxRam').value; disDirty = true; if (zxRom) zxPowerOn(); else render(); };
 
 // ---------- collapsible side panels ----------
