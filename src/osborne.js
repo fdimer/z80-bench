@@ -41,6 +41,7 @@ class Osborne {
     this.pia1 = new M6821('IEEE-488 PIA UD8');
     this.sio = new Z80SIO();
     this.pia0.inB = 0xFF;                   // PB6 /DSR and PB7 /RI from the modem port: idle high
+    for (const c of this.sio.ch) { c.cts = 1; c.dcd = 1; }   // 1489 receivers with nothing plugged in read high (inactive)
     this.pia0.onPA = v => { this.pa = v; };
     this.bus = {
       read: a => this.read(a), write: (a, v) => this.write(a, v),
