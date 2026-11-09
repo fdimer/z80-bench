@@ -41,12 +41,13 @@ class Osborne {
     this.pia1 = new M6821('IEEE-488 PIA UD8');
     this.sio = new Z80SIO();
     this.pia0.inB = 0xFF;                   // PB6 /DSR and PB7 /RI from the modem port: idle high
-    for (const c of this.sio.ch) { c.cts = 1; c.dcd = 1; }   // 1489 receivers with nothing plugged in read high (inactive)
+    for (const c of this.sio.ch) { c.cts = c.dcd = 1; c.ext.cts = c.ext.dcd = 1; }   // 1489 receivers with nothing plugged in read high (inactive)
     this.pia0.onPA = v => { this.pa = v; };
     this.bus = {
       read: a => this.read(a), write: (a, v) => this.write(a, v),
       input: p => this.input(p), output: (p, v) => this.output(p, v)
     };
+    this.conn = { pia0: true, pia1: true, sio: true };   // debug: a disconnected chip no longer sees the CPU bus
     this.cpu = new Z80(this.bus);
     this.reset();
   }
@@ -94,11 +95,11 @@ class Osborne {
     const lo = p & 0xFF, r = lo & 3;
     if (lo & 0x80) return 0xFF;
     switch ((lo >> 2) & 7) {
-      case 0: return this.pia0.read(r);
+      case 0: return this.conn.pia0 ? this.pia0.read(r) : 0xFF;
       case 1: return 0xFF;                                   // 8253 timer (stub)
       case 2: return r === 0 ? this.fdcStatus : 0xFF;         // MB8877 (stub)
-      case 3: return this.sio.read(r);                        // A1 = B/A, A0 = C/D
-      case 4: return this.pia1.read(r);
+      case 3: return this.conn.sio ? this.sio.read(r) : 0xFF;    // A1 = B/A, A0 = C/D
+      case 4: return this.conn.pia1 ? this.pia1.read(r) : 0xFF;
       case 5: return this.kbdRead(p >> 8);
       case 6: return this.rtc;
       default: return 0xFF;
@@ -108,9 +109,9 @@ class Osborne {
     const lo = p & 0xFF, r = lo & 3;
     if (lo & 0x80) return;
     switch ((lo >> 2) & 7) {
-      case 0: this.pia0.write(r, v); break;
-      case 3: this.sio.write(r, v); break;
-      case 4: this.pia1.write(r, v); break;
+      case 0: if (this.conn.pia0) this.pia0.write(r, v); break;
+      case 3: if (this.conn.sio) this.sio.write(r, v); break;
+      case 4: if (this.conn.pia1) this.pia1.write(r, v); break;
       case 7: this.vidEna = true; break;                      // VID ENA flip-flop, cleared by reset
     }
   }
@@ -127,16 +128,19 @@ class Osborne {
     return false;
   }
   // ---- interrupts: PIA IRQs and the SIO share /INT; non-SIO acknowledge reads FEh (pull-ups, D0 forced low) ----
-  intRequest() { return this.pia0.irqA() || this.pia0.irqB() || this.pia1.irqA() || this.pia1.irqB() || this.sio.intRequest(); }
+  intRequest() {
+    const c = this.conn;
+    return (c.pia0 && (this.pia0.irqA() || this.pia0.irqB())) || (c.pia1 && (this.pia1.irqA() || this.pia1.irqB())) || (c.sio && this.sio.intRequest());
+  }
   syncInt() {
-    const s = this.sio.intRequest();
+    const s = this.conn.sio && this.sio.intRequest();
     this.cpu.intLine = this.intRequest();
     this.cpu.intVector = s ? this.sio.vector() : 0xFE;
     return s;
   }
   afterStep(cyc, sioReq) {
     if (sioReq && this.cpu.lastEvent === 'INT') this.sio.ack();
-    for (const c of cyc) if (c.k === 'M1') this.sio.m1(c.d);
+    if (this.conn.sio) for (const c of cyc) if (c.k === 'M1') this.sio.m1(c.d);
   }
   // ---- time: raster position, VBLANK into PIA CB1, RTC counter ----
   advance(t) {

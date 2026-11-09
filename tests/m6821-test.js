@@ -18,4 +18,13 @@ ok(p.read(2) === 0x55, 'port B: output bits from register, inputs from pins (' +
 p.write(1, 0x0D); p.setCA2(1); p.setCA2(0); ok(p.irqA() && (p.read(1) & 0x40), 'CA2 input falling edge sets IRQA2');
 p.write(1, 0x24); ca2 = []; p.read(0); ok(p.ca2() === 0, 'CA2 handshake goes low on port A read');
 p.write(1, 0x24 | 0x02); p.setCA1(0); p.setCA1(1); ok(p.ca2() === 1, 'CA1 active edge restores CA2');
+// forced pins (debug)
+const q = new M6821(); q.write(3, 0x07);
+q.setCB1(0); q.force('CB1', 0); q.setCB1(1); ok(!q.irqB() && q.cb1 === 0, 'forced CB1 ignores the circuit driving it');
+q.force('CB1', 1); ok(q.irqB(), 'forcing CB1 high is a rising edge');
+q.read(2); q.force('CB1', null); ok(q.cb1 === 1, 'released CB1 returns to what the circuit drives (high)');
+q.inB = 0xFF; q.force('PB6', 0); ok((q.read(2) & 0x40) === 0, 'forced PB6 reads low');
+q.inB = 0xFF; ok((q.read(2) & 0x40) === 0, 'outside drive cannot override a forced bit');
+q.reset(); ok((q.pb() & 0x40) === 0, 'a force survives a chip reset');
+q.force('PB6', null); ok((q.pb() & 0x40) === 0x40, 'released PB6 reads the pin again');
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);
