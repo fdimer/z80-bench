@@ -3,3 +3,7 @@ z80-bench-standalone.html
 node_modules/
 .DS_Store
 Thumbs.db
+
+# Osborne Executive ROM images are copyrighted: keep them out of the repository
+*.bin
+*.rom

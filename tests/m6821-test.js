@@ -1,0 +1,21 @@
+// MC6821 PIA model checks: node tests/m6821-test.js
+const { M6821 } = require('../src/m6821.js');
+let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
+const p = new M6821(); let pa = null, ca2 = [];
+p.onPA = v => { pa = v; }; p.onCA2 = l => ca2.push(l);
+ok(p.read(1) === 0 && p.read(0) === 0, 'reset: CRA 0, address 0 is DDR A');
+p.write(0, 0xF0); ok(p.read(0) === 0xF0, 'DDR A reads back');
+p.write(1, 0x04); p.write(0, 0xA5); ok(pa === 0xAF, 'outputs drive PA7-4, inputs pulled high: ' + pa.toString(16));
+p.inA = 0x0C; ok(p.read(0) === 0xAC, 'port A reads the pins');
+p.write(1, 0x3F); ok((p.read(1) & 0x3F) === 0x3F, 'CRA bits 0-5 read back'); ok(p.ca2() === 1, 'CA2 manual output high');
+p.write(1, 0x37); ok(p.ca2() === 0, 'CA2 manual output low');
+p.write(3, 0x07); p.setCB1(0); ok(!p.irqB(), 'falling edge ignored when rising selected'); p.setCB1(1); ok(p.irqB() && (p.read(3) & 0x80), 'CB1 rising edge sets IRQB1 and the flag');
+p.write(3, 0x06); ok(!p.irqB() && (p.read(3) & 0x80), 'interrupt masked, flag still set');
+p.write(3, 0x07); p.read(2); ok(!p.irqB() && !(p.read(3) & 0x80), 'reading port B clears the flag');
+p.setCB1(0); ok(!p.irqB(), 'falling edge ignored when rising selected');
+p.write(3, 0x00); p.write(2, 0x3F); p.write(3, 0x04); p.inB = 0x40; p.write(2, 0x15);
+ok(p.read(2) === 0x55, 'port B: output bits from register, inputs from pins (' + p.read(2).toString(16) + ')');
+p.write(1, 0x0D); p.setCA2(1); p.setCA2(0); ok(p.irqA() && (p.read(1) & 0x40), 'CA2 input falling edge sets IRQA2');
+p.write(1, 0x24); ca2 = []; p.read(0); ok(p.ca2() === 0, 'CA2 handshake goes low on port A read');
+p.write(1, 0x24 | 0x02); p.setCA1(0); p.setCA1(1); ok(p.ca2() === 1, 'CA1 active edge restores CA2');
+console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);

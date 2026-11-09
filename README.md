@@ -8,6 +8,23 @@ Open `z80-bench.html` in any web browser, from this folder on your computer (it 
 
 To get a single self-contained file instead, run `python build.py`, which writes `z80-bench-standalone.html`.
 
+
+## Osborne Executive (osborne branch)
+
+This branch turns Z80 Bench into an Osborne Executive emulator, working from the OCC2 main logic board schematic (1K00035 rev 10), the Osborne Executive Technical Manual and MAME's `osbexec` driver.
+
+- `src/osborne.js` models the machine:
+  - the 3.9936 MHz Z80A
+  - 128K of banked DRAM, the boot ROM, font RAM and scratch RAM, all selected by the system PIA's port A
+  - video RAM (C000h–DFFFh) with its attribute latch
+  - the keyboard matrix on port 14h (rows selected by A8–A15)
+  - the VBLANK interrupt into PIA CB1, the RTC counter, the video-enable flip-flop
+  - mode 2 interrupts with the FEh pull-up vector
+- `src/m6821.js` is a reusable MC6821 PIA model. The Z80 SIO comes from the `sio` branch.
+- The 8253 timer, MB8877 disk controller and IEEE-488 port are stubbed, so the ROM's self-test passes and it shows its sign-on screen. Disk booting is not emulated yet.
+- **The ROM is not included** (it is copyrighted). Supply your own `execv12` image (CRC 70798C2F).
+- Run it headless with `node tests/osborne-run.js path/to/rom.bin [seconds] [keys...]`.
+
 ## Features
 
 - **Pinout**: 40-pin DIP view that updates every T-state (high, low, or floating). Click the input pins to drive them:
