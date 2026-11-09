@@ -75,7 +75,7 @@ class ZX80 {
     this.lineStart = 0; this.line = 0; this.hsyncEnd = -1;
     this.frames = 0; this.synced = false;
     this.fb.fill(0); this.front.fill(0);
-    this.tapeWaiting = false;
+    this.tapeWaiting = false; this.tapeRefused = null;
   }
   // ---- memory: A14 selects ROM or RAM; A15 is ignored by the memory (it is the video trigger) ----
   read(a) { a &= 0x7FFF; return a & 0x4000 ? this.ram[a & (this.ramSize - 1)] : this.rom[a & 0x0FFF]; }
@@ -140,15 +140,17 @@ class ZX80 {
       this.cpu.pc = 0x0283; return;
     }
     if (!this.tape) { if (!this.tapeWaiting) { this.tapeWaiting = true; this.onTape('wait'); } return; }   // the ROM listens for a tape (SPACE is BREAK)
-    const b = this.tape; this.tape = null; this.tapeWaiting = false;
-    const end = b.length >= 0x0C ? b[0x0A] | b[0x0B] << 8 : 0, n = end - 0x4000;
-    if (n < 0x28 || n > b.length) { this.onTape('error', `LOAD: that file is not a ZX80 program (it is ${b.length} bytes; its E_LINE says ${Math.max(0, n)}).`); return; }
-    if (n > this.ramSize) { this.onTape('error', `LOAD: the program needs ${Math.ceil(n / 1024)}K of RAM; switch on the 16K RAM pack.`); return; }
+    // after an error the ROM keeps listening, as a real ZX80 would; tapeWaiting stays set so the error stays on show
+    const b = this.tape, n = ZX80.tapeNeeds(b);
+    if (n < 0x28 || n > b.length) { this.tape = null; this.tapeWaiting = true; this.onTape('error', `LOAD: that file is not a ZX80 program (it is ${b.length} bytes; its E_LINE says ${Math.max(0, n)}). Press SPACE for BREAK.`); return; }
+    if (n > this.ramSize) { this.tapeWaiting = true; if (this.tapeRefused === b) return; this.tapeRefused = b; this.onTape('error', `LOAD: this program needs ${Math.ceil(n / 1024)}K of RAM. Choose the 16K RAM pack (the tape stays in), then type LOAD again.`); return; }
+    this.tape = null; this.tapeWaiting = false;
     this.ram.set(b.subarray(0, n), 0);
     this.cpu.pc = 0x0283;
     this.onTape('load', n);
   }
-  insertTape(bytes) { this.tape = bytes; }
+  insertTape(bytes) { this.tape = bytes; this.tapeRefused = null; }
+  static tapeNeeds(b) { return b && b.length >= 0x0C ? (b[0x0A] | b[0x0B] << 8) - 0x4000 : 0; }   // bytes of RAM a .o file fills
   peekW(a) { return this.read(a) | this.read(a + 1) << 8; }
   // ---- RAM listing: system variables, memory areas, the BASIC program as text and a hex dump ----
   ramReport() {

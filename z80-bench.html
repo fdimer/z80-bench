@@ -1701,7 +1701,7 @@ zx.onTape = (kind, arg) => {
   else if (kind === 'load') { msg.className = 'msg ok'; msg.textContent = `LOAD: ${arg} bytes loaded from ${zxTapeName}. Type LIST (A) or RUN (R).`; zxTapeName = ''; disDirty = true; }
   else if (kind === 'idle') { if (/listening/.test(msg.textContent)) msg.textContent = ''; }
   else if (kind === 'wait') { msg.className = 'msg'; msg.textContent = 'LOAD is listening for a tape: insert a .o file (or press SPACE for BREAK).'; }
-  else { msg.className = 'msg err'; msg.textContent = arg; zxTapeName = ''; }
+  else { msg.className = 'msg err'; msg.textContent = arg; if (!zx.tape) zxTapeName = ''; }
   zxTapeShow();
 };
 $('zxTapeIn').onclick = () => $('zxTapeFile').click();
@@ -1709,8 +1709,13 @@ $('zxTapeFile').onchange = () => {
   const f = $('zxTapeFile').files[0]; $('zxTapeFile').value = ''; if (!f) return;
   if (/\.(p|81|p81|tzx|tap|wav)$/i.test(f.name)) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = `${f.name} is not a ZX80 .o file (.p files are for the ZX81).`; return; }
   f.arrayBuffer().then(buf => {
-    zx.insertTape(new Uint8Array(buf)); zxTapeName = f.name; zxTapeShow();
-    $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = zx.tapeWaiting ? `${f.name} inserted: loading…` : `${f.name} inserted. Type LOAD (W, then NEW LINE).`;
+    const bytes = new Uint8Array(buf), need = ZX80.tapeNeeds(bytes); let note = '';
+    if (need > zx.ramSize && need <= 0x4000 && zxRom) {   // plug in the RAM pack first: a LOAD would replace the RAM anyway
+      zx.ramSize = 0x4000; $('zxRam').value = '16384'; disDirty = true; zxPowerOn();
+      note = ` It needs ${Math.ceil(need / 1024)}K, so the 16K RAM pack has been plugged in and the ZX80 restarted.`;
+    }
+    zx.insertTape(bytes); zxTapeName = f.name; zxTapeShow();
+    $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = (zx.tapeWaiting && !note ? `${f.name} inserted: loading…` : `${f.name} inserted. Type LOAD (W, then NEW LINE).`) + note;
     zscr.focus();
   });
 };
