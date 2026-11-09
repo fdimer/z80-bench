@@ -38,7 +38,8 @@ class Z80 {
 
   // ---- bus cycles ----
   fetch() {
-    const a = this.pc, v = this.bus.read(a);
+    // bus.fetch (optional) lets a machine change what an opcode fetch returns, e.g. the ZX80 forcing NOPs
+    const a = this.pc, v = this.bus.fetch ? this.bus.fetch(a) : this.bus.read(a);
     if (this.log) this.cyc.push({ k: 'M1', a, d: v, rf: (this.i << 8) | this.r });
     this.pc = (a + 1) & 0xFFFF;
     this.r = (this.r & 0x80) | ((this.r + 1) & 0x7F);

@@ -3,3 +3,7 @@ z80-bench-standalone.html
 node_modules/
 .DS_Store
 Thumbs.db
+
+# Sinclair ROM images: keep them out of the repository
+*.rom
+*.bin
