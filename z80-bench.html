@@ -77,7 +77,7 @@ select, input[type=text] { font-family: var(--font-ui); font-size: 14px; backgro
 input.mono { font-size: 13px; }
 label.inline { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }
 
-.grid { display: grid; grid-template-columns: minmax(320px, 370px) minmax(0, 1fr) minmax(0, 1.1fr) auto; gap: 14px; align-items: start; }
+.grid { display: grid; grid-template-columns: minmax(340px, 440px) minmax(280px, 1fr) minmax(350px, 1.1fr) auto; gap: 14px; align-items: start; }
 .side { display: flex; flex-direction: column; align-items: flex-end; gap: 14px; min-width: 0; }
 .side .panel { width: 380px; max-width: 100%; }
 .panel h2 .fold { order: 99; margin-left: 6px; padding: 0 7px; font-size: 14px; line-height: 20px; letter-spacing: 0; text-transform: none; color: var(--muted); }
@@ -86,7 +86,7 @@ label.inline { display: inline-flex; gap: 6px; align-items: center; color: var(-
 .side .panel.collapsed > :not(h2), .side .panel.collapsed h2 .aside { display: none; }
 .side .panel.collapsed h2 { writing-mode: vertical-rl; margin: 0; gap: 10px; }
 .side .panel.collapsed h2 .fold { order: -1; margin: 0; writing-mode: horizontal-tb; }
-@media (max-width: 1180px) { .grid { grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); } .side { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: start; } .side .panel { flex: 1 1 380px; width: auto; } .side .panel.collapsed { flex: 0 0 auto; width: auto; padding: 10px 14px; } .side .panel.collapsed h2 { writing-mode: horizontal-tb; } }
+@media (max-width: 1180px) { .grid { grid-template-columns: minmax(340px, 470px) minmax(0, 1fr); } .side { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: start; } .side .panel { flex: 1 1 380px; width: auto; } .side .panel.collapsed { flex: 0 0 auto; width: auto; padding: 10px 14px; } .side .panel.collapsed h2 { writing-mode: horizontal-tb; } }
 @media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } }
 .col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px 14px; min-width: 0; }
@@ -276,6 +276,10 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .zxscreen { display: block; width: 100%; max-width: 860px; margin: 0 auto; aspect-ratio: 4 / 3; background: #e9e7df; border-radius: 6px; image-rendering: pixelated; outline: none; border: 2px solid #b9b5a8; cursor: text; }
 .zxscreen:focus { border-color: var(--sel); }
 .zxkb { max-width: 860px; margin: 12px auto 0; display: grid; gap: 6px; }
+.rommap { background: var(--panel2); border-radius: 6px; padding: 8px; overflow: hidden; }
+.rommap canvas { display: block; max-width: 100%; height: auto; margin: 0 auto; image-rendering: pixelated; image-rendering: crisp-edges; cursor: crosshair; }
+.rommap-read { margin-top: 8px; font-size: 12.5px; min-height: 18px; color: var(--muted); }
+.rommap-read b { color: var(--ink); }
 .zxkb .krow { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
 .zxkb button { padding: 6px 2px 5px; font-size: 15px; font-weight: 700; line-height: 1.1; background: #2b2b2e; color: #f3f3f3; border-color: #2b2b2e; border-radius: 4px; touch-action: manipulation; }
 .zxkb button .fn { display: block; font-size: 8.5px; color: #9fd6a8; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -407,6 +411,13 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         </div>
         <div class="vscroll" id="memView" tabindex="0" aria-label="Memory"><div class="vspace"><table class="mem vrows" id="mem"></table></div></div>
         <p class="hint">Scroll through all 64 KB. Click a byte to edit it. Blue marks the instruction being executed, amber marks bytes written by the last instruction, underline marks the top of the stack. With Follow PC ticked, each step brings the current instruction back into view; untick it to keep watching another area.</p>
+      </section>
+
+      <section class="panel" id="pRomMap">
+        <h2>ROM bitmap <span class="aside" id="romMapInfo">no ROM</span></h2>
+        <div class="rommap"><canvas id="romMap" width="256" height="264" aria-label="The whole ROM drawn as a bitmap, one pixel per bit"></canvas></div>
+        <div class="rommap-read mono" id="romMapRead">Point at the bitmap to read a byte; click to show it in Memory.</div>
+        <p class="hint">Every bit of the ROM is one pixel. Each byte is a row of 8 pixels (bit 7 on the left) and each strip is one 256-byte page, read top to bottom, pages left to right. Machine code looks like noise, tables and text show regular patterns, and the character set at the end appears as letters. The red mark is the program counter while it is in the ROM; the blue bar marks the two pages the video logic reads characters from (the I register).</p>
       </section>
     </div>
 
@@ -1039,7 +1050,7 @@ function renderIO() {
 function render() {
   const pcNow = regsView().pc, focus = pcNow !== lastFocusPc || tTotal !== lastFocusT;
   lastFocusPc = pcNow; lastFocusT = tTotal;
-  renderPins(); renderRegs(); renderStops(); renderDebug(); renderZx(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
+  renderPins(); renderRegs(); renderStops(); renderDebug(); renderZx(); romMapDraw(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
   $('cntPC').textContent = h4(pcNow) + 'h';
   $('cntT').textContent = tTotal.toLocaleString('en-AU');
   $('cntI').textContent = instrCount.toLocaleString('en-AU');
@@ -1689,6 +1700,51 @@ function zxUseRom(bytes, saved) {   // a 4,096-byte image is ZX80 BASIC, an 8,19
   msg.className = 'msg ok'; msg.textContent = `${k === 4 ? 'ZX80' : 'ZX81'} ROM ${saved ? 'loaded from this browser' : 'loaded'} (CRC ${crc}${ed ? ', ' + ed[0] : ''}).${ed && ed[1] ? ' ' + ed[1] : ''}`;
   return true;
 }
+// ---------- ROM bitmap: every bit of the ROM as a pixel ----------
+// Strips of 8 pixels (one byte per row, bit 7 left), 256 rows per strip = one page; an 8-pixel band on top carries
+// the markers. The picture is cached and only redrawn when the ROM, the theme or a marker changes.
+const romMapCv = $('romMap'), romMapCtx = romMapCv.getContext('2d', { willReadFrequently: true }), ROMMAP_TOP = 8;
+window.addEventListener('resize', () => { if (!running) render(); });
+let romMapImg = null, romMapKey = '', romMapSig = '';
+function romMapBuild() {
+  const pages = zx.rom8k ? 32 : 16, W = pages * 8, H = 256 + ROMMAP_TOP;
+  if (romMapCv.width !== W) romMapCv.width = W; romMapCv.height = H;
+  const cs = getComputedStyle(document.documentElement), col = v => { romMapCtx.fillStyle = cs.getPropertyValue(v).trim() || '#000'; romMapCtx.fillRect(0, 0, 1, 1); return romMapCtx.getImageData(0, 0, 1, 1).data; };
+  const ink = col('--ink'), paper = col('--panel'), img = romMapCtx.createImageData(W, H);
+  for (let p = 0; p < pages; p++) for (let r = 0; r < 256; r++) {
+    const v = zxRom ? zx.rom[p * 256 + r] : 0;
+    for (let b = 0; b < 8; b++) { const c = (v >> (7 - b)) & 1 ? ink : paper, o = ((r + ROMMAP_TOP) * W + p * 8 + b) * 4; img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255; }
+  }
+  for (let o = 0; o < ROMMAP_TOP * W * 4; o += 4) { img.data[o] = paper[0]; img.data[o + 1] = paper[1]; img.data[o + 2] = paper[2]; img.data[o + 3] = 255; }
+  romMapImg = img;
+  $('romMapInfo').textContent = zxRom ? `${pages * 256} bytes · ${W} × 256 pixels · 0000h-${h4(pages * 256 - 1)}h` : 'no ROM';
+}
+function romMapDraw() {
+  const cs = getComputedStyle(document.documentElement);
+  const key = (zxRom ? zxCrc(zx.rom.subarray(0, zx.rom8k ? 0x2000 : 0x1000)) : 0) + '|' + zx.rom8k + '|' + cs.getPropertyValue('--ink') + cs.getPropertyValue('--panel');
+  if (key !== romMapKey) { romMapKey = key; romMapBuild(); romMapSig = ''; }
+  // every ROM bit a crisp square: as large as the panel allows, up to 3x
+  const room = romMapCv.parentElement.clientWidth - 16, dpr = Math.max(1, Math.round((window.devicePixelRatio || 1) * 4) / 4);
+  const scale = Math.max(1, Math.min(3, Math.floor(room / romMapCv.width * dpr) / dpr));   // a whole number of device pixels per ROM bit
+  const cssW = (romMapCv.width * scale) + 'px'; if (romMapCv.style.width !== cssW) romMapCv.style.width = cssW;
+  const size = zx.rom8k ? 0x2000 : 0x1000, pc = cpu.pc, pcIn = zxRom && pc < size, fontPage = (cpu.i & 0xFE) << 8 & (size - 1);
+  const sig = (pcIn ? pc : -1) + '|' + (zxRom ? fontPage : -1);
+  if (sig === romMapSig) return; romMapSig = sig;
+  romMapCtx.putImageData(romMapImg, 0, 0);
+  if (!zxRom) return;
+  romMapCtx.fillStyle = cs.getPropertyValue('--sel').trim() || '#2a6fb0'; romMapCtx.fillRect((fontPage >> 8) * 8, 5, 16, 2);   // font pages
+  if (pcIn) { const x = (pc >> 8) * 8, y = (pc & 0xFF) + ROMMAP_TOP; romMapCtx.fillStyle = '#e0322d'; romMapCtx.fillRect(x, 0, 8, 3); romMapCtx.fillRect(x - 1, y - 1, 10, 1); romMapCtx.fillRect(x - 1, y + 1, 10, 1); romMapCtx.fillRect(x - 1, y, 1, 1); romMapCtx.fillRect(x + 8, y, 1, 1); }
+}
+function romMapAddr(e) {
+  const r = romMapCv.getBoundingClientRect(), x = Math.floor((e.clientX - r.left) * romMapCv.width / r.width), y = Math.floor((e.clientY - r.top) * romMapCv.height / r.height) - ROMMAP_TOP;
+  if (!zxRom || x < 0 || y < 0 || y > 255 || x >= romMapCv.width) return -1;
+  return (x >> 3) * 256 + y;
+}
+romMapCv.addEventListener('mousemove', e => {
+  const a = romMapAddr(e); if (a < 0) return; const v = zx.rom[a];
+  $('romMapRead').innerHTML = `<b>${h4(a)}h</b>: <b>${h2(v)}h</b> ${v.toString(2).padStart(8, '0').replace(/0/g, '·').replace(/1/g, '█')} · ${esc(disasm(x => zx.rom[x & (zx.rom8k ? 0x1FFF : 0x0FFF)], a).text)}`;
+});
+romMapCv.addEventListener('click', e => { const a = romMapAddr(e); if (a < 0) return; $('memFollow').checked = false; $('memFrom').value = h4(a); memScrollTo(a); renderMem(false); });
 function zxApplyRom() { const r = zxRoms[zxSlot(zx.machine)]; zx.rom.fill(0); if (r) zx.rom.set(r); zxRom = !!r; disDirty = true; }
 function zxSetMachine(m, quiet) {
   zx.setMachine(m); $('zxMachine').value = m; zxApplyRom(); zxRenderKb(); zxHintText();
