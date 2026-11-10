@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ZX80 Bench</title>
+<title>ZX80 / ZX81 Bench</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -278,6 +278,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .zxkb { max-width: 860px; margin: 12px auto 0; display: grid; gap: 6px; }
 .zxkb .krow { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
 .zxkb button { padding: 6px 2px 5px; font-size: 15px; font-weight: 700; line-height: 1.1; background: #2b2b2e; color: #f3f3f3; border-color: #2b2b2e; border-radius: 4px; touch-action: manipulation; }
+.zxkb button .fn { display: block; font-size: 8.5px; color: #9fd6a8; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zxkb button .kw { display: block; font-size: 9px; font-weight: 600; color: #f3f3f3; opacity: 0.8; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zxkb button small { display: block; font-size: 9px; font-weight: 500; color: #e05252; letter-spacing: 0.02em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zxkb button.down { background: var(--sel); border-color: var(--sel); }
@@ -292,7 +293,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 
 <div class="wrap">
   <header class="top">
-    <h1>Sinclair ZX80 <span>· Z80 Bench machine emulator</span></h1>
+    <h1>Sinclair ZX80 / ZX81 <span>· Z80 Bench machine emulator</span></h1>
     <div id="status" class="status">Ready</div>
     <div class="counters">
       <span>T-states <b id="cntT">0</b></span>
@@ -323,22 +324,23 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
   <div class="toprows">
       <section class="panel" id="pScreen">
         <h2>Screen <span class="aside" id="zxScrInfo"></span></h2>
-        <canvas id="zxScreen" class="zxscreen" width="414" height="312" tabindex="0" aria-label="ZX80 TV picture: click it and type to use the keyboard"></canvas>
+        <canvas id="zxScreen" class="zxscreen" width="414" height="312" tabindex="0" aria-label="TV picture: click it and type to use the keyboard"></canvas>
         <div class="row">
           <button id="zxLoadRom" class="primary" type="button">Load ROM…</button><input type="file" id="zxRomFile" accept=".rom,.bin" hidden>
           <button id="zxRestart" type="button">Power on / restart</button>
+          <label class="inline" for="zxMachine">Machine <select id="zxMachine"><option value="zx80">ZX80 (4K ROM)</option><option value="zx80-8k">ZX80 with the 8K ROM</option><option value="zx81">ZX81</option></select></label>
           <label class="inline" for="zxRam">RAM <select id="zxRam"><option value="1024" selected>1K (as supplied)</option><option value="16384">16K RAM pack</option></select></label>
           <span class="osbkeys mono" id="zxKeysDown"></span>
         </div>
         <div class="row">
-          <button id="zxTapeIn" type="button">Insert tape…</button><input type="file" id="zxTapeFile" accept=".o,.80" hidden>
+          <button id="zxTapeIn" type="button">Insert tape…</button><input type="file" id="zxTapeFile" accept=".o,.80,.p,.81" hidden>
           <span class="mono tapeinfo" id="zxTapeInfo">No tape</span>
           <button id="zxDumpBin" type="button">Dump RAM (.bin)</button>
           <button id="zxDumpTxt" type="button">RAM listing (.txt)</button>
         </div>
         <div class="msg" id="zxMsg"></div>
-        <div class="zxkb" id="zxKb" aria-label="ZX80 keyboard"></div>
-        <p class="hint">Click the picture and type, or use the keyboard above: keywords (white, top) come from the key pressed at the K cursor, red symbols need SHIFT, which latches for one key. Enter is NEWLINE and Backspace is RUBOUT (SHIFT+0). Tape: insert a .o program file, then type LOAD (W, then NEW LINE); SAVE (E, then NEW LINE) downloads the program as a .o file. Both are instant. RAM listing gives the system variables, the BASIC program as text and a hex dump. The picture is built the way a TV would, from the ZX80's own sync pulses, so it blanks while BASIC is busy, as on the real machine. The ROM is not included: load your own 4 KB image; your browser keeps it.</p>
+        <div class="zxkb" id="zxKb" aria-label="Keyboard"></div>
+        <p class="hint" id="zxHint">Click the picture and type, or use the keyboard above: keywords (white, top) come from the key pressed at the K cursor, red symbols need SHIFT, which latches for one key. Enter is NEWLINE and Backspace is RUBOUT (SHIFT+0). Tape: insert a .o program file, then type LOAD (W, then NEW LINE); SAVE (E, then NEW LINE) downloads the program as a .o file. Both are instant. RAM listing gives the system variables, the BASIC program as text and a hex dump. The picture is built the way a TV would, from the ZX80's own sync pulses, so it blanks while BASIC is busy, as on the real machine. The ROM is not included: load your own 4 KB image; your browser keeps it.</p>
       </section>
   </div>
 
@@ -451,7 +453,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
       </section>
 
       <section class="panel" id="pMach">
-        <h2>Video logic<button class="fold" type="button" aria-expanded="true" title="Collapse">»</button> <span class="aside">ZX80 TTL</span></h2>
+        <h2>Video logic<button class="fold" type="button" aria-expanded="true" title="Collapse">»</button> <span class="aside" id="zxLogicKind">ZX80 TTL</span></h2>
         <div class="zxstate" id="zxState"></div>
         <p class="hint">Opcode fetches above 8000h with bit 6 clear are characters: the CPU gets a NOP (watch D0–D7 read 00 in the bus timing), the byte is latched, and the refresh address I:R plus the line counter picks the font row from the ROM. /INT is A6 of the refresh address; each interrupt acknowledge advances the line counter and sends horizontal sync. Reading port FEh starts vertical sync, any write ends it.</p>
       </section>
@@ -684,7 +686,7 @@ function describe(c0, pc) {
   return disasm(bus.read, pc).text;
 }
 function beginInstruction() {
-  zx.tapeTrap();
+  zx.preStep();
   pre = cpu.snapshot();
   const pc = cpu.pc;
   const text = cpu.halted ? null : disasm(bus.read, pc).text;
@@ -732,6 +734,7 @@ function setStatus(text, warn, run) {
 function haltMsg() {
   const at = h4((cpu.pc - 1) & 0xFFFF) + 'h';
   if (cpu.nmiPending) return `Halted at ${at}; /NMI received: press Step or Run and the CPU jumps to 0066h`;
+  if (zx.ula && zx.nmiGen) return `Halted at ${at}, waiting for the ULA's next NMI (it holds /WAIT so the display starts on time)`;
   if (cpu.iff1) return pins.int === 0 ? `Halted at ${at}; /INT is low: press Step or Run to take the interrupt` : `Halted at ${at}: waiting for an interrupt (pull /INT or /NMI low)`;
   return `Halted at ${at} with interrupts disabled (DI): /INT is ignored, so only /NMI or /RESET can wake the CPU`;
 }
@@ -740,7 +743,7 @@ function describeInputs() {
   if (busReleased) return setStatus('Bus released to another device (/BUSREQ low)', true);
   if (waitT && pins.wait === 0) return setStatus('Wait state: /WAIT is low', true);
   if (running) return setStatus('Running', false, true);
-  if (cpu.halted) return setStatus(haltMsg(), !cpu.iff1 && !cpu.nmiPending);
+  if (cpu.halted) return setStatus(haltMsg(), !cpu.iff1 && !cpu.nmiPending && !(zx.ula && zx.nmiGen));
   setStatus('Ready');
 }
 function stalledMsg(r) {
@@ -821,7 +824,7 @@ function frame(now) {
         if (r === 'wait' || r === 'busreq' || r === 'reset') { stall = r; break; }
         continue;
       }
-      zx.tapeTrap();
+      zx.preStep();
       const pc = cpu.pc;
       const wb = watches.size ? regVals(cpu) : null, mb = memWatches.size ? memVals() : null;
       zx.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(); zx.afterStep(cyc);
@@ -830,7 +833,7 @@ function frame(now) {
       if (wb) { const wn = watchHit(wb); if (wn != null) { finishFast(last, pc); watchStop(wn); return; } }
       if (mb) { const mh = memHit(mb); if (mh) { finishFast(last, pc); watchStop(mh); return; } }
       if (afterBps.size && afterBps.has(pc) && cpu.pc !== pc) { finishFast(last, pc); watchStop(pc); return; }
-      if (cpu.halted && !cpu.iff1 && !cpu.nmiPending) { finishFast(last, pc); stopRun(haltMsg()); return; }
+      if (cpu.halted && !cpu.iff1 && !cpu.nmiPending && !(zx.ula && zx.nmiGen)) { finishFast(last, pc); stopRun(haltMsg()); return; }   // the ZX81's ULA will send an NMI
       last.pc = pc;
     }
     if (stall) break;
@@ -1565,11 +1568,11 @@ function masterReset() {
   for (const k of Object.keys(pins)) pins[k] = 1;
   cpu.nmiPending = false;
   for (const a of [zx.rom, zx.ram, zx.keys, mem]) a.fill(0);
-  zxRom = false; try { localStorage.removeItem(ZX_ROM_KEY); } catch (e) {}
+  zxRom = false; zxRoms[4] = zxRoms[8] = null; try { localStorage.removeItem(ZX_ROM_KEYS[4]); localStorage.removeItem(ZX_ROM_KEYS[8]); } catch (e) {}
   zx.tape = null; zxTapeName = ''; zxTapeShow(); zxHeld.clear(); zxShiftLatch = false; zxShow(); $('zxMsg').className = 'msg'; $('zxMsg').textContent = '';
   resetCPU();
   if (typeof disDirty !== 'undefined') disDirty = true;
-  setStatus('Master reset: ROM forgotten (load it again to switch on), RAM cleared, tape ejected; all breakpoints and stops removed; input pins released');
+  setStatus('Master reset: ZX80 and ZX81 ROMs forgotten (load them again to switch on), RAM cleared, tape ejected; all breakpoints and stops removed; input pins released');
   render();
 }
 let masterArm = null;
@@ -1589,7 +1592,7 @@ function drawZx() {
   zctx.putImageData(zimg, 0, 0);
   const b = zx.beam();
   if (!running && zxRom) { zctx.fillStyle = 'rgba(36,113,168,0.85)'; zctx.fillRect(0, Math.min(b.line, ZX.H - 1), ZX.W, 1); zctx.fillRect(Math.min(b.x, ZX.W - 2), b.line - 3, 2, 7); }
-  if (!zxRom) { zctx.fillStyle = '#333'; zctx.font = '14px "IBM Plex Mono", monospace'; zctx.textAlign = 'center'; zctx.fillText('Load the ZX80 ROM to switch on', ZX.W / 2, ZX.H / 2 - 6); zctx.font = '11px "IBM Plex Mono", monospace'; zctx.fillText('4 KB image, not included', ZX.W / 2, ZX.H / 2 + 14); }
+  if (!zxRom) { zctx.fillStyle = '#333'; zctx.font = '14px "IBM Plex Mono", monospace'; zctx.textAlign = 'center'; zctx.fillText(`Load the ${zx.rom8k ? 'ZX81' : 'ZX80'} ROM to switch on`, ZX.W / 2, ZX.H / 2 - 6); zctx.font = '11px "IBM Plex Mono", monospace'; zctx.fillText(`${zx.rom8k ? '8' : '4'} KB image, not included`, ZX.W / 2, ZX.H / 2 + 14); }
   $('zxScrInfo').textContent = zxRom ? `${zx.synced ? 'in sync' : 'no vertical sync (rolling)'} · line ${b.line} · frame ${zx.frames}` : 'no ROM';
 }
 let zxSig = '';
@@ -1597,18 +1600,27 @@ function renderZxState() {
   const keys = []; ZX_KEYS.forEach((row, r) => row.forEach((k, i) => { if (zx.keys[r] & (1 << i)) keys.push(k); }));
   const lc = zx.lastChar;
   const html = `<div class="blk"><div class="hd">Character logic</div><div class="kv">Line counter <b>${zx.lcntr}</b> · last character latched <b>${lc < 0 ? 'none' : h2(lc) + 'h' + (lc & 0x80 ? ' (inverse)' : '')}</b><br>Font page I <b>${h2(cpu.i)}h</b> · R <b>${h2(cpu.r)}h</b> · /INT (A6 of refresh) <b>${zx.intLevel ? 'low' : 'high'}</b> · IM <b>${cpu.im}</b> IFF1 <b>${cpu.iff1}</b></div></div>
+    ${zx.ula ? `<div class="blk"><div class="hd">ULA: NMI generator</div><div class="kv">NMI on each sync <b>${zx.nmiGen ? 'on (OUT FEh)' : 'off (OUT FDh)'}</b> · NMIs so far <b>${zx.nmis}</b> · margin lines left <b>${((-cpu.a_) & 0xFF) > 0x7F ? '-' : (0x100 - cpu.a_) & 0xFF}</b></div></div>` : ''}
+    ${zx.rom8k ? `<div class="blk"><div class="hd">BASIC mode</div><div class="kv">${(zx.read(0x403B) & 0x80) ? '<b>SLOW</b>: compute and display' : '<b>FAST</b>: picture only while waiting for a key'}${zx.ula ? '' : ' · no NMI hardware on a ZX80, so SLOW is unavailable'}</div></div>` : ''}
     <div class="blk"><div class="hd">Sync and TV</div><div class="kv">Vertical sync <b>${zx.vsync ? 'active' : 'off'}</b> · TV <b>${zx.synced ? 'locked' : 'free running'}</b> · line <b>${zx.line}</b> · frames <b>${zx.frames}</b></div></div>
-    <div class="blk"><div class="hd">Keyboard and memory</div><div class="kv">Keys down <b>${keys.join(' ') || 'none'}</b> · RAM <b>${zx.ramSize / 1024}K</b> · ROM <b>${zxRom ? 'loaded' : 'none'}</b></div></div>`;
+    <div class="blk"><div class="hd">Keyboard and memory</div><div class="kv">Keys down <b>${keys.join(' ') || 'none'}</b> · RAM <b>${zx.ramSize / 1024}K</b> · ROM <b>${zxRom ? (zx.rom8k ? '8K' : '4K') + ' loaded' : 'none'}</b></div></div>`;
   if (html !== zxSig) { zxSig = html; $('zxState').innerHTML = html; }
 }
 function renderZx() { drawZx(); renderZxState(); }
 // keyboard: PC keys and the on-screen ZX80 keyboard
-// legends from the ROM's own tables: keyword in K mode (letter code + C0h) and SHIFTed symbol (key table at 006Ch)
-const ZX_LAYOUT = [
+// legends from each ROM's own tables. ZX80: keyword at the K cursor (letter code + C0h) and SHIFT symbol (table at
+// 006Ch). ZX81: keyword (letter code + C0h), SHIFT symbol or keyword (table at 00A5h) and FUNCTION word (table at 00CCh).
+const ZX80_LAYOUT = [
   [['1', '', 'NOT'], ['2', '', 'AND'], ['3', '', 'THEN'], ['4', '', 'TO'], ['5', '', '←'], ['6', '', '↓'], ['7', '', '↑'], ['8', '', '→'], ['9', '', 'HOME'], ['0', '', 'RUBOUT']],
   [['Q', 'NEW', '▌'], ['W', 'LOAD', '▄'], ['E', 'SAVE', '▘'], ['R', 'RUN', '▝'], ['T', 'CONT', '▒'], ['Y', 'REM', '"'], ['U', 'IF', '$'], ['I', 'INPUT', '('], ['O', 'PRINT', ')'], ['P', '', '*']],
   [['A', 'LIST', '▒'], ['S', 'STOP', '▞'], ['D', 'DIM', '▖'], ['F', 'FOR', '▗'], ['G', 'GO TO', '▒'], ['H', 'POKE', '**'], ['J', 'RAND', '-'], ['K', 'LET', '+'], ['L', '', '='], ['NewLine', '', 'EDIT']],
   [['Shift', '', ''], ['Z', '', ':'], ['X', 'CLEAR', ';'], ['C', 'CLS', '?'], ['V', 'GO SUB', '/'], ['B', 'RETURN', 'OR'], ['N', 'NEXT', '<'], ['M', '', '>'], ['.', '', ','], ['Space', '', '£']]
+];
+const ZX81_LAYOUT = [
+  [['1', '', 'EDIT'], ['2', '', 'AND'], ['3', '', 'THEN'], ['4', '', 'TO'], ['5', '', '←'], ['6', '', '↓'], ['7', '', '↑'], ['8', '', '→'], ['9', '', 'GRAPHICS'], ['0', '', 'RUBOUT']],
+  [['Q', 'PLOT', '""', 'SIN'], ['W', 'UNPLOT', 'OR', 'COS'], ['E', 'REM', 'STEP', 'TAN'], ['R', 'RUN', '<=', 'INT'], ['T', 'RAND', '<>', 'RND'], ['Y', 'RETURN', '>=', 'STR$'], ['U', 'IF', '$', 'CHR$'], ['I', 'INPUT', '(', 'CODE'], ['O', 'POKE', ')', 'PEEK'], ['P', 'PRINT', '"', 'TAB']],
+  [['A', 'NEW', 'STOP', 'ASN'], ['S', 'SAVE', 'LPRINT', 'ACS'], ['D', 'DIM', 'SLOW', 'ATN'], ['F', 'FOR', 'FAST', 'SGN'], ['G', 'GOTO', 'LLIST', 'ABS'], ['H', 'GOSUB', '**', 'SQR'], ['J', 'LOAD', '-', 'VAL'], ['K', 'LIST', '+', 'LEN'], ['L', 'LET', '=', 'USR'], ['NewLine', '', 'FUNCTION']],
+  [['Shift', '', ''], ['Z', 'COPY', ':', 'LN'], ['X', 'CLEAR', ';', 'EXP'], ['C', 'CONT', '?', 'AT'], ['V', 'CLS', '/'], ['B', 'SCROLL', '*', 'INKEY$'], ['N', 'NEXT', '<', 'NOT'], ['M', 'PAUSE', '>', 'PI'], ['.', '', ','], ['Space', '', '£']]
 ];
 const zxHeld = new Set(); let zxShiftLatch = false;
 function zxShow() { $('zxKeysDown').textContent = zxHeld.size || zxShiftLatch ? 'keys: ' + [...(zxShiftLatch ? ['Shift (latched)'] : []), ...zxHeld].join(' + ') : '';
@@ -1626,14 +1638,19 @@ function zxUp(k, then) {
   };
   release();
 }
-$('zxKb').innerHTML = ZX_LAYOUT.map(row => '<div class="krow">' + row.map(([k, kw, sh]) => `<button type="button" data-k="${k}" title="${k}${kw ? ' · keyword ' + kw : ''}${sh ? ' · SHIFT ' + sh : ''}"><span class="kw">${esc(kw) || '&nbsp;'}</span>${k === 'NewLine' ? 'NEW LINE' : k === 'Space' ? 'SPACE' : k === 'Shift' ? 'SHIFT' : k}${'<small>' + (esc(sh) || '&nbsp;') + '</small>'}</button>`).join('') + '</div>').join('');
-for (const b of document.querySelectorAll('#zxKb button')) {
+function zxRenderKb() {
+  const layout = zx.rom8k ? ZX81_LAYOUT : ZX80_LAYOUT;
+  $('zxKb').innerHTML = layout.map(row => '<div class="krow">' + row.map(([k, kw, sh, fn]) => `<button type="button" data-k="${k}" title="${k}${kw ? ' · keyword ' + kw : ''}${sh ? ' · SHIFT ' + sh : ''}${fn ? ' · FUNCTION ' + fn : ''}"><span class="kw">${esc(kw) || '&nbsp;'}</span>${k === 'NewLine' ? 'NEW LINE' : k === 'Space' ? 'SPACE' : k === 'Shift' ? 'SHIFT' : k}<small>${esc(sh) || '&nbsp;'}</small>${zx.rom8k ? '<span class="fn">' + (esc(fn || '') || '&nbsp;') + '</span>' : ''}</button>`).join('') + '</div>').join('');
+  zxBindKb();
+}
+function zxBindKb() { for (const b of document.querySelectorAll('#zxKb button')) {
   const k = b.dataset.k;
   if (k === 'Shift') { b.addEventListener('click', () => { zxShiftLatch = !zxShiftLatch; zx.key('Shift', zxShiftLatch); zxShow(); }); continue; }
   b.addEventListener('pointerdown', e => { e.preventDefault(); zxDown(k); });
   const up = () => { if (!zxHeld.has(k)) return; const latched = zxShiftLatch; zxUp(k, () => { if (latched && zxShiftLatch) setTimeout(() => { zxShiftLatch = false; zx.key('Shift', false); zxShow(); }, 60); }); };
   b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up);
-}
+} zxShow(); }
+zxRenderKb();
 const ZX_CODE = { Enter: 'NewLine', NumpadEnter: 'NewLine', ShiftLeft: 'Shift', ShiftRight: 'Shift', Space: 'Space', Period: '.' };
 function zxKeyNames(e) {
   if (e.code === 'Backspace') return ['Shift', '0'];
@@ -1644,22 +1661,44 @@ function zxKeyNames(e) {
 zscr.addEventListener('keydown', e => { if (e.metaKey || e.ctrlKey) return; const ks = zxKeyNames(e); if (!ks) return; e.preventDefault(); for (const k of ks) if (!zxHeld.has(k)) zxDown(k); });
 zscr.addEventListener('keyup', e => { const ks = zxKeyNames(e); if (!ks) return; e.preventDefault(); for (const k of ks) zxUp(k); });
 zscr.addEventListener('blur', () => { for (const k of [...zxHeld]) zxUp(k); });
-// ROM
-const ZX_ROM_KEY = 'zx80.rom';
+// ROMs: one 4K slot (ZX80 BASIC) and one 8K slot (ZX81 BASIC), each kept by this browser; the machine picks its slot
+const ZX_ROM_KEYS = { 4: 'zx80.rom', 8: 'zx81.rom' }, ZX_MACHINE_KEY = 'zx.machine';
+const ZX_NAMES = { zx80: 'ZX80', 'zx80-8k': 'ZX80 with the 8K ROM', zx81: 'ZX81' };
+const zxRoms = { 4: null, 8: null };
 function zxCrc(b) { let c = ~0; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xEDB88320 : c >>> 1; } return ~c >>> 0; }
-function zxUseRom(bytes, saved) {
+function zxSlot(m) { return m === 'zx80' ? 4 : 8; }
+function zxName() { return ZX_NAMES[zx.machine]; }
+function zxUseRom(bytes, saved) {   // a 4,096-byte image is ZX80 BASIC, an 8,192-byte one ZX81 BASIC
   const msg = $('zxMsg');
-  if (bytes.length < 0x1000) { msg.className = 'msg err'; msg.textContent = `That file is ${bytes.length} bytes; the ZX80 ROM is 4,096.`; return false; }
-  bytes = bytes.subarray(0, 0x1000); zx.rom.set(bytes); zxRom = true;
-  msg.className = 'msg ok'; msg.textContent = `ZX80 ROM ${saved ? 'loaded from this browser' : 'loaded'} (CRC ${zxCrc(bytes).toString(16).toUpperCase().padStart(8, '0')}).`;
-  if (!saved) try { let s = ''; for (const x of bytes) s += String.fromCharCode(x); localStorage.setItem(ZX_ROM_KEY, btoa(s)); } catch (e) {}
+  const k = bytes.length === 0x1000 ? 4 : bytes.length === 0x2000 ? 8 : 0;
+  if (!k) { msg.className = 'msg err'; msg.textContent = `That file is ${bytes.length} bytes: the ZX80 ROM is 4,096 and the ZX81 ROM 8,192.`; return false; }
+  zxRoms[k] = bytes.slice();
+  if (!saved) try { let s = ''; for (const x of bytes) s += String.fromCharCode(x); localStorage.setItem(ZX_ROM_KEYS[k], btoa(s)); } catch (e) {}
+  if (zxSlot(zx.machine) !== k) zxSetMachine(k === 4 ? 'zx80' : 'zx81', true);   // a ZX81 ROM switches to the ZX81 (or keep the 8K ZX80)
+  else zxApplyRom();
+  msg.className = 'msg ok'; msg.textContent = `${k === 4 ? 'ZX80' : 'ZX81'} ROM ${saved ? 'loaded from this browser' : 'loaded'} (CRC ${zxCrc(bytes).toString(16).toUpperCase().padStart(8, '0')}).`;
   return true;
 }
+function zxApplyRom() { const r = zxRoms[zxSlot(zx.machine)]; zx.rom.fill(0); if (r) zx.rom.set(r); zxRom = !!r; disDirty = true; }
+function zxSetMachine(m, quiet) {
+  zx.setMachine(m); $('zxMachine').value = m; zxApplyRom(); zxRenderKb(); zxHintText();
+  $('zxLogicKind').textContent = zx.ula ? 'ZX81 ULA' : 'ZX80 TTL';
+  try { localStorage.setItem(ZX_MACHINE_KEY, m); } catch (e) {}
+  if (!quiet) { if (zxRom) zxPowerOn(); else { if (running) stopRun(); resetCPU(); setStatus(`Load the ${zx.rom8k ? 'ZX81 (8K)' : 'ZX80 (4K)'} ROM to switch on the ${zxName()}`); render(); } }
+}
+function zxHintText() {
+  const tape = zx.rom8k
+    ? 'Tape: insert a .p program file, then type LOAD "" (J, SHIFT+P twice, NEW LINE); SAVE "NAME" (S, SHIFT+P, the name, SHIFT+P, NEW LINE) downloads the program as NAME.p. Both are instant. FUNCTION is SHIFT+NEW LINE: the next key gives the green word.'
+    : 'Tape: insert a .o program file, then type LOAD (W, then NEW LINE); SAVE (E, then NEW LINE) downloads the program as a .o file. Both are instant.';
+  const pic = zx.ula ? 'In SLOW mode the ULA\'s NMIs keep the picture on while BASIC runs; FAST blanks it while busy.' : 'The picture is built from the machine\'s own sync pulses, so it blanks while BASIC is busy, as on the real machine' + (zx.rom8k ? ' (the 8K ROM finds no NMI hardware on a ZX80, so it stays in FAST mode).' : '.');
+  $('zxHint').textContent = `Click the picture and type, or use the keyboard above: keywords (white, top) come from the key pressed at the K cursor, red symbols need SHIFT, which latches for one key. Enter is NEWLINE and Backspace is RUBOUT (SHIFT+0). ${tape} RAM listing gives the system variables, the BASIC program as text and a hex dump. ${pic} The ROMs are not included: load your own 4 KB ZX80 or 8 KB ZX81 image; your browser keeps them.`;
+}
 function zxPowerOn() {
-  if (!zxRom) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = 'Load the ROM first.'; return; }
+  if (!zxRom) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = `Load the ${zx.rom8k ? 'ZX81 (8K)' : 'ZX80 (4K)'} ROM first.`; return; }
   if (running) stopRun();
   zx.ram.fill(0); resetCPU(); disDirty = true; $('speed').value = 'real'; runRate = 'real'; startRun(); zscr.focus();
 }
+$('zxMachine').onchange = () => zxSetMachine($('zxMachine').value);
 $('zxLoadRom').onclick = () => $('zxRomFile').click();
 $('zxRomFile').onchange = () => { const f = $('zxRomFile').files[0]; $('zxRomFile').value = ''; if (f) f.arrayBuffer().then(buf => { if (zxUseRom(new Uint8Array(buf), false)) zxPowerOn(); }); };
 $('zxRestart').onclick = zxPowerOn;
@@ -1695,32 +1734,45 @@ function zxSaved(p, ok) {
 function zxStamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
 let zxTapeName = '';
 function zxTapeShow() { $('zxTapeInfo').textContent = zx.tape ? `Tape in: ${zxTapeName} (${zx.tape.length} bytes)` : 'No tape'; }
-zx.onTape = (kind, arg) => {
+zx.onTape = (kind, arg, name) => {
   const msg = $('zxMsg');
-  if (kind === 'save') { const n = arg.length; zxSaved(zxDownload(`zx80-program-${zxStamp()}.o`, arg, 'application/octet-stream'), f => `SAVE: ${n} bytes written to ${f} (look in your downloads).`); }
-  else if (kind === 'load') { msg.className = 'msg ok'; msg.textContent = `LOAD: ${arg} bytes loaded from ${zxTapeName}. Type LIST (A) or RUN (R).`; zxTapeName = ''; disDirty = true; }
+  if (kind === 'save') {
+    const n = arg.length, base = (name || '').replace(/[^A-Za-z0-9 _.$£-]/g, '').trim().replace(/ +/g, '-');
+    const fname = zx.rom8k ? `${base || 'zx81-program-' + zxStamp()}.p` : `zx80-program-${zxStamp()}.o`;
+    zxSaved(zxDownload(fname, arg, 'application/octet-stream'), f => `SAVE: ${n} bytes written to ${f} (look in your downloads).`);
+  }
+  else if (kind === 'load') { msg.className = 'msg ok'; msg.textContent = `LOAD: ${arg} bytes loaded from ${zxTapeName}. ${zx.rom8k ? 'Type LIST (K) or RUN (R), unless it started by itself.' : 'Type LIST (A) or RUN (R).'}`; zxTapeName = ''; disDirty = true; }
   else if (kind === 'idle') { if (/listening/.test(msg.textContent)) msg.textContent = ''; }
-  else if (kind === 'wait') { msg.className = 'msg'; msg.textContent = 'LOAD is listening for a tape: insert a .o file (or press SPACE for BREAK).'; }
+  else if (kind === 'wait') { msg.className = 'msg'; msg.textContent = `LOAD is listening for a tape: insert a ${zx.rom8k ? '.p' : '.o'} file (or press SPACE for BREAK).`; }
   else { msg.className = 'msg err'; msg.textContent = arg; if (!zx.tape) zxTapeName = ''; }
   zxTapeShow();
 };
 $('zxTapeIn').onclick = () => $('zxTapeFile').click();
 $('zxTapeFile').onchange = () => {
   const f = $('zxTapeFile').files[0]; $('zxTapeFile').value = ''; if (!f) return;
-  if (/\.(p|81|p81|tzx|tap|wav)$/i.test(f.name)) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = `${f.name} is not a ZX80 .o file (.p files are for the ZX81).`; return; }
+  const msg = $('zxMsg');
+  if (/\.(p81|tzx|tap|wav)$/i.test(f.name)) { msg.className = 'msg err'; msg.textContent = `${f.name}: only .o (ZX80) and .p (ZX81) program files can be loaded.`; return; }
+  const isP = /\.(p|81)$/i.test(f.name);
   f.arrayBuffer().then(buf => {
-    const bytes = new Uint8Array(buf), need = ZX80.tapeNeeds(bytes); let note = '';
+    const bytes = new Uint8Array(buf); let note = '';
+    if (isP !== zx.rom8k) {   // the file is for the other BASIC: switch machine if that ROM is here
+      const want = isP ? 'zx81' : 'zx80';
+      if (!zxRoms[zxSlot(want)]) { msg.className = 'msg err'; msg.textContent = `${f.name} is a ${isP ? 'ZX81 .p' : 'ZX80 .o'} file: load the ${isP ? 'ZX81 (8K)' : 'ZX80 (4K)'} ROM first.`; return; }
+      zxSetMachine(want, true); zxPowerOn(); note = ` It's a ${isP ? 'ZX81' : 'ZX80'} program, so the machine is now the ${zxName()}.`;
+    }
+    const need = isP ? ZX80.tapeNeeds81(bytes) : ZX80.tapeNeeds(bytes);
     if (need > zx.ramSize && need <= 0x4000 && zxRom) {   // plug in the RAM pack first: a LOAD would replace the RAM anyway
       zx.ramSize = 0x4000; $('zxRam').value = '16384'; disDirty = true; zxPowerOn();
-      note = ` It needs ${Math.ceil(need / 1024)}K, so the 16K RAM pack has been plugged in and the ZX80 restarted.`;
+      note += ` It needs ${Math.ceil(need / 1024)}K, so the 16K RAM pack has been plugged in and the ${zxName()} restarted.`;
     }
     zx.insertTape(bytes); zxTapeName = f.name; zxTapeShow();
-    $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = (zx.tapeWaiting && !note ? `${f.name} inserted: loading…` : `${f.name} inserted. Type LOAD (W, then NEW LINE).`) + note;
+    const how = zx.rom8k ? 'LOAD "" (J, SHIFT+P twice, NEW LINE)' : 'LOAD (W, then NEW LINE)';
+    msg.className = 'msg ok'; msg.textContent = (zx.tapeWaiting && !note ? `${f.name} inserted: loading…` : `${f.name} inserted. Type ${how}.`) + note;
     zscr.focus();
   });
 };
-$('zxDumpBin').onclick = () => { const sz = zx.ramSize; zxSaved(zxDownload(`zx80-ram-${sz / 1024}k-${zxStamp()}.bin`, zx.ram.slice(0, sz), 'application/octet-stream'), f => `RAM dumped to ${f}: ${sz} bytes, 4000h-${(0x3FFF + sz).toString(16).toUpperCase()}h (byte 0 of the file is address 4000h).`); };
-$('zxDumpTxt').onclick = () => zxSaved(zxDownload(`zx80-ram-${zxStamp()}.txt`, zx.ramReport(), 'text/plain;charset=utf-8'), f => `RAM listing saved to ${f}: system variables, memory areas, the BASIC program and a hex dump.`);
+$('zxDumpBin').onclick = () => { const sz = zx.ramSize; zxSaved(zxDownload(`${zx.rom8k ? 'zx81' : 'zx80'}-ram-${sz / 1024}k-${zxStamp()}.bin`, zx.ram.slice(0, sz), 'application/octet-stream'), f => `RAM dumped to ${f}: ${sz} bytes, 4000h-${(0x3FFF + sz).toString(16).toUpperCase()}h (byte 0 of the file is address 4000h).`); };
+$('zxDumpTxt').onclick = () => zxSaved(zxDownload(`${zx.rom8k ? 'zx81' : 'zx80'}-ram-${zxStamp()}.txt`, zx.ramReport(), 'text/plain;charset=utf-8'), f => `RAM listing saved to ${f}: system variables, memory areas, the BASIC program and a hex dump.`);
 $('zxRam').onchange = () => { zx.ramSize = +$('zxRam').value; disDirty = true; if (zxRom) zxPowerOn(); else render(); };
 
 // ---------- collapsible side panels ----------
@@ -1741,9 +1793,13 @@ $('hexIn').value = savedHex || SAMPLE;
 $('asmIn').value = savedAsm || SAMPLE_ASM;
 portIn.set(0x02, 0x5A);
 setMode(savedMode === 'hex' ? 'hex' : 'asm');
-{ let saved = null; try { saved = localStorage.getItem(ZX_ROM_KEY); } catch (e) {}
-  if (saved) { const s = atob(saved), b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); if (zxUseRom(b, true)) zxPowerOn(); }
-  else { setStatus('Load the ZX80 ROM to start'); render(); } }
+{ for (const k of [4, 8]) { let s = null; try { s = localStorage.getItem(ZX_ROM_KEYS[k]); } catch (e) {}
+    if (s) { s = atob(s); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); if (b.length === k * 1024) zxRoms[k] = b; } }
+  let m = null; try { m = localStorage.getItem(ZX_MACHINE_KEY); } catch (e) {}
+  if (!ZX_NAMES[m]) m = zxRoms[4] || !zxRoms[8] ? 'zx80' : 'zx81';
+  zxSetMachine(m, true);
+  if (zxRom) { $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = `${zxName()} ROM loaded from this browser.`; zxPowerOn(); }
+  else { setStatus(`Load the ${zx.rom8k ? 'ZX81 (8K)' : 'ZX80 (4K)'} ROM to switch on the ${zxName()}`); render(); } }
 })();
 </script>
 </html>
