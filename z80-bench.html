@@ -329,7 +329,8 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <button id="zxLoadRom" class="primary" type="button">Load ROM…</button><input type="file" id="zxRomFile" hidden>
           <button id="zxRestart" type="button">Power on / restart</button>
           <label class="inline" for="zxMachine">Machine <select id="zxMachine"><option value="zx80">ZX80 (4K ROM)</option><option value="zx80-8k">ZX80 with the 8K ROM</option><option value="zx81">ZX81</option></select></label>
-          <label class="inline" for="zxRam">RAM <select id="zxRam"><option value="1024" selected>1K (as supplied)</option><option value="16384">16K RAM pack</option></select></label>
+          <label class="inline" for="zxRam">RAM <select id="zxRam"><option value="1024" selected>1K (as supplied)</option><option value="16384">16K RAM pack</option><option value="32768">32K RAM pack</option><option value="49152">48K RAM pack</option></select></label>
+          <label class="inline" for="zxHires" title="8K of battery-backed RAM at 2000h-3FFFh that also answers the Z80's refresh cycles (WRX), so programs can show true high-resolution pictures straight from RAM. This is what the SCRAM board and similar hi-res boards did."><input type="checkbox" id="zxHires"> Hi-res board</label>
           <span class="osbkeys mono" id="zxKeysDown"></span>
         </div>
         <div class="row">
@@ -1567,7 +1568,7 @@ function masterReset() {
   $('dbgClear').onclick();
   for (const k of Object.keys(pins)) pins[k] = 1;
   cpu.nmiPending = false;
-  for (const a of [zx.rom, zx.ram, zx.keys, mem]) a.fill(0);
+  for (const a of [zx.rom, zx.ram, zx.lowRam, zx.keys, mem]) a.fill(0);
   zxRom = false; zxRoms[4] = zxRoms[8] = null; try { localStorage.removeItem(ZX_ROM_KEYS[4]); localStorage.removeItem(ZX_ROM_KEYS[8]); } catch (e) {}
   zx.tape = null; zxTapeName = ''; zxTapeShow(); zxHeld.clear(); zxShiftLatch = false; zxShow(); $('zxMsg').className = 'msg'; $('zxMsg').textContent = '';
   resetCPU();
@@ -1602,6 +1603,7 @@ function renderZxState() {
   const html = `<div class="blk"><div class="hd">Character logic</div><div class="kv">Line counter <b>${zx.lcntr}</b> · last character latched <b>${lc < 0 ? 'none' : h2(lc) + 'h' + (lc & 0x80 ? ' (inverse)' : '')}</b><br>Font page I <b>${h2(cpu.i)}h</b> · R <b>${h2(cpu.r)}h</b> · /INT (A6 of refresh) <b>${zx.intLevel ? 'low' : 'high'}</b> · IM <b>${cpu.im}</b> IFF1 <b>${cpu.iff1}</b></div></div>
     ${zx.ula ? `<div class="blk"><div class="hd">ULA: NMI generator</div><div class="kv">NMI on each sync <b>${zx.nmiGen ? 'on (OUT FEh)' : 'off (OUT FDh)'}</b> · NMIs so far <b>${zx.nmis}</b> · margin lines left <b>${((-cpu.a_) & 0xFF) > 0x7F ? '-' : (0x100 - cpu.a_) & 0xFF}</b></div></div>` : ''}
     ${zx.rom8k ? `<div class="blk"><div class="hd">BASIC mode</div><div class="kv">${(zx.read(0x403B) & 0x80) ? '<b>SLOW</b>: compute and display' : '<b>FAST</b>: picture only while waiting for a key'}${zx.ula ? '' : ' · no NMI hardware on a ZX80, so SLOW is unavailable'}</div></div>` : ''}
+    ${zx.hires ? `<div class="blk"><div class="hd">Hi-res board</div><div class="kv">8K RAM at 2000h-3FFFh · picture bytes fetched from RAM <b>${zx.hiresBytes}</b> ${cpu.i >= 0x20 && cpu.i < 0xC0 ? '· I points into RAM: <b>high resolution</b>' : '· I points at the ROM: character display'}</div></div>` : ''}
     <div class="blk"><div class="hd">Sync and TV</div><div class="kv">Vertical sync <b>${zx.vsync ? 'active' : 'off'}</b> · TV <b>${zx.synced ? 'locked' : 'free running'}</b> · line <b>${zx.line}</b> · frames <b>${zx.frames}</b></div></div>
     <div class="blk"><div class="hd">Keyboard and memory</div><div class="kv">Keys down <b>${keys.join(' ') || 'none'}</b> · RAM <b>${zx.ramSize / 1024}K</b> · ROM <b>${zxRom ? (zx.rom8k ? '8K' : '4K') + ' loaded' : 'none'}</b></div></div>`;
   if (html !== zxSig) { zxSig = html; $('zxState').innerHTML = html; }
@@ -1665,6 +1667,13 @@ zscr.addEventListener('blur', () => { for (const k of [...zxHeld]) zxUp(k); });
 const ZX_ROM_KEYS = { 4: 'zx80.rom', 8: 'zx81.rom' }, ZX_MACHINE_KEY = 'zx.machine';
 const ZX_NAMES = { zx80: 'ZX80', 'zx80-8k': 'ZX80 with the 8K ROM', zx81: 'ZX81' };
 const zxRoms = { 4: null, 8: null };
+// known ROM images by CRC-32. The first ZX81 ROM has some routines 3-4 bytes lower than the later ones, so
+// machine code written for the later ROMs (most of it, and all Timex software) can fail on it.
+const ZX_ROM_EDITIONS = {
+  '4C7FC597': ['ZX80 4K BASIC'],
+  'FCBBD617': ['ZX81 1st edition', 'BASIC programs are fine, but some machine-code programs written for the later ROM call routines that sit a few bytes lower in this one, and stop with an error.'],
+  '4B1DD6EB': ['ZX81 2nd edition, also the Timex Sinclair 1000'], '522C37B8': ['ZX81 3rd edition'], '7DD19C48': ['Timex Sinclair 1500']
+};
 function zxCrc(b) { let c = ~0; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xEDB88320 : c >>> 1; } return ~c >>> 0; }
 function zxSlot(m) { return m === 'zx80' ? 4 : 8; }
 function zxName() { return ZX_NAMES[zx.machine]; }
@@ -1676,7 +1685,8 @@ function zxUseRom(bytes, saved) {   // a 4,096-byte image is ZX80 BASIC, an 8,19
   if (!saved) try { let s = ''; for (const x of bytes) s += String.fromCharCode(x); localStorage.setItem(ZX_ROM_KEYS[k], btoa(s)); } catch (e) {}
   if (zxSlot(zx.machine) !== k) zxSetMachine(k === 4 ? 'zx80' : 'zx81', true);   // a ZX81 ROM switches to the ZX81 (or keep the 8K ZX80)
   else zxApplyRom();
-  msg.className = 'msg ok'; msg.textContent = `${k === 4 ? 'ZX80' : 'ZX81'} ROM ${saved ? 'loaded from this browser' : 'loaded'} (CRC ${zxCrc(bytes).toString(16).toUpperCase().padStart(8, '0')}).`;
+  const crc = zxCrc(bytes).toString(16).toUpperCase().padStart(8, '0'), ed = ZX_ROM_EDITIONS[crc];
+  msg.className = 'msg ok'; msg.textContent = `${k === 4 ? 'ZX80' : 'ZX81'} ROM ${saved ? 'loaded from this browser' : 'loaded'} (CRC ${crc}${ed ? ', ' + ed[0] : ''}).${ed && ed[1] ? ' ' + ed[1] : ''}`;
   return true;
 }
 function zxApplyRom() { const r = zxRoms[zxSlot(zx.machine)]; zx.rom.fill(0); if (r) zx.rom.set(r); zxRom = !!r; disDirty = true; }
@@ -1691,7 +1701,7 @@ function zxHintText() {
     ? 'Tape: insert a .p program file, then type LOAD "" (J, SHIFT+P twice, NEW LINE); SAVE "NAME" (S, SHIFT+P, the name, SHIFT+P, NEW LINE) downloads the program as NAME.p. Both are instant. FUNCTION is SHIFT+NEW LINE: the next key gives the green word.'
     : 'Tape: insert a .o program file, then type LOAD (W, then NEW LINE); SAVE (E, then NEW LINE) downloads the program as a .o file. Both are instant.';
   const pic = zx.ula ? 'In SLOW mode the ULA\'s NMIs keep the picture on while BASIC runs; FAST blanks it while busy.' : 'The picture is built from the machine\'s own sync pulses, so it blanks while BASIC is busy, as on the real machine' + (zx.rom8k ? ' (the 8K ROM finds no NMI hardware on a ZX80, so it stays in FAST mode).' : '.');
-  $('zxHint').textContent = `Click the picture and type, or use the keyboard above: keywords (white, top) come from the key pressed at the K cursor, red symbols need SHIFT, which latches for one key. Enter is NEWLINE and Backspace is RUBOUT (SHIFT+0). ${tape} RAM listing gives the system variables, the BASIC program as text and a hex dump. ${pic} The ROMs are not included: load your own 4 KB ZX80 or 8 KB ZX81 image; your browser keeps them.`;
+  $('zxHint').textContent = `Click the picture and type, or use the keyboard above: keywords (white, top) come from the key pressed at the K cursor, red symbols need SHIFT, which latches for one key. Enter is NEWLINE and Backspace is RUBOUT (SHIFT+0). ${tape} RAM listing gives the system variables, the BASIC program as text and a hex dump. ${pic} Bigger RAM packs and the hi-res board (8K RAM at 2000h that answers refresh cycles, as the SCRAM and WRX boards did) are for programs that need them. The ROMs are not included: load your own 4 KB ZX80 or 8 KB ZX81 image; your browser keeps them.`;
 }
 function zxPowerOn() {
   if (!zxRom) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = `Load the ${zx.rom8k ? 'ZX81 (8K)' : 'ZX80 (4K)'} ROM first.`; return; }
@@ -1780,7 +1790,20 @@ $('zxTapeFile').onchange = () => {
 };
 $('zxDumpBin').onclick = () => { const sz = zx.ramSize; zxSaved(zxDownload(`${zx.rom8k ? 'zx81' : 'zx80'}-ram-${sz / 1024}k-${zxStamp()}.bin`, zx.ram.slice(0, sz), 'application/octet-stream'), f => `RAM dumped to ${f}: ${sz} bytes, 4000h-${(0x3FFF + sz).toString(16).toUpperCase()}h (byte 0 of the file is address 4000h).`); };
 $('zxDumpTxt').onclick = () => zxSaved(zxDownload(`${zx.rom8k ? 'zx81' : 'zx80'}-ram-${zxStamp()}.txt`, zx.ramReport(), 'text/plain;charset=utf-8'), f => `RAM listing saved to ${f}: system variables, memory areas, the BASIC program and a hex dump.`);
-$('zxRam').onchange = () => { zx.ramSize = +$('zxRam').value; disDirty = true; if (zxRom) zxPowerOn(); else render(); };
+$('zxRam').onchange = () => {
+  zx.ramSize = +$('zxRam').value; disDirty = true; if (zxRom) zxPowerOn(); else render();
+  if (zx.ramSize > 0x4000) {   // the ROMs only look for RAM up to 7FFFh, as on the real machines
+    const hi = zx.ramSize === 0x8000 ? 192 : 255;
+    $('zxMsg').className = 'msg'; $('zxMsg').textContent = zx.rom8k
+      ? `${zx.ramSize / 1024}K fitted. BASIC only finds 16K by itself: type POKE 16389,${hi} then NEW (as on a real ZX81) before loading a program that needs more.`
+      : `${zx.ramSize / 1024}K fitted, but the ZX80's 4K BASIC only uses the first 16K; the rest is there for machine code.`;
+  }
+};
+$('zxHires').onchange = () => {
+  zx.hires = $('zxHires').checked; disDirty = true; try { localStorage.setItem('zx.hires', zx.hires ? '1' : '0'); } catch (e) {}
+  $('zxMsg').className = 'msg'; $('zxMsg').textContent = zx.hires ? 'Hi-res board fitted: 8K of RAM at 2000h-3FFFh (it keeps its contents through a restart, like the battery-backed original), and RAM now answers refresh cycles, so hi-res programs can draw from it.' : 'Hi-res board removed: 2000h-3FFFh is the ROM\'s echo again.';
+  render();
+};
 
 // ---------- collapsible side panels ----------
 for (const sec of document.querySelectorAll('.side .panel')) {
@@ -1802,7 +1825,7 @@ portIn.set(0x02, 0x5A);
 setMode(savedMode === 'hex' ? 'hex' : 'asm');
 { for (const k of [4, 8]) { let s = null; try { s = localStorage.getItem(ZX_ROM_KEYS[k]); } catch (e) {}
     if (s) { s = atob(s); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); if (b.length === k * 1024) zxRoms[k] = b; } }
-  let m = null; try { m = localStorage.getItem(ZX_MACHINE_KEY); } catch (e) {}
+  let m = null; try { m = localStorage.getItem(ZX_MACHINE_KEY); zx.hires = localStorage.getItem('zx.hires') === '1'; $('zxHires').checked = zx.hires; } catch (e) {}
   if (!ZX_NAMES[m]) m = zxRoms[4] || !zxRoms[8] ? 'zx80' : 'zx81';
   zxSetMachine(m, true);
   if (zxRom) { $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = `${zxName()} ROM loaded from this browser.`; zxPowerOn(); }

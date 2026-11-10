@@ -80,8 +80,10 @@ class ZX80 {
   constructor(rom, machine) {
     this.rom = new Uint8Array(0x2000); if (rom) this.rom.set(rom.subarray(0, 0x2000));
     this.setMachine(machine || 'zx80');
-    this.ram = new Uint8Array(0x4000);
-    this.ramSize = 0x400;                      // 1K as supplied; 16K with the RAM pack
+    this.ram = new Uint8Array(0xC000);         // 4000h-FFFFh
+    this.ramSize = 0x400;                      // 1K as supplied; 16K with the RAM pack; 32K or 48K with bigger packs
+    this.lowRam = new Uint8Array(0x2000);      // 8K of RAM at 2000h-3FFFh in place of the ROM's echo (a hi-res board)
+    this.hires = false;                        // hi-res board fitted: RAM at 2000h, and RAM answers refresh cycles (WRX)
     this.keys = new Uint8Array(8);             // bit set = key down
     this.fb = new Uint8Array(ZX.W * ZX.H);      // TV picture being built: 1 = ink (black)
     this.front = new Uint8Array(ZX.W * ZX.H);   // last complete picture
@@ -103,7 +105,7 @@ class ZX80 {
   }
   reset() {
     this.cpu.reset();
-    this.nmiGen = false; this.nextH = Infinity; this.nmis = 0;
+    this.nmiGen = false; this.nextH = Infinity; this.nmis = 0; this.hiresBytes = 0;
     this.t = 0;                 // T-states since power-on
     this.lcntr = 0;             // 74LS393 line counter (character row 0-7)
     this.vsync = false; this.vsyncStart = 0;
@@ -114,13 +116,38 @@ class ZX80 {
     this.fb.fill(0); this.front.fill(0);
     this.tapeWaiting = false; this.tapeRefused = null;
   }
-  // ---- memory: A14 selects ROM or RAM; A15 is ignored by the memory (it is the video trigger) ----
-  read(a) { a &= 0x7FFF; return a & 0x4000 ? this.ram[a & (this.ramSize - 1)] : this.rom[a & this.romMask]; }
+  // ---- memory ----
+  // Up to 16K: A14 selects ROM or RAM and A15 is ignored (it is the video trigger), so everything echoes above
+  // 8000h. A 32K or 48K pack puts real RAM above 8000h for data; opcode fetches from C000h up still see the echo
+  // of 4000h-7FFFh, because that is where the display file is "executed". The hi-res board replaces the ROM's
+  // echo at 2000h-3FFFh with 8K of RAM.
+  // ramAt: index into this.ram for an address, or -1 (not main RAM); m1 = opcode fetch
+  ramAt(a, m1) {
+    if (this.ramSize > 0x4000 && a >= 0x4000 && a < 0x4000 + this.ramSize && !(m1 && a >= 0xC000)) return a - 0x4000;
+    a &= 0x7FFF;
+    return a & 0x4000 ? (a - 0x4000) & (this.ramSize - 1) & 0x3FFF : -1;
+  }
+  read(a, m1) {
+    const i = this.ramAt(a, m1); if (i >= 0) return this.ram[i];
+    a &= 0x7FFF;
+    return this.hires && a >= 0x2000 ? this.lowRam[a - 0x2000] : this.rom[a & this.romMask];
+  }
   peek(a) { return this.read(a); }
-  write(a, v) { a &= 0x7FFF; if (a & 0x4000) this.ram[a & (this.ramSize - 1)] = v; }
+  write(a, v) {
+    const i = this.ramAt(a, false); if (i >= 0) { this.ram[i] = v; return; }
+    a &= 0x7FFF; if (this.hires && a >= 0x2000) this.lowRam[a - 0x2000] = v;
+  }
+  // the byte RAM puts on the bus during a refresh cycle (address I:R), or -1 if no RAM answers. A plain ZX81's
+  // RAM is switched off during refresh; the hi-res board (and WRX-modified RAM packs) answer, which is how true
+  // high resolution works: the picture byte comes straight from RAM instead of the ROM's character set.
+  refreshRam(ra) {
+    if (!this.hires) return -1;
+    const i = this.ramAt(ra, false); if (i >= 0) return this.ram[i];
+    ra &= 0x7FFF; return ra >= 0x2000 && ra < 0x4000 ? this.lowRam[ra - 0x2000] : -1;
+  }
   // opcode fetch: above 8000h a byte with bit 6 clear is a character; the CPU is given a NOP
   fetch(a) {
-    const v = this.read(a);
+    const v = this.read(a, true);
     if ((a & 0x8000) && !(v & 0x40)) { this.latch = v; return 0x00; }
     return v;
   }
@@ -300,10 +327,11 @@ class ZX80 {
     for (const c of cyc) {
       const n = ZX_CYC_T[c.k] || c.n || 0;
       if (c.k === 'M1' && !c.halt && (c.a & 0x8000) && c.d === 0x00) {
-        const v = this.read(c.a);
+        const v = this.read(c.a, true);
         if (!(v & 0x40)) {   // a character: font byte from I:R with the character code and line counter
-          const fa = (c.rf & 0xFE00) | ((v & 0x3F) << 3) | this.lcntr;
-          let bits = fa & 0x4000 ? 0 : this.rom[fa & this.romMask];
+          const fa = (c.rf & 0xFE00) | ((v & 0x3F) << 3) | this.lcntr, hr = this.refreshRam(c.rf);
+          let bits = hr >= 0 ? hr : fa & 0x4000 ? 0 : this.rom[fa & this.romMask];
+          if (hr >= 0) this.hiresBytes++;
           if (v & 0x80) bits ^= 0xFF;
           this.plot(t0 + off + 4, bits); this.lastChar = v;
         }
