@@ -11,6 +11,9 @@
 // (bits 1-0 page 0 ... bits 7-6 page 3). Slot 0 holds the 32K BIOS + BASIC ROM, on these Sonys also the 16K
 // Personal Data Bank firmware at 8000h, and on the HB-55P its 16K of RAM at C000h. Slots 1 and 3 are the
 // cartridge slots. The HB-75P has 64K of RAM in slot 2.
+// Cassette: .cas tape images are handled by trapping the BIOS tape routines (TAPION 00E1h, TAPIN 00E4h, TAPIOF
+// 00E7h, TAPOON 00EAh, TAPOUT 00EDh, TAPOOF 00F0h) instead of modelling the audio signal, so loading and saving
+// are instant. A .cas file is the bytes of each tape block, every block preceded by an 8-byte marker.
 // The Z80 on an MSX gets one wait state in every opcode fetch, so M1 cycles take 5 T-states.
 
 const MSX = {
@@ -37,6 +40,7 @@ const MSX_KEYS = [
   ['Space', 'Home', 'Ins', 'Del', 'Left', 'Up', 'Down', 'Right']
 ];
 const MSX_KEYPOS = {}; MSX_KEYS.forEach((row, r) => row.forEach((k, c) => { MSX_KEYPOS[k] = [r, c]; }));
+const MSX_CAS_HDR = [0x1F, 0xA6, 0xDE, 0xBA, 0xCC, 0x13, 0x7D, 0x74];
 const MSX_CYC_T = { M1: 5, MR: 3, MW: 3, IR: 4, IW: 4, IA: 7 };
 
 // MSX BASIC keywords: tokens 81h-FCh, and the functions that follow an FFh prefix (81h-B0h)
@@ -130,6 +134,7 @@ class MSXMachine {
     this.bus = { read: a => this.read(a), write: (a, v) => this.write(a, v), input: p => this.input(p), output: (p, v) => this.output(p, v) };
     this.cpu = new Z80(this.bus);
     this.cpu.intVector = 0xFF;
+    this.tape = null; this.tapePos = 0; this.rec = []; this.onTape = () => {};
     this.reset();
   }
   // HB-55P: 16K of RAM at C000h in slot 0. HB-75P: 64K of RAM in slot 2.
@@ -277,7 +282,41 @@ class MSXMachine {
     this.frames++;
   }
   // ---- per instruction ----
-  preStep() {}
+  // ---- cassette ----
+  insertTape(bytes) { this.tape = bytes; this.tapePos = 0; }
+  casHeaderAt(p) { const t = this.tape; for (let i = 0; i < 8; i++) if (t[p + i] !== MSX_CAS_HDR[i]) return false; return true; }
+  // the files on the tape: BASIC (CLOAD), binary (BLOAD) and ASCII (LOAD) files start with a block of ten marker bytes and a 6-letter name
+  tapeFiles() {
+    const out = [], t = this.tape; if (!t) return out;
+    for (let p = 0; p + 24 <= t.length; p += 8) {
+      if (!this.casHeaderAt(p)) continue;
+      const m = t[p + 8], kind = m === 0xD3 ? 'basic' : m === 0xD0 ? 'binary' : m === 0xEA ? 'ascii' : null; if (!kind) continue;
+      let same = true; for (let i = 1; i < 10; i++) if (t[p + 8 + i] !== m) same = false; if (!same) continue;
+      let name = ''; for (let i = 0; i < 6; i++) { const c = t[p + 18 + i]; name += c >= 32 && c < 127 ? String.fromCharCode(c) : ' '; }
+      out.push({ kind, name: name.trim(), at: p });
+    }
+    return out;
+  }
+  tapeTrap() {
+    const c = this.cpu, pc = c.pc;
+    if (pc < 0xE1 || pc > 0xF0 || (pc - 0xE1) % 3 || !this.hasBios || (this.ppiA & 3) !== 0 || c.halted) return;
+    let cy = 0;
+    switch (pc) {
+      case 0xE1: {   // TAPION: find the next block; returns with interrupts off, carry set on failure
+        let found = -1; if (this.tape) for (let p = (this.tapePos + 7) & ~7; p + 8 <= this.tape.length; p += 8) if (this.casHeaderAt(p)) { found = p; break; }
+        if (found < 0) { cy = 1; this.onTape('error', this.tape ? 'end' : 'none'); } else { this.tapePos = found + 8; this.onTape('block', found); }
+        c.iff1 = c.iff2 = 0; break;
+      }
+      case 0xE4: if (this.tape && this.tapePos < this.tape.length) c.a = this.tape[this.tapePos++]; else cy = 1; break;   // TAPIN: one byte in A
+      case 0xE7: c.iff1 = c.iff2 = 1; this.onTape('idle'); break;                                                       // TAPIOF
+      case 0xEA: while (this.rec.length % 8) this.rec.push(0); this.rec.push(...MSX_CAS_HDR); c.iff1 = c.iff2 = 0; break; // TAPOON: start a block
+      case 0xED: this.rec.push(c.a); break;                                                                              // TAPOUT: one byte from A
+      case 0xF0: c.iff1 = c.iff2 = 1; this.onTape('recorded', this.rec.length); break;                                   // TAPOOF
+    }
+    c.f = (c.f & 0xFE) | cy;
+    c.pc = this.read(c.sp) | this.read((c.sp + 1) & 0xFFFF) << 8; c.sp = (c.sp + 2) & 0xFFFF;                          // RET
+  }
+  preStep() { this.tapeTrap(); }
   intOut() { return !!(this.vstat & 0x80) && !!(this.vreg[1] & 0x20); }      // the VDP's /INT pin: frame flag and interrupt enable
   syncInt() { this.cpu.intLine = this.intOut(); }
   afterStep(cyc) {

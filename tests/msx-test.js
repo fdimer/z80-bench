@@ -71,4 +71,12 @@ const rom = new Uint8Array(0x20000); for (let s = 0; s < 16; s++) rom[s * 0x2000
 const k = new ctx.MSXCart(rom, 'ascii8'); m.carts[1] = k; m.output(0xA8, 0x04); m.write(0x6800, 5);
 ok(m.read(0x6000) === 5 && m.read(0x4000) === 0, 'ASCII 8K mapper switches an 8K segment');
 m.setMachine('hb75p'); m.output(0xA8, 0xAA); m.write(0x1234, 0x5A); ok(m.read(0x1234) === 0x5A, 'HB-75P: 64K of RAM in slot 2');
+// cassette traps: a stand-in BIOS whose tape entry points are never reached, because the model answers them
+m.setMachine('hb55p'); m.output(0xA8, 0); m.carts[1] = null;
+m.insertTape(new Uint8Array([0x1F, 0xA6, 0xDE, 0xBA, 0xCC, 0x13, 0x7D, 0x74, 0x55, 0x66]));
+m.cpu.sp = 0xF000; m.ram[0xF000] = 0x34; m.ram[0xF001] = 0x12; m.cpu.pc = 0xE1; m.preStep();
+ok(m.cpu.pc === 0x1234 && !(m.cpu.f & 1) && m.tapePos === 8, 'TAPION finds the block marker and returns');
+m.cpu.sp = 0xF000; m.cpu.pc = 0xE4; m.preStep(); ok(m.cpu.a === 0x55, 'TAPIN reads a byte from the tape');
+m.cpu.sp = 0xF000; m.cpu.pc = 0xEA; m.preStep(); m.cpu.a = 0x77; m.cpu.sp = 0xF000; m.cpu.pc = 0xED; m.preStep();
+ok(m.rec.length === 9 && m.rec[8] === 0x77, 'TAPOON and TAPOUT record a block');
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);

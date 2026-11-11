@@ -357,13 +357,19 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <button id="mxCartOut" type="button" hidden>Remove cartridge</button>
         </div>
         <div class="row">
+          <button id="mxTapeIn" type="button">Insert tape…</button><input type="file" id="mxTapeFile" hidden>
+          <span class="mono tapeinfo" id="mxTapeInfo">No tape</span>
+          <button id="mxTapeRew" type="button" hidden>Rewind</button>
+          <button id="mxTapeSave" type="button" hidden>Save recording (.cas)</button>
+        </div>
+        <div class="row">
           <button id="mxDumpBin" type="button">Dump RAM (.bin)</button>
           <button id="mxDumpVram" type="button">Dump video RAM (.bin)</button>
           <button id="mxDumpTxt" type="button">Listing (.txt)</button>
         </div>
         <div class="msg" id="mxMsg"></div>
         <div class="mxkb" id="mxKb" aria-label="Keyboard"></div>
-        <p class="hint" id="mxHint">Click the picture and type: the PC keyboard is mapped by key position to the MSX international layout. F1–F5 are the function keys, F8 (or End) is STOP, F7 is SELECT, left Alt is GRAPH and right Alt is CODE; CTRL+STOP breaks into a running BASIC program. On the keyboard above, SHIFT, CTRL, GRAPH and CODE stay down for the next key. Load ROM takes the 32 KB BIOS (hb-55p_basicbios1.rom) and, if you want Sony's built-in Personal Data Bank, the 16 KB firmware (hb-55p_firmware.rom); you can pick both files at once. Untick Built-in software to start in MSX BASIC. Cartridge ROMs go in slot 1; plain ROMs and the four common mega-ROM mappers are supported. Listing gives the system variables, the BASIC program as text, the screen and hex dumps. Sound and cassette are not connected yet: the sound chip's registers are shown in the MSX hardware panel. The ROMs are not included; your browser keeps the BIOS and firmware once loaded.</p>
+        <p class="hint" id="mxHint">Click the picture and type: the PC keyboard is mapped by key position to the MSX international layout. F1–F5 are the function keys, F8 (or End) is STOP, F7 is SELECT, left Alt is GRAPH and right Alt is CODE; CTRL+STOP breaks into a running BASIC program. On the keyboard above, SHIFT, CTRL, GRAPH and CODE stay down for the next key. Load ROM takes the 32 KB BIOS (hb-55p_basicbios1.rom) and, if you want Sony's built-in Personal Data Bank, the 16 KB firmware (hb-55p_firmware.rom); you can pick both files at once. Untick Built-in software to start in MSX BASIC. Cartridge ROMs go in slot 1; plain ROMs and the four common mega-ROM mappers are supported. Listing gives the system variables, the BASIC program as text, the screen and hex dumps. Cassette: insert a .cas tape file and type the command shown (CLOAD for BASIC programs, BLOAD"CAS:",R for machine code, RUN"CAS:" for ASCII files); loading is instant and the tape moves on to the next file each time. CSAVE, BSAVE and SAVE"CAS:" record to a new tape that Save recording downloads as a .cas file. Many tape programs need more than 16K: choose the HB-75P for those. Sound is not connected yet: the sound chip's registers are shown in the MSX hardware panel. The ROMs are not included; your browser keeps the BIOS and firmware once loaded.</p>
       </section>
   </div>
 
@@ -1610,10 +1616,10 @@ function masterReset() {
   for (const a of [msx.bios, msx.fw, msx.ram, msx.vram, msx.keys, mem]) a.fill(0);
   msx.hasBios = msx.hasFw = false; msx.carts[1] = null; mxCartName = '';
   try { localStorage.removeItem(MX_ROM_KEYS.bios); localStorage.removeItem(MX_ROM_KEYS.fw); } catch (e) {}
-  mxHeld.clear(); mxLatched.clear(); mxQueue.length = 0; mxWant.clear(); mxShow(); mxCartShow(); $('mxMsg').className = 'msg'; $('mxMsg').textContent = '';
+  msx.tape = null; msx.tapePos = 0; msx.rec = []; mxTapeName = ''; mxTapeShow(); mxHeld.clear(); mxLatched.clear(); mxQueue.length = 0; mxWant.clear(); mxShow(); mxCartShow(); $('mxMsg').className = 'msg'; $('mxMsg').textContent = '';
   resetCPU();
   if (typeof disDirty !== 'undefined') disDirty = true;
-  setStatus('Master reset: BIOS and firmware ROMs forgotten (load them again to switch on), RAM and video RAM cleared, cartridge removed; all breakpoints and stops removed; input pins released');
+  setStatus('Master reset: BIOS and firmware ROMs forgotten (load them again to switch on), RAM and video RAM cleared, cartridge and tape removed; all breakpoints and stops removed; input pins released');
   render();
 }
 let masterArm = null;
@@ -1654,7 +1660,7 @@ function renderMxState() {
     <div class="blk"><div class="hd">Machine</div><div class="kv">Sony <b>${msx.machine === 'hb75p' ? 'HB-75P' : 'HB-55P'}</b> · RAM <b>${msx.ramSize / 1024}K</b> in slot ${msx.ramSlot} · interrupts taken <b>${msx.ints}</b><br>Cartridge (slot 1) <b>${cart ? esc(mxCartName) + ' · ' + cart.len / 1024 + 'K ' + MSX_MAPPERS[cart.type] + (cart.type === 'plain' ? ' at ' + h4(cart.base) + 'h' : ' · segments ' + cart.bank.map(h2).join(' ')) : 'none'}</b></div></div>`;
   if (html !== mxSig) { mxSig = html; $('mxState').innerHTML = html; }
 }
-function renderMx() { drawMx(); renderMxState(); }
+function renderMx() { drawMx(); renderMxState(); mxTapeShow(); }
 // keyboard: the PC keyboard by key position, and the on-screen MSX keyboard (international layout)
 // each key: [matrix name, legend, shifted legend, width]
 const MX_LAYOUT = [
@@ -1915,6 +1921,41 @@ function mxStamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); 
 $('mxDumpBin').onclick = () => mxSaved(mxDownload(`msx-ram-${msx.ramSize / 1024}k-${mxStamp()}.bin`, msx.ram.slice(msx.ramBase), 'application/octet-stream'), f => `RAM dumped to ${f}: ${msx.ramSize} bytes, ${h4(msx.ramBase)}h-FFFFh (byte 0 of the file is address ${h4(msx.ramBase)}h).`);
 $('mxDumpVram').onclick = () => mxSaved(mxDownload(`msx-vram-${mxStamp()}.bin`, msx.vram.slice(), 'application/octet-stream'), f => `Video RAM dumped to ${f}: 16,384 bytes.`);
 $('mxDumpTxt').onclick = () => mxSaved(mxDownload(`msx-listing-${mxStamp()}.txt`, msx.ramReport(), 'text/plain;charset=utf-8'), f => `Listing saved to ${f}: registers, slots, system variables, the video processor, the BASIC program, the screen as text and hex dumps of RAM and video RAM.`);
+
+// ---------- cassette (.cas tape files) ----------
+let mxTapeName = '', mxTapeSig = '';
+const MX_TAPE_CMD = { basic: () => 'CLOAD', binary: () => 'BLOAD"CAS:",R', ascii: () => 'RUN"CAS:"' };   // without a name, the next file on the tape is taken
+const MX_TAPE_KIND = { basic: 'BASIC program', binary: 'machine code', ascii: 'ASCII file' };
+function mxTapeShow() {
+  const t = msx.tape, sig = (t ? mxTapeName + t.length + '@' + msx.tapePos : '') + '|' + msx.rec.length;
+  if (sig === mxTapeSig) return; mxTapeSig = sig;
+  $('mxTapeInfo').textContent = (t ? `Tape: ${mxTapeName} · at ${msx.tapePos.toLocaleString('en-AU')} of ${t.length.toLocaleString('en-AU')} bytes` : 'No tape') + (msx.rec.length ? ` · recorded ${msx.rec.length.toLocaleString('en-AU')} bytes` : '');
+  $('mxTapeRew').hidden = !t; $('mxTapeSave').hidden = !msx.rec.length;
+}
+msx.onTape = (kind, arg) => {
+  const msg = $('mxMsg');
+  if (kind === 'error') { msg.className = 'msg err'; msg.textContent = arg === 'none' ? 'The program asked for the cassette, but no tape is in: press Insert tape and choose a .cas file, then give the command again.' : `End of tape ${mxTapeName}: nothing more to load. Rewind to load it again.`; }
+  else if (kind === 'recorded') { msg.className = 'msg ok'; msg.textContent = `Recorded to tape: ${arg.toLocaleString('en-AU')} bytes so far. Press Save recording to download it as a .cas file.`; }
+  mxTapeShow();
+};
+$('mxTapeIn').onclick = () => $('mxTapeFile').click();
+$('mxTapeFile').onchange = () => {
+  const f = $('mxTapeFile').files[0]; $('mxTapeFile').value = ''; if (!f) return;
+  f.arrayBuffer().then(buf => {
+    const bytes = new Uint8Array(buf), msg = $('mxMsg'); msx.insertTape(bytes);
+    let blocks = 0; for (let p = 0; p + 8 <= bytes.length; p += 8) if (msx.casHeaderAt(p)) blocks++;
+    if (!blocks) { msx.tape = null; mxTapeShow(); msg.className = 'msg err'; msg.textContent = `${f.name} is not a .cas tape file (no tape block markers found). Only .cas images are supported, not .wav or .tsx.`; return; }
+    mxTapeName = f.name; mxTapeShow();
+    const files = msx.tapeFiles(), first = files[0];
+    msg.className = 'msg ok'; msg.textContent = `${f.name} inserted: ` + (files.length ? `${files.length} file${files.length === 1 ? '' : 's'}: ` + files.slice(0, 6).map(x => `${MX_TAPE_KIND[x.kind]} "${x.name}"`).join(', ') + (files.length > 6 ? ', …' : '') + `. To load the first one type ${MX_TAPE_CMD[first.kind](first.name)}${first.kind === 'basic' ? ' and then RUN' : ''}.` : `${blocks} block${blocks === 1 ? '' : 's'} with no standard file header: the program on it has its own loader.`) + (msx.machine === 'hb55p' ? ' If it reports Out of memory, switch to the HB-75P (64K).' : '');
+    mscr.focus();
+  });
+};
+$('mxTapeRew').onclick = () => { msx.tapePos = 0; mxTapeShow(); $('mxMsg').className = 'msg'; $('mxMsg').textContent = 'Tape rewound.'; };
+$('mxTapeSave').onclick = () => {
+  const data = new Uint8Array(msx.rec), n = data.length;
+  mxSaved(mxDownload(`msx-tape-${mxStamp()}.cas`, data, 'application/octet-stream').then(f => { if (f) { msx.rec = []; mxTapeShow(); } return f; }), f => `Recording saved to ${f}: ${n.toLocaleString('en-AU')} bytes. The recording has been cleared for the next one.`);
+};
 
 // ---------- collapsible side panels ----------
 for (const sec of document.querySelectorAll('.side .panel')) {
