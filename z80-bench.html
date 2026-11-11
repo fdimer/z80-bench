@@ -276,10 +276,15 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .zxscreen { display: block; width: 100%; max-width: 860px; margin: 0 auto; aspect-ratio: 4 / 3; background: #e9e7df; border-radius: 6px; image-rendering: pixelated; outline: none; border: 2px solid #b9b5a8; cursor: text; }
 .zxscreen:focus { border-color: var(--sel); }
 .zxkb { max-width: 860px; margin: 12px auto 0; display: grid; gap: 6px; }
-.rommap { background: var(--panel2); border-radius: 6px; padding: 8px; overflow: hidden; }
-.rommap canvas { display: block; max-width: 100%; height: auto; margin: 0 auto; image-rendering: pixelated; image-rendering: crisp-edges; cursor: crosshair; }
-.rommap-read { margin-top: 8px; font-size: 12.5px; min-height: 18px; color: var(--muted); }
-.rommap-read b { color: var(--ink); }
+.mmbands { background: var(--panel2); border-radius: 6px; padding: 8px; max-height: 640px; overflow-y: auto; }
+.mmband + .mmband { margin-top: 10px; }
+.mmband .cap { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.mmband canvas { display: block; max-width: 100%; height: auto; image-rendering: pixelated; image-rendering: crisp-edges; cursor: crosshair; }
+.mm-read { margin-top: 8px; font-size: 12.5px; min-height: 18px; color: var(--muted); font-family: var(--font-mono); }
+.mm-read b { color: var(--ink); }
+.mm-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.mm-legend span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.mm-legend i { width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--line); display: inline-block; }
 .zxkb .krow { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
 .zxkb button { padding: 6px 2px 5px; font-size: 15px; font-weight: 700; line-height: 1.1; background: #2b2b2e; color: #f3f3f3; border-color: #2b2b2e; border-radius: 4px; touch-action: manipulation; }
 .zxkb button .fn { display: block; font-size: 8.5px; color: #9fd6a8; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -413,11 +418,12 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <p class="hint">Scroll through all 64 KB. Click a byte to edit it. Blue marks the instruction being executed, amber marks bytes written by the last instruction, underline marks the top of the stack. With Follow PC ticked, each step brings the current instruction back into view; untick it to keep watching another area.</p>
       </section>
 
-      <section class="panel" id="pRomMap">
-        <h2>ROM bitmap <span class="aside" id="romMapInfo">no ROM</span></h2>
-        <div class="rommap"><canvas id="romMap" width="256" height="264" aria-label="The whole ROM drawn as a bitmap, one pixel per bit"></canvas></div>
-        <div class="rommap-read mono" id="romMapRead">Point at the bitmap to read a byte; click to show it in Memory.</div>
-        <p class="hint">Every bit of the ROM is one pixel. Each byte is a row of 8 pixels (bit 7 on the left) and each strip is one 256-byte page, read top to bottom, pages left to right. Machine code looks like noise, tables and text show regular patterns, and the character set at the end appears as letters. The red mark is the program counter while it is in the ROM; the blue bar marks the two pages the video logic reads characters from (the I register).</p>
+      <section class="panel" id="pMemMap">
+        <h2>Memory bitmap <span class="aside" id="mmInfo"></span></h2>
+        <div class="mmbands" id="mmBands"></div>
+        <div class="mm-legend" id="mmLegend"></div>
+        <div class="mm-read" id="mmRead">Point at the bitmap to read a byte; click to show it in Memory.</div>
+        <p class="hint">Every bit of memory is one pixel. Each byte is a row of 8 pixels (bit 7 on the left) and each strip is one 256-byte page, read top to bottom; each band holds up to 8K. The background colour shows what each part of RAM is being used for, read from BASIC's own system variables, so you can watch the program, the display file and the stack grow and move. In the ROM, the tinted pages are the ones the video logic reads characters from (the I register), where the character set appears as letters. The red mark is the program counter and the blue mark the stack pointer.</p>
       </section>
     </div>
 
@@ -1050,7 +1056,7 @@ function renderIO() {
 function render() {
   const pcNow = regsView().pc, focus = pcNow !== lastFocusPc || tTotal !== lastFocusT;
   lastFocusPc = pcNow; lastFocusT = tTotal;
-  renderPins(); renderRegs(); renderStops(); renderDebug(); renderZx(); romMapDraw(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
+  renderPins(); renderRegs(); renderStops(); renderDebug(); renderZx(); mmDraw(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
   $('cntPC').textContent = h4(pcNow) + 'h';
   $('cntT').textContent = tTotal.toLocaleString('en-AU');
   $('cntI').textContent = instrCount.toLocaleString('en-AU');
@@ -1700,51 +1706,108 @@ function zxUseRom(bytes, saved) {   // a 4,096-byte image is ZX80 BASIC, an 8,19
   msg.className = 'msg ok'; msg.textContent = `${k === 4 ? 'ZX80' : 'ZX81'} ROM ${saved ? 'loaded from this browser' : 'loaded'} (CRC ${crc}${ed ? ', ' + ed[0] : ''}).${ed && ed[1] ? ' ' + ed[1] : ''}`;
   return true;
 }
-// ---------- ROM bitmap: every bit of the ROM as a pixel ----------
-// Strips of 8 pixels (one byte per row, bit 7 left), 256 rows per strip = one page; an 8-pixel band on top carries
-// the markers. The picture is cached and only redrawn when the ROM, the theme or a marker changes.
-const romMapCv = $('romMap'), romMapCtx = romMapCv.getContext('2d', { willReadFrequently: true }), ROMMAP_TOP = 8;
-window.addEventListener('resize', () => { if (!running) render(); });
-let romMapImg = null, romMapKey = '', romMapSig = '';
-function romMapBuild() {
-  const pages = zx.rom8k ? 32 : 16, W = pages * 8, H = 256 + ROMMAP_TOP;
-  if (romMapCv.width !== W) romMapCv.width = W; romMapCv.height = H;
-  const cs = getComputedStyle(document.documentElement), col = v => { romMapCtx.fillStyle = cs.getPropertyValue(v).trim() || '#000'; romMapCtx.fillRect(0, 0, 1, 1); return romMapCtx.getImageData(0, 0, 1, 1).data; };
-  const ink = col('--ink'), paper = col('--panel'), img = romMapCtx.createImageData(W, H);
-  for (let p = 0; p < pages; p++) for (let r = 0; r < 256; r++) {
-    const v = zxRom ? zx.rom[p * 256 + r] : 0;
-    for (let b = 0; b < 8; b++) { const c = (v >> (7 - b)) & 1 ? ink : paper, o = ((r + ROMMAP_TOP) * W + p * 8 + b) * 4; img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255; }
+// ---------- memory bitmap: every bit as a pixel, tinted by region ----------
+// Each byte is a row of 8 pixels (bit 7 on the left); each strip is one 256-byte page, top to bottom; a band holds
+// up to 32 pages (8K). The background of every byte is tinted by the region it belongs to (MM.regions, by address,
+// or a band's own fixed key). An 8-pixel margin above each band carries the PC and SP markers. A band is only
+// redrawn when its bytes, its regions, the theme or a marker changes, and at most four times a second while running.
+const MM_TOP = 8;
+let mmBands = [], mmLayout = null, mmAt = 0, mmTheme = '', mmInk = [0, 0, 0], mmPaper = [255, 255, 255], mmTints = {}, mmLegendSig = '';
+function mmAddr(e, b) {
+  const r = b.cv.getBoundingClientRect(), x = Math.floor((e.clientX - r.left) * b.cv.width / r.width), y = Math.floor((e.clientY - r.top) * b.cv.height / r.height) - MM_TOP;
+  if (x < 0 || y < 0 || y > 255 || x >= b.cv.width) return -1;
+  const off = (x >> 3) * 256 + y; return off < b.def.bytes ? off : -1;
+}
+function mmRebuild(defs) {
+  const box = $('mmBands'); box.innerHTML = ''; mmBands = [];
+  for (const def of defs) {
+    const d = document.createElement('div'); d.className = 'mmband'; d.innerHTML = `<div class="cap">${esc(def.label)}</div>`;
+    const cv = document.createElement('canvas'); cv.width = Math.ceil(def.bytes / 256) * 8; cv.height = 256 + MM_TOP; d.appendChild(cv); box.appendChild(d);
+    const b = { cv, ctx: cv.getContext('2d', { willReadFrequently: true }), def, img: null, sig: null, mark: null, keys: new Uint8Array(def.bytes) }; mmBands.push(b);
+    cv.addEventListener('mousemove', e => {
+      const off = mmAddr(e, b); if (off < 0) return; const a = b.def.base + off, v = b.def.read(a), k = b.keyNames[b.keys[off]], reg = k && MM.legend[k] ? MM.legend[k][0] : '';
+      let dis = ''; if (b.def.cpu) try { dis = disasm(x => peekMem(x & 0xFFFF), a).text; } catch (err) {}
+      $('mmRead').innerHTML = `<b>${h4(a)}h</b>${b.def.cpu ? '' : ' (offset)'}: <b>${h2(v)}h</b> ${v.toString(2).padStart(8, '0').replace(/0/g, '·').replace(/1/g, '█')}${reg ? ' · ' + esc(reg) : ''}${dis ? ' · ' + esc(dis) : ''}`;
+    });
+    cv.addEventListener('click', e => { const off = mmAddr(e, b); if (off < 0 || !b.def.cpu) return; const a = b.def.base + off; $('memFollow').checked = false; $('memFrom').value = h4(a); memScrollTo(a); renderMem(false); });
   }
-  for (let o = 0; o < ROMMAP_TOP * W * 4; o += 4) { img.data[o] = paper[0]; img.data[o + 1] = paper[1]; img.data[o + 2] = paper[2]; img.data[o + 3] = 255; }
-  romMapImg = img;
-  $('romMapInfo').textContent = zxRom ? `${pages * 256} bytes · ${W} × 256 pixels · 0000h-${h4(pages * 256 - 1)}h` : 'no ROM';
 }
-function romMapDraw() {
-  const cs = getComputedStyle(document.documentElement);
-  const key = (zxRom ? zxCrc(zx.rom.subarray(0, zx.rom8k ? 0x2000 : 0x1000)) : 0) + '|' + zx.rom8k + '|' + cs.getPropertyValue('--ink') + cs.getPropertyValue('--panel');
-  if (key !== romMapKey) { romMapKey = key; romMapBuild(); romMapSig = ''; }
-  // every ROM bit a crisp square: as large as the panel allows, up to 3x
-  const room = romMapCv.parentElement.clientWidth - 16, dpr = Math.max(1, Math.round((window.devicePixelRatio || 1) * 4) / 4);
-  const scale = Math.max(1, Math.min(3, Math.floor(room / romMapCv.width * dpr) / dpr));   // a whole number of device pixels per ROM bit
-  const cssW = (romMapCv.width * scale) + 'px'; if (romMapCv.style.width !== cssW) romMapCv.style.width = cssW;
-  const size = zx.rom8k ? 0x2000 : 0x1000, pc = cpu.pc, pcIn = zxRom && pc < size, fontPage = (cpu.i & 0xFE) << 8 & (size - 1);
-  const sig = (pcIn ? pc : -1) + '|' + (zxRom ? fontPage : -1);
-  if (sig === romMapSig) return; romMapSig = sig;
-  romMapCtx.putImageData(romMapImg, 0, 0);
-  if (!zxRom) return;
-  romMapCtx.fillStyle = cs.getPropertyValue('--sel').trim() || '#2a6fb0'; romMapCtx.fillRect((fontPage >> 8) * 8, 5, 16, 2);   // font pages
-  if (pcIn) { const x = (pc >> 8) * 8, y = (pc & 0xFF) + ROMMAP_TOP; romMapCtx.fillStyle = '#e0322d'; romMapCtx.fillRect(x, 0, 8, 3); romMapCtx.fillRect(x - 1, y - 1, 10, 1); romMapCtx.fillRect(x - 1, y + 1, 10, 1); romMapCtx.fillRect(x - 1, y, 1, 1); romMapCtx.fillRect(x + 8, y, 1, 1); }
+window.addEventListener('resize', () => { if (!running) mmDraw(true); });
+function mmDraw(force) {
+  const now = performance.now(); if (running && !force && now - mmAt < 250) return; mmAt = now;
+  const defs = MM.bands(), layout = defs.map(d => d.label + '|' + d.base + '|' + d.bytes).join(';');
+  if (layout !== mmLayout) { mmLayout = layout; mmRebuild(defs); mmTheme = ''; }
+  const cs = getComputedStyle(document.documentElement), theme = cs.getPropertyValue('--ink') + cs.getPropertyValue('--panel');
+  if (theme !== mmTheme && mmBands.length) {
+    mmTheme = theme; const c = mmBands[0].ctx, col = v => { c.fillStyle = v; c.fillRect(0, 0, 1, 1); return c.getImageData(0, 0, 1, 1).data; };
+    mmInk = col(cs.getPropertyValue('--ink').trim() || '#000'); mmPaper = col(cs.getPropertyValue('--panel').trim() || '#fff');
+    const dark = mmPaper[0] + mmPaper[1] + mmPaper[2] < 380, mix = dark ? 0.42 : 0.3; mmTints = {};
+    for (const k in MM.legend) { const h = col(MM.legend[k][1]); mmTints[k] = [0, 1, 2].map(i => Math.round(mmPaper[i] + (h[i] - mmPaper[i]) * mix)); }
+    for (const b of mmBands) b.sig = null; mmLegendSig = '';
+  }
+  const regs = MM.regions(), regSig = regs.map(r => r.join(',')).join(';'), marks = MM.markers(), used = new Set();
+  const box = $('mmBands'), room = box.clientWidth - 16, dpr = Math.max(1, Math.round((window.devicePixelRatio || 1) * 4) / 4);
+  let total = 0;
+  mmBands.forEach((b, bi) => {
+    const def = b.def = defs[bi], W = b.cv.width, n = def.bytes; total += n;
+    let s = 7; for (let i = 0; i < n; i++) s = (Math.imul(s, 31) + def.read(def.base + i)) | 0;
+    const sig = s + '|' + (def.key || regSig);
+    if (sig !== b.sig) {
+      b.sig = sig; b.mark = null;
+      // region key of every byte: 0 = none, then indices into keyNames
+      const names = b.keyNames = ['']; b.keys.fill(0);
+      const idx = k => { let i = names.indexOf(k); if (i < 0) { i = names.length; names.push(k); } return i; };
+      if (def.key) b.keys.fill(idx(def.key));
+      else for (const [a0, a1, k] of regs) { const lo = Math.max(a0, def.base) - def.base, hi = Math.min(a1, def.base + n) - def.base; if (hi > lo) b.keys.fill(idx(k), lo, hi); }
+      const img = b.img || (b.img = b.ctx.createImageData(W, b.cv.height)), d = img.data;
+      for (let o = 0; o < d.length; o += 4) { d[o] = mmPaper[0]; d[o + 1] = mmPaper[1]; d[o + 2] = mmPaper[2]; d[o + 3] = 255; }
+      for (let i = 0; i < n; i++) {
+        const v = def.read(def.base + i), t = mmTints[names[b.keys[i]]]; if (!v && !t) continue;
+        const x0 = (i >> 8) * 8, y = (i & 0xFF) + MM_TOP;
+        for (let k = 0; k < 8; k++) { const c = (v >> (7 - k)) & 1 ? mmInk : t; if (!c) continue; const o = (y * W + x0 + k) * 4; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; }
+      }
+    }
+    for (const k of b.keyNames) if (k) used.add(k);
+    const mine = def.cpu ? marks.filter(([a]) => a >= def.base && a < def.base + n) : [], mark = mine.map(m => m[0]).join(',');
+    if (mark !== b.mark) {
+      b.mark = mark; b.ctx.putImageData(b.img, 0, 0);
+      for (const [a, colr] of mine) { const x = ((a - def.base) >> 8) * 8, y = ((a - def.base) & 0xFF) + MM_TOP; b.ctx.fillStyle = colr; b.ctx.fillRect(x, 0, 8, 3); b.ctx.fillRect(x - 1, y - 1, 10, 1); b.ctx.fillRect(x - 1, y + 1, 10, 1); b.ctx.fillRect(x - 1, y, 1, 1); b.ctx.fillRect(x + 8, y, 1, 1); }
+    }
+    const scale = Math.max(1, Math.min(3, Math.floor(room / Math.max(W, 128) * dpr) / dpr)), cssW = (W * scale) + 'px'; if (b.cv.style.width !== cssW) b.cv.style.width = cssW;
+  });
+  const lsig = [...used].sort().join(',') + mmTheme;
+  if (lsig !== mmLegendSig) { mmLegendSig = lsig; $('mmLegend').innerHTML = Object.keys(MM.legend).filter(k => used.has(k)).map(k => `<span><i style="background: rgb(${mmTints[k].join(',')})"></i>${esc(MM.legend[k][0])}</span>`).join(''); }
+  const info = `${total.toLocaleString('en-AU')} bytes in ${mmBands.length} band${mmBands.length === 1 ? '' : 's'}`; if ($('mmInfo').textContent !== info) $('mmInfo').textContent = info;
 }
-function romMapAddr(e) {
-  const r = romMapCv.getBoundingClientRect(), x = Math.floor((e.clientX - r.left) * romMapCv.width / r.width), y = Math.floor((e.clientY - r.top) * romMapCv.height / r.height) - ROMMAP_TOP;
-  if (!zxRom || x < 0 || y < 0 || y > 255 || x >= romMapCv.width) return -1;
-  return (x >> 3) * 256 + y;
-}
-romMapCv.addEventListener('mousemove', e => {
-  const a = romMapAddr(e); if (a < 0) return; const v = zx.rom[a];
-  $('romMapRead').innerHTML = `<b>${h4(a)}h</b>: <b>${h2(v)}h</b> ${v.toString(2).padStart(8, '0').replace(/0/g, '·').replace(/1/g, '█')} · ${esc(disasm(x => zx.rom[x & (zx.rom8k ? 0x1FFF : 0x0FFF)], a).text)}`;
-});
-romMapCv.addEventListener('click', e => { const a = romMapAddr(e); if (a < 0) return; $('memFollow').checked = false; $('memFrom').value = h4(a); memScrollTo(a); renderMem(false); });
+// what the ZX80/ZX81 memory bitmap shows: the ROM, the hi-res board's RAM if fitted, and the RAM in bands of 8K.
+// The RAM regions come from BASIC's own system variables; until BASIC has set them up (or when machine code has
+// moved the stack) they are out of order, and the RAM is then shown as one plain region.
+const MM = {
+  legend: {
+    font: ['character set (I register)', '#e6c229'], hires: ['hi-res board RAM', '#9c6b3f'], ram: ['RAM', '#8a8f98'],
+    sys: ['system variables', '#8e6bbf'], prog: ['BASIC program', '#3f7fd0'], disp: ['display file (video)', '#2e9e5b'], vars: ['variables', '#e07b39'],
+    edit: ['line being edited', '#c7559a'], calc: ['calculator stack', '#1fa3a3'], free: ['free', '#ffffff'], stack: ['machine stack', '#d0483f'], above: ['above RAMTOP', '#70757d']
+  },
+  bands() {
+    const romSize = zx.rom8k ? 0x2000 : 0x1000, out = [{ label: `ROM 0000h-${h4(romSize - 1)}h${zxRom ? '' : ' (not loaded)'}`, base: 0, bytes: romSize, read: a => zx.rom[a], cpu: true }];
+    if (zx.hires) out.push({ label: 'Hi-res board RAM 2000h-3FFFh', base: 0x2000, bytes: 0x2000, read: a => zx.lowRam[a - 0x2000], cpu: true });
+    for (let o = 0; o < zx.ramSize; o += 0x2000) { const n = Math.min(0x2000, zx.ramSize - o); out.push({ label: `RAM ${h4(0x4000 + o)}h-${h4(0x4000 + o + n - 1)}h`, base: 0x4000 + o, bytes: n, read: a => zx.ram[a - 0x4000], cpu: true }); }
+    return out;
+  },
+  regions() {
+    const R = [], top = 0x4000 + zx.ramSize, w = a => zx.peekW(a), romSize = zx.rom8k ? 0x2000 : 0x1000, fp = (cpu.i & 0xFE) << 8;
+    if (zxRom && fp < romSize) R.push([fp, fp + 0x200, 'font']);
+    if (zx.hires) R.push([0x2000, 0x4000, 'hires']);
+    const seq = zx.rom8k
+      ? [[0x4000, 'sys'], [0x407D, 'prog'], [w(0x400C), 'disp'], [w(0x4010), 'vars'], [w(0x4014), 'edit'], [w(0x401A), 'calc'], [w(0x401C), 'free'], [cpu.sp, 'stack'], [w(0x4004), 'above']]
+      : [[0x4000, 'sys'], [0x4028, 'prog'], [w(0x4008), 'vars'], [w(0x400A), 'edit'], [w(0x400C), 'disp'], [(w(0x4010) + 1) & 0xFFFF, 'free'], [cpu.sp, 'stack']];
+    let ok = zxRom; for (let i = 1; i < seq.length; i++) if (seq[i][0] < seq[i - 1][0] || seq[i][0] > top) ok = false;
+    if (!ok) { R.push([0x4000, top, 'ram']); return R; }
+    seq.forEach(([a, k], i) => { const e = i + 1 < seq.length ? seq[i + 1][0] : top; if (e > a && k !== 'free') R.push([a, e, k]); });
+    return R;
+  },
+  markers() { const cs = getComputedStyle(document.documentElement); return [[cpu.sp, cs.getPropertyValue('--sel').trim() || '#2a6fb0'], [cpu.pc >= 0xC000 || zx.ramSize <= 0x4000 ? cpu.pc & 0x7FFF : cpu.pc, '#e0322d']]; }   // the display file runs in the echo above 8000h
+};
 function zxApplyRom() { const r = zxRoms[zxSlot(zx.machine)]; zx.rom.fill(0); if (r) zx.rom.set(r); zxRom = !!r; disDirty = true; }
 function zxSetMachine(m, quiet) {
   zx.setMachine(m); $('zxMachine').value = m; zxApplyRom(); zxRenderKb(); zxHintText();
