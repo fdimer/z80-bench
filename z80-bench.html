@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ZX80 / ZX81 Bench</title>
+<title>MSX Bench</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -292,6 +292,15 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .zxkb button small { display: block; font-size: 9px; font-weight: 500; color: #e05252; letter-spacing: 0.02em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zxkb button.down { background: var(--sel); border-color: var(--sel); }
 .zxkb button.latched { background: #8a5a00; border-color: #8a5a00; }
+.mxscreen { background: #000; border-color: #444; aspect-ratio: 280 / 216; }
+.mxkb { max-width: 860px; margin: 12px auto 0; display: grid; gap: 5px; }
+.mxkb .krow { display: flex; gap: 5px; }
+.mxkb button { flex: 1 1 0; min-width: 0; padding: 4px 1px 6px; font-size: 13px; font-weight: 700; line-height: 1.1; background: #d9d6cc; color: #1c1c1e; border-color: #b9b5a8; border-radius: 4px; touch-action: manipulation; overflow: hidden; }
+.mxkb .krow:first-child button { background: #6f7680; border-color: #6f7680; color: #fff; font-size: 11px; }
+.mxkb button small { display: block; font-size: 9.5px; font-weight: 500; opacity: 0.7; margin-bottom: 1px; }
+.mxkb button.down { background: var(--sel); border-color: var(--sel); color: #fff; }
+.mxkb button.latched { background: #8a5a00; border-color: #8a5a00; color: #fff; }
+.zxstate .none { color: var(--warn); }
 #pScreen .row, #pScreen .msg, #pScreen .hint { max-width: 860px; margin-left: auto; margin-right: auto; }
 .zxstate { display: grid; gap: 8px; font-size: 12.5px; }
 .zxstate .blk { background: var(--panel2); border-radius: 4px; padding: 8px 10px; }
@@ -302,7 +311,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 
 <div class="wrap">
   <header class="top">
-    <h1>Sinclair ZX80 / ZX81 <span>· Z80 Bench machine emulator</span></h1>
+    <h1>MSX · Sony HB-55P <span>· Z80 Bench machine emulator</span></h1>
     <div id="status" class="status">Ready</div>
     <div class="counters">
       <span>T-states <b id="cntT">0</b></span>
@@ -324,7 +333,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <option value="1000">Clock 1 kHz</option>
         <option value="5000">Clock 5 kHz</option>
         <option value="10000">Clock 10 kHz</option>
-        <option value="real" selected>Real time (3.25 MHz)</option>
+        <option value="real" selected>Real time (3.58 MHz)</option>
         <option value="max">Full speed</option>
       </select>
     </label>
@@ -332,25 +341,29 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 
   <div class="toprows">
       <section class="panel" id="pScreen">
-        <h2>Screen <span class="aside" id="zxScrInfo"></span></h2>
-        <canvas id="zxScreen" class="zxscreen" width="414" height="312" tabindex="0" aria-label="TV picture: click it and type to use the keyboard"></canvas>
+        <h2>Screen <span class="aside" id="mxScrInfo"></span></h2>
+        <canvas id="mxScreen" class="zxscreen mxscreen" width="280" height="216" tabindex="0" aria-label="TV picture: click it and type to use the keyboard"></canvas>
         <div class="row">
-          <button id="zxLoadRom" class="primary" type="button">Load ROM…</button><input type="file" id="zxRomFile" hidden>
-          <button id="zxRestart" type="button">Power on / restart</button>
-          <label class="inline" for="zxMachine">Machine <select id="zxMachine"><option value="zx80">ZX80 (4K ROM)</option><option value="zx80-8k">ZX80 with the 8K ROM</option><option value="zx81">ZX81</option></select></label>
-          <label class="inline" for="zxRam">RAM <select id="zxRam"><option value="1024" selected>1K (as supplied)</option><option value="16384">16K RAM pack</option><option value="32768">32K RAM pack</option><option value="49152">48K RAM pack</option></select></label>
-          <label class="inline" for="zxHires" title="8K of battery-backed RAM at 2000h-3FFFh that also answers the Z80's refresh cycles (WRX), so programs can show true high-resolution pictures straight from RAM. This is what the SCRAM board and similar hi-res boards did."><input type="checkbox" id="zxHires"> Hi-res board</label>
-          <span class="osbkeys mono" id="zxKeysDown"></span>
+          <button id="mxLoadRom" class="primary" type="button">Load ROM…</button><input type="file" id="mxRomFile" multiple hidden>
+          <button id="mxRestart" type="button">Power on / restart</button>
+          <label class="inline" for="mxMachine">Machine <select id="mxMachine"><option value="hb55p">Sony HB-55P (16K RAM)</option><option value="hb75p">Sony HB-75P (64K RAM)</option></select></label>
+          <label class="inline" for="mxFw" title="The Sony Personal Data Bank ROM at 8000h in slot 0. When it is fitted the machine starts in it instead of BASIC."><input type="checkbox" id="mxFw" checked> Built-in software</label>
+          <span class="osbkeys mono" id="mxKeysDown"></span>
         </div>
         <div class="row">
-          <button id="zxTapeIn" type="button">Insert tape…</button><input type="file" id="zxTapeFile" hidden>
-          <span class="mono tapeinfo" id="zxTapeInfo">No tape</span>
-          <button id="zxDumpBin" type="button">Dump RAM (.bin)</button>
-          <button id="zxDumpTxt" type="button">RAM listing (.txt)</button>
+          <button id="mxCartIn" type="button">Insert cartridge…</button><input type="file" id="mxCartFile" hidden>
+          <span class="mono tapeinfo" id="mxCartInfo">No cartridge</span>
+          <label class="inline" for="mxMapper">Mapper <select id="mxMapper"><option value="auto">Automatic</option><option value="plain">Plain ROM</option><option value="konami">Konami</option><option value="scc">Konami SCC</option><option value="ascii8">ASCII 8K</option><option value="ascii16">ASCII 16K</option></select></label>
+          <button id="mxCartOut" type="button" hidden>Remove cartridge</button>
         </div>
-        <div class="msg" id="zxMsg"></div>
-        <div class="zxkb" id="zxKb" aria-label="Keyboard"></div>
-        <p class="hint" id="zxHint">Click the picture and type, or use the keyboard above: keywords (white, top) come from the key pressed at the K cursor, red symbols need SHIFT, which latches for one key. Enter is NEWLINE and Backspace is RUBOUT (SHIFT+0). Tape: insert a .o program file, then type LOAD (W, then NEW LINE); SAVE (E, then NEW LINE) downloads the program as a .o file. Both are instant. RAM listing gives the system variables, the BASIC program as text and a hex dump. The picture is built the way a TV would, from the ZX80's own sync pulses, so it blanks while BASIC is busy, as on the real machine. The ROM is not included: load your own 4 KB image; your browser keeps it.</p>
+        <div class="row">
+          <button id="mxDumpBin" type="button">Dump RAM (.bin)</button>
+          <button id="mxDumpVram" type="button">Dump video RAM (.bin)</button>
+          <button id="mxDumpTxt" type="button">Listing (.txt)</button>
+        </div>
+        <div class="msg" id="mxMsg"></div>
+        <div class="mxkb" id="mxKb" aria-label="Keyboard"></div>
+        <p class="hint" id="mxHint">Click the picture and type: the PC keyboard is mapped by key position to the MSX international layout. F1–F5 are the function keys, F8 (or End) is STOP, F7 is SELECT, left Alt is GRAPH and right Alt is CODE; CTRL+STOP breaks into a running BASIC program. On the keyboard above, SHIFT, CTRL, GRAPH and CODE stay down for the next key. Load ROM takes the 32 KB BIOS (hb-55p_basicbios1.rom) and, if you want Sony's built-in Personal Data Bank, the 16 KB firmware (hb-55p_firmware.rom); you can pick both files at once. Untick Built-in software to start in MSX BASIC. Cartridge ROMs go in slot 1; plain ROMs and the four common mega-ROM mappers are supported. Listing gives the system variables, the BASIC program as text, the screen and hex dumps. Sound and cassette are not connected yet: the sound chip's registers are shown in the MSX hardware panel. The ROMs are not included; your browser keeps the BIOS and firmware once loaded.</p>
       </section>
   </div>
 
@@ -378,9 +391,9 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <textarea id="asmIn" spellcheck="false" aria-label="Z80 assembly source"></textarea>
         <textarea id="hexIn" spellcheck="false" aria-label="Hexadecimal machine code" hidden></textarea>
         <div class="row">
-          <label class="inline" for="loadAddr" id="loadAddrWrap" title="Where the code goes in memory. Set this to the start of ROM in your system's memory map.">Load at <input id="loadAddr" type="text" class="mono" value="0000" size="5" maxlength="4">h</label>
-          <label class="inline"><input type="checkbox" id="clearFirst" checked> Clear memory first</label>
-          <label class="inline"><input type="checkbox" id="resetAfter" checked> Reset CPU after loading</label>
+          <label class="inline" for="loadAddr" id="loadAddrWrap" title="Where the code goes in memory. It must be in RAM (C000h and up on the HB-55P). BASIC keeps its program from the bottom of RAM, so E000h is a safe place: type CLEAR 200,&amp;HDFFF in BASIC first.">Load at <input id="loadAddr" type="text" class="mono" value="E000" size="5" maxlength="4">h</label>
+          <label class="inline"><input type="checkbox" id="clearFirst"> Clear RAM first</label>
+          <label class="inline"><input type="checkbox" id="resetAfter"> Reset CPU after loading</label>
         </div>
         <div class="row"><button id="btnLoad" class="primary">Assemble and load</button><button id="btnImport">Import file…</button><button id="btnToHex">Copy bytes to Hex tab</button><button id="btnRestoreAsm" hidden title="Put back the assembly source that was there before the last hex load">Restore previous source</button>
           <input type="file" id="fileIn" hidden></div>
@@ -415,7 +428,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <label class="inline"><input type="checkbox" id="memFollow" checked> Follow PC</label>
         </div>
         <div class="vscroll" id="memView" tabindex="0" aria-label="Memory"><div class="vspace"><table class="mem vrows" id="mem"></table></div></div>
-        <p class="hint">Scroll through all 64 KB. Click a byte to edit it. Blue marks the instruction being executed, amber marks bytes written by the last instruction, underline marks the top of the stack. With Follow PC ticked, each step brings the current instruction back into view; untick it to keep watching another area.</p>
+        <p class="hint">Scroll through all 64 KB as the CPU sees it now, through whichever slots are switched in. Click a byte to edit it (RAM only). Blue marks the instruction being executed, amber marks bytes written by the last instruction, underline marks the top of the stack. With Follow PC ticked, each step brings the current instruction back into view; untick it to keep watching another area.</p>
       </section>
 
       <section class="panel" id="pMemMap">
@@ -423,7 +436,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <div class="mmbands" id="mmBands"></div>
         <div class="mm-legend" id="mmLegend"></div>
         <div class="mm-read" id="mmRead">Point at the bitmap to read a byte; click to show it in Memory.</div>
-        <p class="hint">Every bit of memory is one pixel. Each byte is a row of 8 pixels (bit 7 on the left) and each strip is one 256-byte page, read top to bottom; each band holds up to 8K. The background colour shows what each part of RAM is being used for, read from BASIC's own system variables, so you can watch the program, the display file and the stack grow and move. In the ROM, the tinted pages are the ones the video logic reads characters from (the I register), where the character set appears as letters. The red mark is the program counter and the blue mark the stack pointer.</p>
+        <p class="hint">Every bit of memory is one pixel. Each byte is a row of 8 pixels (bit 7 on the left) and each strip is one 256-byte page, read top to bottom; each band holds 8K. The background colour shows what each part is being used for: in RAM, read from BASIC's own system variables; in video RAM, from the video processor's table registers, so you can see the screen (name table), the character shapes and the sprites, and watch them move when a program changes screen mode. The red mark is the program counter and the blue mark the stack pointer, shown on the bands whose slot is switched in.</p>
       </section>
     </div>
 
@@ -471,9 +484,9 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
       </section>
 
       <section class="panel" id="pMach">
-        <h2>Video logic<button class="fold" type="button" aria-expanded="true" title="Collapse">»</button> <span class="aside" id="zxLogicKind">ZX80 TTL</span></h2>
-        <div class="zxstate" id="zxState"></div>
-        <p class="hint">Opcode fetches above 8000h with bit 6 clear are characters: the CPU gets a NOP (watch D0–D7 read 00 in the bus timing), the byte is latched, and the refresh address I:R plus the line counter picks the font row from the ROM. /INT is A6 of the refresh address; each interrupt acknowledge advances the line counter and sends horizontal sync. Reading port FEh starts vertical sync, any write ends it.</p>
+        <h2>MSX hardware<button class="fold" type="button" aria-expanded="true" title="Collapse">»</button> <span class="aside">slots · video · PPI · sound</span></h2>
+        <div class="zxstate" id="mxState"></div>
+        <p class="hint">Each 16K page of memory shows one of four slots, chosen by two bits of PPI port A (port A8h). The video processor has its own 16K of video RAM, reached only through ports 98h (data) and 99h (address, registers, status); it raises the machine's one interrupt at the end of every picture, 50 times a second. PPI port C (AAh) picks the keyboard row that port A9h reads. The sound generator sits on ports A0h–A2h.</p>
       </section>
 
       <section class="panel" id="pSystem" hidden>
@@ -513,38 +526,47 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 
 <script src="src/z80core.js"></script>
 <script src="src/z80asm.js"></script>
-<script src="src/zx80.js"></script>
+<script src="src/msx.js"></script>
 <script>
 (() => {
 const $ = id => document.getElementById(id);
-const SAMPLE_ASM = `; Sample program: counts on output port 01h
-; and keeps a copy of the count in memory.
-; Code starts at the Load at address (or use ORG).
-PORT    EQU  01h
-start:  ld   sp,1000h       ; stack at top of 4 KB
-        ld   a,0
-loop:   out  (PORT),a
-        inc  a
+const SAMPLE_ASM = `; Sample program: fills the top line of the screen
+; with the letter A, straight through the video
+; processor's ports. Tick "Reset CPU after loading"
+; to run it on the bare machine (no BIOS), or untick
+; it, and from BASIC type:
+;   CLEAR 200,&HDFFF:DEFUSR=&HE000:A=USR(0)
+; (BASIC programs start at C001h on the 16K HB-55P,
+; so machine code goes higher up, above CLEAR's limit.)
+VDPDAT  EQU  98h            ; video RAM data
+VDPCTL  EQU  99h            ; address and registers
+        org  0E000h
+start:  di
+        xor  a              ; video RAM address 0000h,
+        out  (VDPCTL),a     ; low byte first
+        ld   a,40h          ; high byte, bit 6 = write
+        out  (VDPCTL),a
+        ld   b,40
+        ld   a,'A'
+loop:   out  (VDPDAT),a
         ld   (count),a
-        call copy
-        jr   loop
-
-copy:   ld   b,a            ; subroutine
+        djnz loop
         ret
 
 count:  db   0              ; RAM variable
 `;
-const SAMPLE = `; Sample program: counts on output port 01h
-; and keeps a copy of the count at 0100h.
-31 00 10   ; 0000  LD SP,1000h
-3E 00      ; 0003  LD A,00h
-D3 01      ; 0005  loop: OUT (01h),A
-3C         ; 0007  INC A
-32 00 01   ; 0008  LD (0100h),A
-CD 10 00   ; 000B  CALL 0010h
-18 F5      ; 000E  JR loop
-47         ; 0010  sub: LD B,A
-C9         ; 0011  RET
+const SAMPLE = `; Sample program: fills the top line of the screen with "A"
+E000:
+F3         ; DI
+AF         ; XOR A
+D3 99      ; OUT (99h),A
+3E 40      ; LD A,40h
+D3 99      ; OUT (99h),A
+06 28      ; LD B,40
+3E 41      ; LD A,'A'
+D3 98      ; loop: OUT (98h),A
+10 FC      ; DJNZ loop
+C9         ; RET
 `;
 
 // ---------- system ----------
@@ -556,19 +578,20 @@ const portOut = new Map();
 const ioLog = [];
 let lastWrites = new Set();
 
-const zx = new ZX80(null);
-const bus = {   // the panes' view of memory (the CPU itself uses zx.bus)
-  read: a => zx.peek(a & 0xFFFF), peek: a => zx.peek(a & 0xFFFF),
-  write: (a, v) => { disDirty = true; zx.write(a & 0xFFFF, v & 0xFF); },
-  input: p => zx.input(p), output: (p, v) => zx.output(p, v)
+const msx = new MSXMachine();
+const bus = {   // the panes' view of memory, through the slots as they are switched now (the CPU itself uses msx.bus)
+  read: a => msx.peek(a & 0xFFFF), peek: a => msx.peek(a & 0xFFFF),
+  write: (a, v) => { disDirty = true; msx.write(a & 0xFFFF, v & 0xFF); },
+  input: p => msx.input(p), output: (p, v) => msx.output(p, v)
 };
-{ const oi = zx.input.bind(zx), oo = zx.output.bind(zx), ow = zx.write.bind(zx);
-  zx.input = p => { const v = oi(p); ioLog.push({ dir: 'IN', p, v, t: tTotal }); trimLog(); return v; };
-  zx.output = (p, v) => { oo(p, v); ioLog.push({ dir: 'OUT', p, v, t: tTotal }); trimLog(); };
-  zx.write = (a, v) => { disDirty = true; ow(a, v); };
+{ const oi = msx.input.bind(msx), oo = msx.output.bind(msx), ow = msx.write.bind(msx);
+  // the video data port is left out of the log: a screen clear alone is thousands of writes
+  msx.input = p => { const v = oi(p); if ((p & 0xFF) !== 0x98) { ioLog.push({ dir: 'IN', p, v, t: tTotal }); trimLog(); } return v; };
+  msx.output = (p, v) => { if ((p & 0xFF) === 0xA8 && v !== msx.ppiA) disDirty = true; oo(p, v); portOut.set(p & 0xFF, v); if ((p & 0xFF) !== 0x98) { ioLog.push({ dir: 'OUT', p, v, t: tTotal }); trimLog(); } };
+  msx.write = (a, v) => { if (a < 0xF380) disDirty = true; ow(a, v); };
 }
 function trimLog() { if (ioLog.length > 60) ioLog.splice(0, ioLog.length - 60); }
-const cpu = zx.cpu;
+const cpu = msx.cpu;
 
 // ---------- pins ----------
 const pins = { int: 1, nmi: 1, wait: 1, busreq: 1, reset: 1 };
@@ -704,12 +727,12 @@ function describe(c0, pc) {
   return disasm(bus.read, pc).text;
 }
 function beginInstruction() {
-  zx.preStep();
+  msx.preStep();
   pre = cpu.snapshot();
   const pc = cpu.pc;
   const text = cpu.halted ? null : disasm(bus.read, pc).text;
   memBefore = memWatches.size ? memVals() : null;
-  zx.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(); zx.afterStep(cyc);
+  msx.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(); msx.afterStep(cyc);
   timeline = expand(cyc); ti = 0; lastTimeline = timeline;
   lastWrites = new Set(cyc.filter(c => c.k === 'MW').map(c => c.a));
   curInstr = { pc, text: cpu.lastEvent === 'NMI' ? 'NMI response → 0066h' : cpu.lastEvent === 'INT' ? 'Interrupt response (IM ' + pre.im + ')' : (cyc[0] && cyc[0].halt) ? 'HALT state (NOP fetch)' : text, tlen: timeline.length };
@@ -719,7 +742,7 @@ function tick() { const r = tick0(); if (pinWatches.size || busWatches.size) pin
 function tick0() {
   tTotal++;
   if (pins.reset === 0) {
-    zx.reset(); cpu.intLine = pins.int === 0;
+    msx.reset(); cpu.intLine = pins.int === 0;
     timeline = null; pre = null; waitT = null; curT = RESET_T; busReleased = false; inReset = true;
     lastTimeline = null; curInstr = null;
     return 'reset';
@@ -752,8 +775,7 @@ function setStatus(text, warn, run) {
 function haltMsg() {
   const at = h4((cpu.pc - 1) & 0xFFFF) + 'h';
   if (cpu.nmiPending) return `Halted at ${at}; /NMI received: press Step or Run and the CPU jumps to 0066h`;
-  if (zx.ula && zx.nmiGen) return `Halted at ${at}, waiting for the ULA's next NMI (it holds /WAIT so the display starts on time)`;
-  if (cpu.iff1) return pins.int === 0 ? `Halted at ${at}; /INT is low: press Step or Run to take the interrupt` : `Halted at ${at}: waiting for an interrupt (pull /INT or /NMI low)`;
+  if (cpu.iff1) return pins.int === 0 || msx.intOut() ? `Halted at ${at}; /INT is low: press Step or Run to take the interrupt` : `Halted at ${at}: waiting for the video processor's next frame interrupt`;
   return `Halted at ${at} with interrupts disabled (DI): /INT is ignored, so only /NMI or /RESET can wake the CPU`;
 }
 function describeInputs() {
@@ -761,7 +783,7 @@ function describeInputs() {
   if (busReleased) return setStatus('Bus released to another device (/BUSREQ low)', true);
   if (waitT && pins.wait === 0) return setStatus('Wait state: /WAIT is low', true);
   if (running) return setStatus('Running', false, true);
-  if (cpu.halted) return setStatus(haltMsg(), !cpu.iff1 && !cpu.nmiPending && !(zx.ula && zx.nmiGen));
+  if (cpu.halted) return setStatus(haltMsg(), !cpu.iff1 && !cpu.nmiPending);
   setStatus('Ready');
 }
 function stalledMsg(r) {
@@ -831,7 +853,7 @@ function frame(now) {
   // full speed
   const t0 = performance.now();
   let last = null, stall = null;
-  const budget = runRate === 'real' ? dt * ZX.CPU_HZ / 1000 : Infinity;
+  const budget = runRate === 'real' ? dt * MSX.CPU_HZ / 1000 : Infinity;
   let spent = 0;
   while (performance.now() - t0 < 12 && spent < budget) {
     for (let k = 0; k < 400 && spent < budget; k++) {
@@ -842,22 +864,22 @@ function frame(now) {
         if (r === 'wait' || r === 'busreq' || r === 'reset') { stall = r; break; }
         continue;
       }
-      zx.preStep();
+      msx.preStep();
       const pc = cpu.pc;
       const wb = watches.size ? regVals(cpu) : null, mb = memWatches.size ? memVals() : null;
-      zx.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(); zx.afterStep(cyc);
-      tTotal += cycleT(cyc); instrCount++; last = cyc; spent += cycleT(cyc);
+      msx.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(), took = msx.afterStep(cyc);
+      tTotal += cycleT(cyc); instrCount++; last = cyc; spent += took;
       if (checkBoundary()) { finishFast(last, pc); return; }
       if (wb) { const wn = watchHit(wb); if (wn != null) { finishFast(last, pc); watchStop(wn); return; } }
       if (mb) { const mh = memHit(mb); if (mh) { finishFast(last, pc); watchStop(mh); return; } }
       if (afterBps.size && afterBps.has(pc) && cpu.pc !== pc) { finishFast(last, pc); watchStop(pc); return; }
-      if (cpu.halted && !cpu.iff1 && !cpu.nmiPending && !(zx.ula && zx.nmiGen)) { finishFast(last, pc); stopRun(haltMsg()); return; }   // the ZX81's ULA will send an NMI
+      if (cpu.halted && !cpu.iff1 && !cpu.nmiPending) { finishFast(last, pc); stopRun(haltMsg()); return; }
       last.pc = pc;
     }
     if (stall) break;
   }
   if (last) finishFast(last, last.pc);
-  if (stall) stalledMsg(stall); else setStatus(runRate === 'real' ? 'Running in real time (3.25 MHz)' : 'Running at full speed', false, true);
+  if (stall) stalledMsg(stall); else setStatus(runRate === 'real' ? 'Running in real time (3.58 MHz)' : 'Running at full speed', false, true);
   render();
   requestAnimationFrame(frame);
 }
@@ -872,7 +894,7 @@ function finishFast(cyc, pc) {
 function disasmSafe(pc) { try { return disasm(bus.read, pc).text; } catch (e) { return '?'; } }
 function resetCPU() {
   if (running) stopRun();
-  zx.reset(); cpu.intLine = pins.int === 0;
+  msx.reset(); cpu.intLine = pins.int === 0;
   timeline = null; pre = null; waitT = null; lastTimeline = null; curInstr = null; lastWrites = new Set();
   curT = Object.assign({}, BASE, { a: 0, t: '–' });
   tTotal = 0; instrCount = 0; pinSync();
@@ -897,7 +919,7 @@ function pinValue(name) {
     case 'M1': return T.m1; case 'MREQ': return T.mreq; case 'IORQ': return T.iorq; case 'RD': return T.rd; case 'WR': return T.wr; case 'RFSH': return T.rfsh;
     case 'HALT': return inReset ? 1 : (regsView().halted ? 0 : 1);
     case 'BUSACK': return busReleased ? 0 : 1;
-    case 'INT': return pins.int === 0 || zx.intLevel ? 0 : 1;
+    case 'INT': return pins.int === 0 || msx.intOut() ? 0 : 1;
     default: return pins[name.toLowerCase()];
   }
 }
@@ -1040,7 +1062,7 @@ function renderMem(focus) {
   }
   const tab = $('mem'); tab.style.top = first * MEM_ROW + 'px'; tab.innerHTML = html;
   if (document.activeElement !== $('memFrom')) $('memFrom').value = h4(Math.floor(view.scrollTop / MEM_ROW) * 16);
-  $('memInfo').textContent = 'ROM 0000h · ' + (zx.ramSize / 1024) + 'K RAM at 4000h · mirrored above 8000h';
+  $('memInfo').textContent = 'slots now: ' + [0, 1, 2, 3].map(p => msx.slotOf(p)).join(' ') + ' · ' + (msx.ramSize / 1024) + 'K RAM in slot ' + msx.ramSlot;
 }
 function renderIO() {
   const lat = $('latches');
@@ -1056,7 +1078,7 @@ function renderIO() {
 function render() {
   const pcNow = regsView().pc, focus = pcNow !== lastFocusPc || tTotal !== lastFocusT;
   lastFocusPc = pcNow; lastFocusT = tTotal;
-  renderPins(); renderRegs(); renderStops(); renderDebug(); renderZx(); mmDraw(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
+  renderPins(); renderRegs(); renderStops(); renderDebug(); renderMx(); mmDraw(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
   $('cntPC').textContent = h4(pcNow) + 'h';
   $('cntT').textContent = tTotal.toLocaleString('en-AU');
   $('cntI').textContent = instrCount.toLocaleString('en-AU');
@@ -1157,7 +1179,7 @@ function setMode(m) {
   $('btnToHex').hidden = !asm;
   $('btnLoad').textContent = asm ? 'Assemble and load' : 'Load into memory';
   $('loadMsg').textContent = ''; $('loadMsg').className = 'msg';
-  try { localStorage.setItem('z80bench.mode', m); } catch (e) {}
+  try { localStorage.setItem('msxbench.mode', m); } catch (e) {}
 }
 function selectLine(ta, line) {
   const lines = ta.value.split('\n');
@@ -1172,14 +1194,14 @@ function readLoadAddr() {
     $('loadAddr').focus(); return null;
   }
   $('loadAddr').value = h4(v);
-  try { localStorage.setItem('z80bench.loadAddr', h4(v)); } catch (e) {}
+  try { localStorage.setItem('msxbench.loadAddr', h4(v)); } catch (e) {}
   return v;
 }
 function assembleSource() {
   const base = readLoadAddr(); if (base === null) return null;
   const r = assemble($('asmIn').value, base);
   r.base = base;
-  try { localStorage.setItem('z80bench.asm', $('asmIn').value); } catch (e) {}
+  try { localStorage.setItem('msxbench.asm', $('asmIn').value); } catch (e) {}
   if (r.errors.length) {
     const msg = $('loadMsg'); msg.className = 'msg err';
     msg.textContent = 'Not assembled. ' + r.errors.slice(0, 4).map(e => `Line ${e.line}: ${e.msg}`).join('. ') + (r.errors.length > 4 ? ` (+${r.errors.length - 4} more)` : '') + '.';
@@ -1191,16 +1213,16 @@ function assembleSource() {
 }
 function loadChunks(chunks, note, tail) {
   const msg = $('loadMsg');
-  if ($('clearFirst').checked) zx.ram.fill(0);
+  if ($('clearFirst').checked) msx.ram.fill(0);
   let total = 0, outside = 0; const ranges = [];
   for (const c of chunks) {
-    c.bytes.forEach((v, i) => { const a = (c.addr + i) & 0xFFFF; zx.write(a, v); });
+    c.bytes.forEach((v, i) => { const a = (c.addr + i) & 0xFFFF; if (a >= msx.ramBase) msx.ram[a] = v; else outside++; });
     total += c.bytes.length; ranges.push(h4(c.addr) + '–' + h4((c.addr + c.bytes.length - 1) & 0xFFFF));
   }
-  if ($('resetAfter').checked) { resetCPU(); cpu.pc = chunks[0].addr; disStart = cpu.pc; memScrollTo(chunks[0].addr); disDirty = true; setStatus('Program loaded, CPU reset, PC = ' + h4(cpu.pc) + 'h'); }
+  if ($('resetAfter').checked) { resetCPU(); for (const c of chunks) for (let p = c.addr >> 14; p <= ((c.addr + c.bytes.length - 1) & 0xFFFF) >> 14; p++) msx.ppiA = (msx.ppiA & ~(3 << (p * 2))) | (msx.ramSlot << (p * 2)); cpu.pc = chunks[0].addr; disStart = cpu.pc; memScrollTo(chunks[0].addr); disDirty = true; setStatus('Program loaded, CPU reset, PC = ' + h4(cpu.pc) + 'h'); }
   portOut.clear(); ioLog.length = 0;
   msg.className = outside ? 'msg err' : 'msg ok';
-  msg.textContent = (note || '') + `Loaded ${total} byte${total === 1 ? '' : 's'} at ${ranges.join(', ')}.` + (outside ? ` ${outside} byte(s) fall above installed memory and won't be visible to the CPU; raise Installed memory in the System panel.` : '') + (tail || '');
+  msg.textContent = (note || '') + `Loaded ${total} byte${total === 1 ? '' : 's'} at ${ranges.join(', ')}.` + (outside ? ` ${outside} byte(s) fall below the RAM (${h4(msx.ramBase)}h-FFFFh on this machine) and were not loaded.` : '') + (tail || '');
   render();
 }
 let importedName = null;
@@ -1215,7 +1237,7 @@ function loadProgram(fromUser) {
   const { chunks, errors } = parseHex($('hexIn').value, start & 0xFFFF);
   if (errors.length) { msg.className = 'msg err'; msg.textContent = 'Not loaded. ' + errors.slice(0, 3).join('; ') + (errors.length > 3 ? ` (+${errors.length - 3} more)` : ''); return; }
   if (!chunks.length) { msg.className = 'msg err'; msg.textContent = 'No bytes found to load.'; return; }
-  try { localStorage.setItem('z80bench.hex', $('hexIn').value); } catch (e) {}
+  try { localStorage.setItem('msxbench.hex', $('hexIn').value); } catch (e) {}
   const intel = $('hexIn').value.split(/\r?\n/).some(l => l.trim().startsWith(':'));
   const dis = fromUser ? showDisassembly(chunks, importedName) : '';
   loadChunks(chunks, '', (intel && chunks[0].addr !== start ? ' (Intel HEX records carry their own addresses, so Load at is not used.)' : '') + dis);
@@ -1248,7 +1270,7 @@ const DIS = {
   db: 'DB  ', byte: v => '0' + h2(v) + 'h',
   jump: /^(JP|JR|CALL|DJNZ)\b.*?\b0?(?<t>[0-9A-F]{4})h$/, target: /\b0?[0-9A-F]{4}h$/
 };
-const LS_ASM = 'z80bench.asm';
+const LS_ASM = 'msxbench.asm';
 
 // ---------- disassemble loaded code into the Assembly tab ----------
 let prevAsm = null, hexFromAsm = null;
@@ -1349,7 +1371,7 @@ function importFile(file) {
     $(target === 'hex' ? 'hexIn' : 'asmIn').value = text;
     if (target === 'hex') { importedName = file.name; hexFromAsm = null; }
     setMode(target);
-    try { localStorage.setItem(target === 'hex' ? 'z80bench.hex' : 'z80bench.asm', text); } catch (e) {}
+    try { localStorage.setItem(target === 'hex' ? 'msxbench.hex' : 'msxbench.asm', text); } catch (e) {}
     msg.className = 'msg ok';
     msg.textContent = note + ` Check Load at (now ${h4(parseInt($('loadAddr').value, 16) || 0)}h), then press ${target === 'hex' ? 'Load into memory' : 'Assemble and load'}.`;
     $('loadAddr').focus(); $('loadAddr').select();
@@ -1579,18 +1601,19 @@ $('dbgAdd').onclick = dbgAdd;
 for (const id of ['dbgAddr', 'dbgMemVal', 'dbgBusVal']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); dbgAdd(); } });
 $('dbgList').addEventListener('click', e => { const b = e.target.closest('button[data-key]'); if (!b) return; b.classList.contains('x') ? dbgRemove(b.dataset.key) : dbgGo(b.dataset.key); });
 $('dbgClear').onclick = () => { breakpoints.clear(); afterBps.clear(); watches.clear(); memWatches.clear(); pinWatches.clear(); busWatches.clear(); hitReg = null; dbgHit = null; render(); };
-// ---------- master reset: memory, ROM, every debug point and the input pins ----------
+// ---------- master reset: memory, ROMs, every debug point and the input pins ----------
 function masterReset() {
   if (running) stopRun();
   $('dbgClear').onclick();
   for (const k of Object.keys(pins)) pins[k] = 1;
   cpu.nmiPending = false;
-  for (const a of [zx.rom, zx.ram, zx.lowRam, zx.keys, mem]) a.fill(0);
-  zxRom = false; zxRoms[4] = zxRoms[8] = null; try { localStorage.removeItem(ZX_ROM_KEYS[4]); localStorage.removeItem(ZX_ROM_KEYS[8]); } catch (e) {}
-  zx.tape = null; zxTapeName = ''; zxTapeShow(); zxHeld.clear(); zxShiftLatch = false; zxShow(); $('zxMsg').className = 'msg'; $('zxMsg').textContent = '';
+  for (const a of [msx.bios, msx.fw, msx.ram, msx.vram, msx.keys, mem]) a.fill(0);
+  msx.hasBios = msx.hasFw = false; msx.carts[1] = null; mxCartName = '';
+  try { localStorage.removeItem(MX_ROM_KEYS.bios); localStorage.removeItem(MX_ROM_KEYS.fw); } catch (e) {}
+  mxHeld.clear(); mxLatched.clear(); mxQueue.length = 0; mxWant.clear(); mxShow(); mxCartShow(); $('mxMsg').className = 'msg'; $('mxMsg').textContent = '';
   resetCPU();
   if (typeof disDirty !== 'undefined') disDirty = true;
-  setStatus('Master reset: ZX80 and ZX81 ROMs forgotten (load them again to switch on), RAM cleared, tape ejected; all breakpoints and stops removed; input pins released');
+  setStatus('Master reset: BIOS and firmware ROMs forgotten (load them again to switch on), RAM and video RAM cleared, cartridge removed; all breakpoints and stops removed; input pins released');
   render();
 }
 let masterArm = null;
@@ -1601,111 +1624,154 @@ $('btnMaster').onclick = () => {
 };
 dbgFields();
 
-// ---------- ZX80: TV picture, keyboard, ROM, video-logic panel ----------
-const zscr = $('zxScreen'), zctx = zscr.getContext('2d'), zimg = zctx.createImageData(ZX.W, ZX.H);
-let zxRom = false;
-function drawZx() {
-  const d = zimg.data, src = zx.front;
-  for (let i = 0; i < src.length; i++) { const o = i * 4, ink = src[i]; d[o] = ink ? 24 : 233; d[o + 1] = ink ? 24 : 231; d[o + 2] = ink ? 26 : 223; d[o + 3] = 255; }
-  zctx.putImageData(zimg, 0, 0);
-  const b = zx.beam();
-  if (!running && zxRom) { zctx.fillStyle = 'rgba(36,113,168,0.85)'; zctx.fillRect(0, Math.min(b.line, ZX.H - 1), ZX.W, 1); zctx.fillRect(Math.min(b.x, ZX.W - 2), b.line - 3, 2, 7); }
-  if (!zxRom) { zctx.fillStyle = '#333'; zctx.font = '14px "IBM Plex Mono", monospace'; zctx.textAlign = 'center'; zctx.fillText(`Load the ${zx.rom8k ? 'ZX81' : 'ZX80'} ROM to switch on`, ZX.W / 2, ZX.H / 2 - 6); zctx.font = '11px "IBM Plex Mono", monospace'; zctx.fillText(`${zx.rom8k ? '8' : '4'} KB image, not included`, ZX.W / 2, ZX.H / 2 + 14); }
-  $('zxScrInfo').textContent = zxRom ? `${zx.synced ? 'in sync' : 'no vertical sync (rolling)'} · line ${b.line} · frame ${zx.frames}` : 'no ROM';
+// ---------- MSX: picture, keyboard, ROMs, cartridge, hardware panel ----------
+const mscr = $('mxScreen'), mctx = mscr.getContext('2d'), mimg = mctx.createImageData(MSX.FW, MSX.FH);
+const MX_PAL32 = (() => { const u = new Uint32Array(16), b = new Uint8Array(u.buffer); MSX.PALETTE.forEach((c, i) => { b[i * 4] = c[0]; b[i * 4 + 1] = c[1]; b[i * 4 + 2] = c[2]; b[i * 4 + 3] = 255; }); return u; })();
+const mimg32 = new Uint32Array(mimg.data.buffer);
+let mxCartName = '';
+const mxOn = () => msx.hasBios;
+function drawMx() {
+  const src = msx.front;
+  for (let i = 0; i < src.length; i++) mimg32[i] = MX_PAL32[src[i] & 15];
+  mctx.putImageData(mimg, 0, 0);
+  const b = msx.beam();
+  if (!running && mxOn() && b.line < 192) { mctx.fillStyle = 'rgba(255,255,255,0.75)'; mctx.fillRect(0, b.line + MSX.BORDER, MSX.FW, 1); mctx.fillRect(b.x + MSX.BORDER, b.line + MSX.BORDER - 3, 2, 7); }
+  if (!mxOn()) { mctx.fillStyle = '#ddd'; mctx.font = '13px "IBM Plex Mono", monospace'; mctx.textAlign = 'center'; mctx.fillText('Load the MSX BIOS ROM to switch on', MSX.FW / 2, MSX.FH / 2 - 6); mctx.font = '10px "IBM Plex Mono", monospace'; mctx.fillText('32 KB image, not included', MSX.FW / 2, MSX.FH / 2 + 12); }
+  $('mxScrInfo').textContent = mxOn() ? `${MSX.MODE_NAMES[msx.mode()]}${msx.vreg[1] & 0x40 ? '' : ' · blanked'} · line ${msx.line} · frame ${msx.frames}` : 'no ROM';
 }
-let zxSig = '';
-function renderZxState() {
-  const keys = []; ZX_KEYS.forEach((row, r) => row.forEach((k, i) => { if (zx.keys[r] & (1 << i)) keys.push(k); }));
-  const lc = zx.lastChar;
-  const html = `<div class="blk"><div class="hd">Character logic</div><div class="kv">Line counter <b>${zx.lcntr}</b> · last character latched <b>${lc < 0 ? 'none' : h2(lc) + 'h' + (lc & 0x80 ? ' (inverse)' : '')}</b><br>Font page I <b>${h2(cpu.i)}h</b> · R <b>${h2(cpu.r)}h</b> · /INT (A6 of refresh) <b>${zx.intLevel ? 'low' : 'high'}</b> · IM <b>${cpu.im}</b> IFF1 <b>${cpu.iff1}</b></div></div>
-    ${zx.ula ? `<div class="blk"><div class="hd">ULA: NMI generator</div><div class="kv">NMI on each sync <b>${zx.nmiGen ? 'on (OUT FEh)' : 'off (OUT FDh)'}</b> · NMIs so far <b>${zx.nmis}</b> · margin lines left <b>${((-cpu.a_) & 0xFF) > 0x7F ? '-' : (0x100 - cpu.a_) & 0xFF}</b></div></div>` : ''}
-    ${zx.rom8k ? `<div class="blk"><div class="hd">BASIC mode</div><div class="kv">${(zx.read(0x403B) & 0x80) ? '<b>SLOW</b>: compute and display' : '<b>FAST</b>: picture only while waiting for a key'}${zx.ula ? '' : ' · no NMI hardware on a ZX80, so SLOW is unavailable'}</div></div>` : ''}
-    ${zx.hires ? `<div class="blk"><div class="hd">Hi-res board</div><div class="kv">8K RAM at 2000h-3FFFh · picture bytes fetched from RAM <b>${zx.hiresBytes}</b> ${cpu.i >= 0x20 && cpu.i < 0xC0 ? '· I points into RAM: <b>high resolution</b>' : '· I points at the ROM: character display'}</div></div>` : ''}
-    <div class="blk"><div class="hd">Sync and TV</div><div class="kv">Vertical sync <b>${zx.vsync ? 'active' : 'off'}</b> · TV <b>${zx.synced ? 'locked' : 'free running'}</b> · line <b>${zx.line}</b> · frames <b>${zx.frames}</b></div></div>
-    <div class="blk"><div class="hd">Keyboard and memory</div><div class="kv">Keys down <b>${keys.join(' ') || 'none'}</b> · RAM <b>${zx.ramSize / 1024}K</b> · ROM <b>${zxRom ? (zx.rom8k ? '8K' : '4K') + ' loaded' : 'none'}</b></div></div>`;
-  if (html !== zxSig) { zxSig = html; $('zxState').innerHTML = html; }
+const MX_DEV = { bios: 'BIOS + BASIC ROM', fw: 'Personal Data Bank ROM', ram: 'RAM', cart: 'cartridge' };
+const mxNote = p => { if (!p) return 'off'; const n = Math.round(12 * Math.log2(111861 / p / 440)) + 57; return n < 0 || n > 119 ? '' : ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][n % 12] + Math.floor(n / 12); };
+let mxSig = '';
+function renderMxState() {
+  const keys = []; MSX_KEYS.forEach((row, r) => row.forEach((k, i) => { if (msx.keys[r] & (1 << i)) keys.push(k); }));
+  const r = msx.vreg, T = msx.tables(), st = msx.vstat, g = msx.psg, c = msx.ppiC, cart = msx.carts[1];
+  const pages = [0, 1, 2, 3].map(p => { const s = msx.slotOf(p), d = msx.device(s, p << 14) || (p === 3 && msx.device(s, 0xFFFF)) || null; return `<br>${h4(p << 14)}h–${h4((p << 14) + 0x3FFF)}h → slot <b>${s}</b> ${d ? MX_DEV[d] : '<span class="none">nothing (reads FFh)</span>'}`; }).join('');
+  const tone = ch => { const p = g[ch * 2] | (g[ch * 2 + 1] & 15) << 8, on = !(g[7] & (1 << ch)), nz = !(g[7] & (8 << ch)), v = g[8 + ch]; return `${'ABC'[ch]} <b>${on ? (p ? Math.round(111861 / p) + ' Hz ' + mxNote(p) : 'period 0') : 'tone off'}</b>${nz ? ' +noise' : ''} vol <b>${v & 16 ? 'env' : v & 15}</b>`; };
+  const html = `<div class="blk"><div class="hd">Slots · PPI port A = ${h2(msx.ppiA)}h</div><div class="kv">${pages.slice(4)}</div></div>
+    <div class="blk"><div class="hd">Video processor (TMS9929A)</div><div class="kv">Mode <b>${MSX.MODE_NAMES[T.mode]}</b> · display <b>${r[1] & 0x40 ? 'on' : 'blanked'}</b> · frame interrupt <b>${r[1] & 0x20 ? 'enabled' : 'off'}</b><br>R0–R7 <b>${[...r].map(h2).join(' ')}</b> · status <b>${h2(st)}</b>${st & 0x80 ? ' frame' : ''}${st & 0x40 ? ' 5th-sprite' : ''}${st & 0x20 ? ' collision' : ''} · /INT <b>${msx.intOut() ? 'low' : 'high'}</b><br>Video RAM pointer <b>${h4(msx.vaddr)}h</b>${msx.vlatch >= 0 ? ' · first control byte waiting' : ''} · line <b>${msx.line}</b><br>Name table <b>${h4(T.name)}h</b> · patterns <b>${h4(T.pattern)}h</b>${T.colourLen ? ' · colours <b>' + h4(T.colour) + 'h</b>' : ''}${T.mode === 'text' ? '' : '<br>Sprite attributes <b>' + h4(T.sprAttr) + 'h</b> · sprite patterns <b>' + h4(T.sprPattern) + 'h</b> · <b>' + (r[1] & 2 ? '16×16' : '8×8') + (r[1] & 1 ? ' magnified' : '') + '</b>'}<br>Text colour <b>${MSX.COLOUR_NAMES[r[7] >> 4]}</b> · backdrop <b>${MSX.COLOUR_NAMES[r[7] & 15]}</b></div></div>
+    <div class="blk"><div class="hd">PPI port C = ${h2(c)}h</div><div class="kv">Keyboard row <b>${c & 15}</b> · cassette motor <b>${c & 0x10 ? 'off' : 'on'}</b> · cassette out <b>${(c >> 5) & 1}</b> · CAPS lamp <b>${c & 0x40 ? 'off' : 'on'}</b> · key click <b>${(c >> 7) & 1}</b><br>Keys down <b>${keys.join(' ') || 'none'}</b></div></div>
+    <div class="blk"><div class="hd">Sound generator (AY-3-8910)</div><div class="kv">${tone(0)}<br>${tone(1)}<br>${tone(2)}<br>Noise period <b>${g[6] & 31}</b> · envelope period <b>${g[11] | g[12] << 8}</b> shape <b>${g[13] & 15}</b> · selected register <b>${msx.psgAddr}</b></div></div>
+    <div class="blk"><div class="hd">Machine</div><div class="kv">Sony <b>${msx.machine === 'hb75p' ? 'HB-75P' : 'HB-55P'}</b> · RAM <b>${msx.ramSize / 1024}K</b> in slot ${msx.ramSlot} · interrupts taken <b>${msx.ints}</b><br>Cartridge (slot 1) <b>${cart ? esc(mxCartName) + ' · ' + cart.len / 1024 + 'K ' + MSX_MAPPERS[cart.type] + (cart.type === 'plain' ? ' at ' + h4(cart.base) + 'h' : ' · segments ' + cart.bank.map(h2).join(' ')) : 'none'}</b></div></div>`;
+  if (html !== mxSig) { mxSig = html; $('mxState').innerHTML = html; }
 }
-function renderZx() { drawZx(); renderZxState(); }
-// keyboard: PC keys and the on-screen ZX80 keyboard
-// legends from each ROM's own tables. ZX80: keyword at the K cursor (letter code + C0h) and SHIFT symbol (table at
-// 006Ch). ZX81: keyword (letter code + C0h), SHIFT symbol or keyword (table at 00A5h) and FUNCTION word (table at 00CCh).
-const ZX80_LAYOUT = [
-  [['1', '', 'NOT'], ['2', '', 'AND'], ['3', '', 'THEN'], ['4', '', 'TO'], ['5', '', '←'], ['6', '', '↓'], ['7', '', '↑'], ['8', '', '→'], ['9', '', 'HOME'], ['0', '', 'RUBOUT']],
-  [['Q', 'NEW', '▌'], ['W', 'LOAD', '▄'], ['E', 'SAVE', '▘'], ['R', 'RUN', '▝'], ['T', 'CONT', '▒'], ['Y', 'REM', '"'], ['U', 'IF', '$'], ['I', 'INPUT', '('], ['O', 'PRINT', ')'], ['P', '', '*']],
-  [['A', 'LIST', '▒'], ['S', 'STOP', '▞'], ['D', 'DIM', '▖'], ['F', 'FOR', '▗'], ['G', 'GO TO', '▒'], ['H', 'POKE', '**'], ['J', 'RAND', '-'], ['K', 'LET', '+'], ['L', '', '='], ['NewLine', '', 'EDIT']],
-  [['Shift', '', ''], ['Z', '', ':'], ['X', 'CLEAR', ';'], ['C', 'CLS', '?'], ['V', 'GO SUB', '/'], ['B', 'RETURN', 'OR'], ['N', 'NEXT', '<'], ['M', '', '>'], ['.', '', ','], ['Space', '', '£']]
+function renderMx() { drawMx(); renderMxState(); }
+// keyboard: the PC keyboard by key position, and the on-screen MSX keyboard (international layout)
+// each key: [matrix name, legend, shifted legend, width]
+const MX_LAYOUT = [
+  [['F1', 'F1', 'F6'], ['F2', 'F2', 'F7'], ['F3', 'F3', 'F8'], ['F4', 'F4', 'F9'], ['F5', 'F5', 'F10'], ['Select', 'SELECT'], ['Stop', 'STOP'], ['Home', 'HOME', 'CLS'], ['Ins', 'INS'], ['Del', 'DEL']],
+  [['Esc', 'ESC'], ['1', '1', '!'], ['2', '2', '@'], ['3', '3', '#'], ['4', '4', '$'], ['5', '5', '%'], ['6', '6', '^'], ['7', '7', '&'], ['8', '8', '*'], ['9', '9', '('], ['0', '0', ')'], ['-', '-', '_'], ['=', '=', '+'], ['\\', '\\', '|'], ['BS', 'BS']],
+  [['Tab', 'TAB', '', 1.5], ['Q'], ['W'], ['E'], ['R'], ['T'], ['Y'], ['U'], ['I'], ['O'], ['P'], ['[', '[', '{'], [']', ']', '}'], ['Return', 'RETURN', '', 1.5]],
+  [['Ctrl', 'CTRL', '', 1.75], ['A'], ['S'], ['D'], ['F'], ['G'], ['H'], ['J'], ['K'], ['L'], [';', ';', ':'], ["'", "'", '"'], ['`', '`', '~'], ['Dead', 'DEAD', '', 1.25]],
+  [['Shift', 'SHIFT', '', 2.25], ['Z'], ['X'], ['C'], ['V'], ['B'], ['N'], ['M'], [',', ',', '<'], ['.', '.', '>'], ['/', '/', '?'], ['Up', '↑', '', 1.25], ['Caps', 'CAPS', '', 1.5]],
+  [['Graph', 'GRAPH', '', 1.5], ['Code', 'CODE', '', 1.5], ['Space', 'SPACE', '', 7.5], ['Left', '←', '', 1.25], ['Down', '↓', '', 1.25], ['Right', '→', '', 1.25]]
 ];
-const ZX81_LAYOUT = [
-  [['1', '', 'EDIT'], ['2', '', 'AND'], ['3', '', 'THEN'], ['4', '', 'TO'], ['5', '', '←'], ['6', '', '↓'], ['7', '', '↑'], ['8', '', '→'], ['9', '', 'GRAPHICS'], ['0', '', 'RUBOUT']],
-  [['Q', 'PLOT', '""', 'SIN'], ['W', 'UNPLOT', 'OR', 'COS'], ['E', 'REM', 'STEP', 'TAN'], ['R', 'RUN', '<=', 'INT'], ['T', 'RAND', '<>', 'RND'], ['Y', 'RETURN', '>=', 'STR$'], ['U', 'IF', '$', 'CHR$'], ['I', 'INPUT', '(', 'CODE'], ['O', 'POKE', ')', 'PEEK'], ['P', 'PRINT', '"', 'TAB']],
-  [['A', 'NEW', 'STOP', 'ASN'], ['S', 'SAVE', 'LPRINT', 'ACS'], ['D', 'DIM', 'SLOW', 'ATN'], ['F', 'FOR', 'FAST', 'SGN'], ['G', 'GOTO', 'LLIST', 'ABS'], ['H', 'GOSUB', '**', 'SQR'], ['J', 'LOAD', '-', 'VAL'], ['K', 'LIST', '+', 'LEN'], ['L', 'LET', '=', 'USR'], ['NewLine', '', 'FUNCTION']],
-  [['Shift', '', ''], ['Z', 'COPY', ':', 'LN'], ['X', 'CLEAR', ';', 'EXP'], ['C', 'CONT', '?', 'AT'], ['V', 'CLS', '/'], ['B', 'SCROLL', '*', 'INKEY$'], ['N', 'NEXT', '<', 'NOT'], ['M', 'PAUSE', '>', 'PI'], ['.', '', ','], ['Space', '', '£']]
-];
-const zxHeld = new Set(); let zxShiftLatch = false;
-function zxShow() { $('zxKeysDown').textContent = zxHeld.size || zxShiftLatch ? 'keys: ' + [...(zxShiftLatch ? ['Shift (latched)'] : []), ...zxHeld].join(' + ') : '';
-  for (const b of document.querySelectorAll('#zxKb button')) { b.classList.toggle('down', zxHeld.has(b.dataset.k)); b.classList.toggle('latched', b.dataset.k === 'Shift' && zxShiftLatch); } }
-// a key is held for at least 80 ms of ZX80 time, or a quick tap would be released before the ROM scans the keyboard
-const ZX_MIN_HOLD = ZX.CPU_HZ * 0.08, zxDownAt = new Map();
-function zxDown(k) { zxHeld.add(k); zxDownAt.set(k, zx.t); zx.key(k, true); zxShow(); }
-function zxUp(k, then) {
-  if (!zxHeld.has(k)) return;
-  const since = zxDownAt.get(k) ?? -Infinity, waitStart = performance.now();
-  const release = () => {
-    if (!zxHeld.has(k)) return;
-    if (running && zx.t - since < ZX_MIN_HOLD && performance.now() - waitStart < 1500) { setTimeout(release, 15); return; }
-    zxHeld.delete(k); zx.key(k, false); zxShow(); if (then) then();
-  };
-  release();
+const MX_LATCH = new Set(['Shift', 'Ctrl', 'Graph', 'Code']);     // on-screen modifier keys stay down for the next key
+const mxHeld = new Set(), mxLatched = new Set();
+function mxShow() {
+  const all = [...[...mxLatched].map(k => k + ' (latched)'), ...mxHeld];
+  $('mxKeysDown').textContent = all.length ? 'keys: ' + all.join(' + ') : '';
+  for (const b of document.querySelectorAll('#mxKb button')) { b.classList.toggle('down', mxHeld.has(b.dataset.k)); b.classList.toggle('latched', mxLatched.has(b.dataset.k)); }
 }
-function zxRenderKb() {
-  const layout = zx.rom8k ? ZX81_LAYOUT : ZX80_LAYOUT;
-  $('zxKb').innerHTML = layout.map(row => '<div class="krow">' + row.map(([k, kw, sh, fn]) => `<button type="button" data-k="${k}" title="${k}${kw ? ' · keyword ' + kw : ''}${sh ? ' · SHIFT ' + sh : ''}${fn ? ' · FUNCTION ' + fn : ''}"><span class="kw">${esc(kw) || '&nbsp;'}</span>${k === 'NewLine' ? 'NEW LINE' : k === 'Space' ? 'SPACE' : k === 'Shift' ? 'SHIFT' : k}<small>${esc(sh) || '&nbsp;'}</small>${zx.rom8k ? '<span class="fn">' + (esc(fn || '') || '&nbsp;') + '</span>' : ''}</button>`).join('') + '</div>').join('');
-  zxBindKb();
+// Key presses and releases are queued and played to the machine in order, in MSX time. The BIOS reads the
+// keyboard on every third frame interrupt (60 ms), so a key stays down for at least 65 ms, two presses are at least
+// 65 ms apart (or both would be found in one scan, in matrix order rather than typed order) and a key stays up for
+// 65 ms before it goes down again. A quick tap is never missed, a fast double letter gives two letters, and SHIFT
+// applies to exactly the keys it was held for, however fast they were typed.
+const MX_SCAN = MSX.CPU_HZ * 0.065, mxDownAt = new Map(), mxUpAt = new Map();
+const mxQueue = [], mxWant = new Set(); let mxLastDown = -Infinity, mxLastWall = 0, mxPumpTimer = null;
+function mxPump() {
+  clearTimeout(mxPumpTimer); mxPumpTimer = null;
+  while (mxQueue.length) {
+    const ev = mxQueue[0];
+    if (running && performance.now() - mxLastWall < 1500) {
+      if (ev.k && ev.down && (msx.t - mxLastDown < MX_SCAN || msx.t - (mxUpAt.get(ev.k) ?? -Infinity) < MX_SCAN)) break;
+      if (ev.k && !ev.down && msx.t - (mxDownAt.get(ev.k) ?? -Infinity) < MX_SCAN) break;
+    }
+    mxQueue.shift(); mxLastWall = performance.now();
+    if (ev.fn) ev.fn();
+    else if (ev.down) { mxHeld.add(ev.k); mxDownAt.set(ev.k, msx.t); mxLastDown = msx.t; msx.key(ev.k, true); }
+    else { mxHeld.delete(ev.k); mxUpAt.set(ev.k, msx.t); if (!mxLatched.has(ev.k)) msx.key(ev.k, false); }
+    mxShow();
+  }
+  if (mxQueue.length) mxPumpTimer = setTimeout(mxPump, 8);
 }
-function zxBindKb() { for (const b of document.querySelectorAll('#zxKb button')) {
-  const k = b.dataset.k;
-  if (k === 'Shift') { b.addEventListener('click', () => { zxShiftLatch = !zxShiftLatch; zx.key('Shift', zxShiftLatch); zxShow(); }); continue; }
-  b.addEventListener('pointerdown', e => { e.preventDefault(); zxDown(k); });
-  const up = () => { if (!zxHeld.has(k)) return; const latched = zxShiftLatch; zxUp(k, () => { if (latched && zxShiftLatch) setTimeout(() => { zxShiftLatch = false; zx.key('Shift', false); zxShow(); }, 60); }); };
-  b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up);
-} zxShow(); }
-zxRenderKb();
-const ZX_CODE = { Enter: 'NewLine', NumpadEnter: 'NewLine', ShiftLeft: 'Shift', ShiftRight: 'Shift', Space: 'Space', Period: '.' };
-function zxKeyNames(e) {
-  if (e.code === 'Backspace') return ['Shift', '0'];
-  if (ZX_CODE[e.code]) return [ZX_CODE[e.code]];
-  let m = /^Key([A-Z])$/.exec(e.code); if (m) return [m[1]];
-  m = /^(?:Digit|Numpad)(\d)$/.exec(e.code); return m ? [m[1]] : null;
+function mxPush(ev) { if (!mxQueue.length) mxLastWall = performance.now(); mxQueue.push(ev); mxPump(); }
+function mxDown(k) { if (mxWant.has(k)) return; mxWant.add(k); mxPush({ k, down: true }); }
+function mxUp(k, then) { if (!mxWant.has(k)) return; mxWant.delete(k); mxPush({ k, down: false }); if (then) mxPush({ fn: then }); }
+function mxRenderKb() {
+  $('mxKb').innerHTML = MX_LAYOUT.map(row => '<div class="krow">' + row.map(([k, lg, sh, w]) => `<button type="button" data-k="${esc(k)}" style="flex-grow:${w || 1}" title="${esc(k)}${sh ? ' · SHIFT ' + esc(sh) : ''}"><small>${esc(sh || '') || '&nbsp;'}</small>${esc(lg || k)}</button>`).join('') + '</div>').join('');
+  for (const b of document.querySelectorAll('#mxKb button')) {
+    const k = b.dataset.k;
+    if (MX_LATCH.has(k)) { b.addEventListener('click', () => { if (mxLatched.has(k)) { mxLatched.delete(k); msx.key(k, false); } else { mxLatched.add(k); msx.key(k, true); } mxShow(); }); continue; }
+    b.addEventListener('pointerdown', e => { e.preventDefault(); mxDown(k); });
+    const up = () => { if (!mxWant.has(k)) return; const had = [...mxLatched]; mxUp(k, () => { for (const m of had) if (mxLatched.delete(m)) msx.key(m, false); mxShow(); }); };
+    b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up);
+  }
+  mxShow();
 }
-zscr.addEventListener('keydown', e => { if (e.metaKey || e.ctrlKey) return; const ks = zxKeyNames(e); if (!ks) return; e.preventDefault(); for (const k of ks) if (!zxHeld.has(k)) zxDown(k); });
-zscr.addEventListener('keyup', e => { const ks = zxKeyNames(e); if (!ks) return; e.preventDefault(); for (const k of ks) zxUp(k); });
-zscr.addEventListener('blur', () => { for (const k of [...zxHeld]) zxUp(k); });
-// ROMs: one 4K slot (ZX80 BASIC) and one 8K slot (ZX81 BASIC), each kept by this browser; the machine picks its slot
-const ZX_ROM_KEYS = { 4: 'zx80.rom', 8: 'zx81.rom' }, ZX_MACHINE_KEY = 'zx.machine';
-const ZX_NAMES = { zx80: 'ZX80', 'zx80-8k': 'ZX80 with the 8K ROM', zx81: 'ZX81' };
-const zxRoms = { 4: null, 8: null };
-// known ROM images by CRC-32. The first ZX81 ROM has some routines 3-4 bytes lower than the later ones, so
-// machine code written for the later ROMs (most of it, and all Timex software) can fail on it.
-const ZX_ROM_EDITIONS = {
-  '4C7FC597': ['ZX80 4K BASIC'],
-  'FCBBD617': ['ZX81 1st edition', 'BASIC programs are fine, but some machine-code programs written for the later ROM call routines that sit a few bytes lower in this one, and stop with an error.'],
-  '4B1DD6EB': ['ZX81 2nd edition, also the Timex Sinclair 1000'], '522C37B8': ['ZX81 3rd edition'], '7DD19C48': ['Timex Sinclair 1500']
+mxRenderKb();
+const MX_CODE = { Enter: 'Return', NumpadEnter: 'Return', ShiftLeft: 'Shift', ShiftRight: 'Shift', ControlLeft: 'Ctrl', ControlRight: 'Ctrl', AltLeft: 'Graph', AltRight: 'Code', CapsLock: 'Caps', Space: 'Space',
+  Backspace: 'BS', Tab: 'Tab', Escape: 'Esc', Home: 'Home', Insert: 'Ins', Delete: 'Del', ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down', F1: 'F1', F2: 'F2', F3: 'F3', F4: 'F4', F5: 'F5',
+  F7: 'Select', F8: 'Stop', End: 'Stop', Minus: '-', Equal: '=', Backslash: '\\', BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'", Backquote: '`', Comma: ',', Period: '.', Slash: '/', NumpadDecimal: '.' };
+function mxKeyName(e) {
+  if (MX_CODE[e.code]) return MX_CODE[e.code];
+  let m = /^Key([A-Z])$/.exec(e.code); if (m) return m[1];
+  m = /^(?:Digit|Numpad)(\d)$/.exec(e.code); return m ? m[1] : null;
+}
+mscr.addEventListener('keydown', e => { if (e.metaKey) return; const k = mxKeyName(e); if (!k) return; e.preventDefault(); if (e.repeat) return; mxDown(k); });
+mscr.addEventListener('keyup', e => { const k = mxKeyName(e); if (!k) return; e.preventDefault(); mxUp(k); });
+mscr.addEventListener('blur', () => { for (const k of [...mxWant]) mxUp(k); });
+// ROMs: the 32K BIOS + BASIC and the optional 16K firmware, each kept by this browser
+const MX_ROM_KEYS = { bios: 'msx.bios.rom', fw: 'msx.fw.rom' }, MX_MACHINE_KEY = 'msx.machine';
+const MX_NAMES = { hb55p: 'Sony HB-55P', hb75p: 'Sony HB-75P' };
+const MX_ROM_NAMES = { 'E9CCD789': 'Sony HB-55P / HB-75P BIOS and BASIC 1.0', '492B12F8': 'Sony Personal Data Bank' };
+function mxCrc(b) { let c = ~0; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xEDB88320 : c >>> 1; } return ~c >>> 0; }
+const mxCrcHex = b => mxCrc(b).toString(16).toUpperCase().padStart(8, '0');
+function mxKeep(key, bytes) { try { let s = ''; for (const x of bytes) s += String.fromCharCode(x); localStorage.setItem(key, btoa(s)); } catch (e) {} }
+function mxUseRom(bytes, saved) {   // 32,768 bytes without a cartridge header: the BIOS; 16,384 bytes with one: built-in firmware
+  const msg = $('mxMsg'), ab = bytes[0] === 0x41 && bytes[1] === 0x42, crc = mxCrcHex(bytes), known = MX_ROM_NAMES[crc];
+  if (bytes.length === 0x8000 && !ab) {
+    msx.bios.set(bytes); msx.hasBios = true; if (!saved) mxKeep(MX_ROM_KEYS.bios, bytes);
+    msg.className = 'msg ok'; msg.textContent = `BIOS ROM ${saved ? 'loaded from this browser' : 'loaded'} (CRC ${crc}${known ? ', ' + known : ', not one this page knows: a BIOS from another maker may expect a different slot layout'}).`;
+  } else if (bytes.length === 0x4000 && ab) {
+    msx.fw.set(bytes); msx.hasFw = true; if (!saved) mxKeep(MX_ROM_KEYS.fw, bytes);
+    msg.className = 'msg ok'; msg.textContent = `Firmware ROM ${saved ? 'loaded from this browser' : 'loaded'} into slot 0 at 8000h (CRC ${crc}${known ? ', ' + known : ''}). Untick "Built-in software" to start in BASIC instead.`;
+  } else { msg.className = 'msg err'; msg.textContent = `That file is ${bytes.length.toLocaleString('en-AU')} bytes${ab ? ' and has a cartridge header' : ''}: the BIOS is 32,768 bytes and the Sony firmware 16,384. For game and program ROMs use Insert cartridge.`; return false; }
+  disDirty = true; return true;
+}
+function mxCartShow() { const c = msx.carts[1]; $('mxCartInfo').textContent = c ? `Cartridge: ${mxCartName} (${c.len / 1024}K, ${MSX_MAPPERS[c.type]})` : 'No cartridge'; $('mxCartOut').hidden = !c; $('mxMapper').value = c ? c.type : 'auto'; }
+function mxSetMachine(m, quiet) {
+  msx.setMachine(m); $('mxMachine').value = m; disDirty = true;
+  try { localStorage.setItem(MX_MACHINE_KEY, m); } catch (e) {}
+  if (!quiet) { if (mxOn()) mxPowerOn(); else { resetCPU(); mxNoRom(); render(); } }
+}
+function mxNoRom() { setStatus('Load the MSX BIOS ROM (32 KB) to switch on the ' + MX_NAMES[msx.machine]); }
+function mxPowerOn() {
+  if (!mxOn()) { $('mxMsg').className = 'msg err'; $('mxMsg').textContent = 'Load the BIOS ROM first (32,768 bytes).'; return; }
+  if (running) stopRun();
+  msx.ram.fill(0); msx.vram.fill(0); resetCPU(); disDirty = true; $('speed').value = 'real'; runRate = 'real'; startRun(); mscr.focus();
+}
+$('mxMachine').onchange = () => mxSetMachine($('mxMachine').value);
+$('mxLoadRom').onclick = () => $('mxRomFile').click();
+$('mxRomFile').onchange = () => { const fs = [...$('mxRomFile').files]; $('mxRomFile').value = ''; if (!fs.length) return;
+  Promise.all(fs.map(f => f.arrayBuffer())).then(bufs => { let ok = false; for (const b of bufs) ok = mxUseRom(new Uint8Array(b), false) || ok; if (ok && mxOn()) mxPowerOn(); else if (ok) { $('mxMsg').textContent += ' Now load the BIOS ROM.'; render(); } }); };
+$('mxRestart').onclick = mxPowerOn;
+$('mxFw').onchange = () => { msx.fwOn = $('mxFw').checked; try { localStorage.setItem('msx.fwOn', msx.fwOn ? '1' : '0'); } catch (e) {} disDirty = true; if (mxOn()) mxPowerOn(); else render(); };
+$('mxCartIn').onclick = () => $('mxCartFile').click();
+$('mxCartFile').onchange = () => {
+  const f = $('mxCartFile').files[0]; $('mxCartFile').value = ''; if (!f) return;
+  f.arrayBuffer().then(buf => {
+    const bytes = new Uint8Array(buf), msg = $('mxMsg');
+    if (bytes.length < 0x2000 || bytes.length > 0x400000) { msg.className = 'msg err'; msg.textContent = `${f.name} is ${bytes.length.toLocaleString('en-AU')} bytes: cartridge ROMs are 8 KB to 4 MB.`; return; }
+    const c = new MSXCart(bytes); msx.carts[1] = c; mxCartName = f.name; mxCartShow();
+    const hdr = c.type !== 'plain' || (bytes[c.base === 0 ? 0x4000 : 0] === 0x41 && bytes[(c.base === 0 ? 0x4000 : 0) + 1] === 0x42);
+    msg.className = hdr ? 'msg ok' : 'msg'; msg.textContent = `${f.name} inserted in slot 1: ${c.len / 1024}K, ${c.type === 'plain' ? 'plain ROM at ' + h4(c.base) + 'h' : MSX_MAPPERS[c.type] + ' mapper (guessed from the code; change it beside the cartridge name if the program misbehaves)'}.${hdr ? '' : ' It has no "AB" cartridge header, so the BIOS will not start it by itself.'}${mxOn() ? ' The machine has been restarted.' : ''}`;
+    if (mxOn()) mxPowerOn(); else render();
+  });
 };
-function zxCrc(b) { let c = ~0; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xEDB88320 : c >>> 1; } return ~c >>> 0; }
-function zxSlot(m) { return m === 'zx80' ? 4 : 8; }
-function zxName() { return ZX_NAMES[zx.machine]; }
-function zxUseRom(bytes, saved) {   // a 4,096-byte image is ZX80 BASIC, an 8,192-byte one ZX81 BASIC
-  const msg = $('zxMsg');
-  const k = bytes.length === 0x1000 ? 4 : bytes.length === 0x2000 ? 8 : 0;
-  if (!k) { msg.className = 'msg err'; msg.textContent = `That file is ${bytes.length} bytes: the ZX80 ROM is 4,096 and the ZX81 ROM 8,192.`; return false; }
-  zxRoms[k] = bytes.slice();
-  if (!saved) try { let s = ''; for (const x of bytes) s += String.fromCharCode(x); localStorage.setItem(ZX_ROM_KEYS[k], btoa(s)); } catch (e) {}
-  if (zxSlot(zx.machine) !== k) zxSetMachine(k === 4 ? 'zx80' : 'zx81', true);   // a ZX81 ROM switches to the ZX81 (or keep the 8K ZX80)
-  else zxApplyRom();
-  const crc = zxCrc(bytes).toString(16).toUpperCase().padStart(8, '0'), ed = ZX_ROM_EDITIONS[crc];
-  msg.className = 'msg ok'; msg.textContent = `${k === 4 ? 'ZX80' : 'ZX81'} ROM ${saved ? 'loaded from this browser' : 'loaded'} (CRC ${crc}${ed ? ', ' + ed[0] : ''}).${ed && ed[1] ? ' ' + ed[1] : ''}`;
-  return true;
-}
+$('mxCartOut').onclick = () => { msx.carts[1] = null; mxCartName = ''; mxCartShow(); $('mxMsg').className = 'msg'; $('mxMsg').textContent = 'Cartridge removed.'; if (mxOn()) mxPowerOn(); else render(); };
+$('mxMapper').onchange = () => { const c = msx.carts[1], v = $('mxMapper').value; if (!c) { $('mxMapper').value = 'auto'; return; }
+  const n = new MSXCart(c.rom, v === 'auto' ? undefined : v); msx.carts[1] = n; mxCartShow(); $('mxMsg').className = 'msg'; $('mxMsg').textContent = `Cartridge mapper set to ${MSX_MAPPERS[n.type]}.`; if (mxOn()) mxPowerOn(); else render(); };
 // ---------- memory bitmap: every bit as a pixel, tinted by region ----------
 // Each byte is a row of 8 pixels (bit 7 on the left); each strip is one 256-byte page, top to bottom; a band holds
 // up to 32 pages (8K). The background of every byte is tinted by the region it belongs to (MM.regions, by address,
@@ -1727,9 +1793,9 @@ function mmRebuild(defs) {
     cv.addEventListener('mousemove', e => {
       const off = mmAddr(e, b); if (off < 0) return; const a = b.def.base + off, v = b.def.read(a), k = b.keyNames[b.keys[off]], reg = k && MM.legend[k] ? MM.legend[k][0] : '';
       let dis = ''; if (b.def.cpu) try { dis = disasm(x => peekMem(x & 0xFFFF), a).text; } catch (err) {}
-      $('mmRead').innerHTML = `<b>${h4(a)}h</b>${b.def.cpu ? '' : ' (offset)'}: <b>${h2(v)}h</b> ${v.toString(2).padStart(8, '0').replace(/0/g, '·').replace(/1/g, '█')}${reg ? ' · ' + esc(reg) : ''}${dis ? ' · ' + esc(dis) : ''}`;
+      $('mmRead').innerHTML = `<b>${h4(a)}h</b>${b.def.space === 'v' ? ' in video RAM' : b.def.cpu ? '' : ' (slot not switched in)'}: <b>${h2(v)}h</b> ${v.toString(2).padStart(8, '0').replace(/0/g, '·').replace(/1/g, '█')}${reg ? ' · ' + esc(reg) : ''}${dis ? ' · ' + esc(dis) : ''}`;
     });
-    cv.addEventListener('click', e => { const off = mmAddr(e, b); if (off < 0 || !b.def.cpu) return; const a = b.def.base + off; $('memFollow').checked = false; $('memFrom').value = h4(a); memScrollTo(a); renderMem(false); });
+    cv.addEventListener('click', e => { const off = mmAddr(e, b); if (off < 0 || b.def.space) return; const a = b.def.base + off; $('memFollow').checked = false; $('memFrom').value = h4(a); memScrollTo(a); renderMem(false); });
   }
 }
 window.addEventListener('resize', () => { if (!running) mmDraw(true); });
@@ -1751,14 +1817,14 @@ function mmDraw(force) {
   mmBands.forEach((b, bi) => {
     const def = b.def = defs[bi], W = b.cv.width, n = def.bytes; total += n;
     let s = 7; for (let i = 0; i < n; i++) s = (Math.imul(s, 31) + def.read(def.base + i)) | 0;
-    const sig = s + '|' + (def.key || regSig);
+    const sig = s + '|' + (def.key || regSig) + '|' + def.label;
     if (sig !== b.sig) {
       b.sig = sig; b.mark = null;
       // region key of every byte: 0 = none, then indices into keyNames
       const names = b.keyNames = ['']; b.keys.fill(0);
       const idx = k => { let i = names.indexOf(k); if (i < 0) { i = names.length; names.push(k); } return i; };
       if (def.key) b.keys.fill(idx(def.key));
-      else for (const [a0, a1, k] of regs) { const lo = Math.max(a0, def.base) - def.base, hi = Math.min(a1, def.base + n) - def.base; if (hi > lo) b.keys.fill(idx(k), lo, hi); }
+      else for (const [a0, a1, k, sp] of regs) { if ((sp || '') !== (def.space || '')) continue; const lo = Math.max(a0, def.base) - def.base, hi = Math.min(a1, def.base + n) - def.base; if (hi > lo) b.keys.fill(idx(k), lo, hi); }
       const img = b.img || (b.img = b.ctx.createImageData(W, b.cv.height)), d = img.data;
       for (let o = 0; o < d.length; o += 4) { d[o] = mmPaper[0]; d[o + 1] = mmPaper[1]; d[o + 2] = mmPaper[2]; d[o + 3] = 255; }
       for (let i = 0; i < n; i++) {
@@ -1779,64 +1845,49 @@ function mmDraw(force) {
   if (lsig !== mmLegendSig) { mmLegendSig = lsig; $('mmLegend').innerHTML = Object.keys(MM.legend).filter(k => used.has(k)).map(k => `<span><i style="background: rgb(${mmTints[k].join(',')})"></i>${esc(MM.legend[k][0])}</span>`).join(''); }
   const info = `${total.toLocaleString('en-AU')} bytes in ${mmBands.length} band${mmBands.length === 1 ? '' : 's'}`; if ($('mmInfo').textContent !== info) $('mmInfo').textContent = info;
 }
-// what the ZX80/ZX81 memory bitmap shows: the ROM, the hi-res board's RAM if fitted, and the RAM in bands of 8K.
-// The RAM regions come from BASIC's own system variables; until BASIC has set them up (or when machine code has
-// moved the stack) they are out of order, and the RAM is then shown as one plain region.
+// what the MSX memory bitmap shows: the BIOS and firmware ROMs, the cartridge, the RAM and the video RAM, in bands
+// of 8K. A band is "live" (PC and SP marks, disassembly on hover) only while its slot is switched into that page.
+// RAM regions come from BASIC's own system variables; video RAM regions from the VDP's table registers.
 const MM = {
   legend: {
-    font: ['character set (I register)', '#e6c229'], hires: ['hi-res board RAM', '#9c6b3f'], ram: ['RAM', '#8a8f98'],
-    sys: ['system variables', '#8e6bbf'], prog: ['BASIC program', '#3f7fd0'], disp: ['display file (video)', '#2e9e5b'], vars: ['variables', '#e07b39'],
-    edit: ['line being edited', '#c7559a'], calc: ['calculator stack', '#1fa3a3'], free: ['free', '#ffffff'], stack: ['machine stack', '#d0483f'], above: ['above RAMTOP', '#70757d']
+    font: ['character set', '#e6c229'], ram: ['RAM', '#8a8f98'], prog: ['BASIC program', '#3f7fd0'], vars: ['variables and arrays', '#e07b39'], stack: ['machine stack', '#d0483f'],
+    str: ['string space', '#c7559a'], fcb: ['file control blocks', '#1fa3a3'], above: ['above HIMEM', '#70757d'], sys: ['system work area and hooks', '#8e6bbf'], free: ['free', '#ffffff'],
+    vname: ['name table (the screen)', '#2e9e5b'], vpat: ['pattern table', '#e6c229'], vcol: ['colour table', '#3f7fd0'], vsat: ['sprite attributes', '#d0483f'], vspr: ['sprite patterns', '#c7559a']
   },
   bands() {
-    const romSize = zx.rom8k ? 0x2000 : 0x1000, out = [{ label: `ROM 0000h-${h4(romSize - 1)}h${zxRom ? '' : ' (not loaded)'}`, base: 0, bytes: romSize, read: a => zx.rom[a], cpu: true }];
-    if (zx.hires) out.push({ label: 'Hi-res board RAM 2000h-3FFFh', base: 0x2000, bytes: 0x2000, read: a => zx.lowRam[a - 0x2000], cpu: true });
-    for (let o = 0; o < zx.ramSize; o += 0x2000) { const n = Math.min(0x2000, zx.ramSize - o); out.push({ label: `RAM ${h4(0x4000 + o)}h-${h4(0x4000 + o + n - 1)}h`, base: 0x4000 + o, bytes: n, read: a => zx.ram[a - 0x4000], cpu: true }); }
+    const out = [], live = (slot, a) => msx.slotOf(a >> 14) === slot;
+    for (let a = 0; a < 0x8000; a += 0x2000) out.push({ label: `BIOS + BASIC ROM ${h4(a)}h-${h4(a + 0x1FFF)}h (slot 0)${msx.hasBios ? '' : ' (not loaded)'}`, base: a, bytes: 0x2000, read: x => msx.bios[x], cpu: live(0, a) });
+    if (msx.hasFw && msx.fwOn) for (let a = 0x8000; a < 0xC000; a += 0x2000) out.push({ label: `Firmware ROM ${h4(a)}h-${h4(a + 0x1FFF)}h (slot 0)`, base: a, bytes: 0x2000, read: x => msx.fw[x - 0x8000], cpu: live(0, a) });
+    const c = msx.carts[1];
+    if (c && c.type === 'plain') for (let o = 0; o < c.len; o += 0x2000) { const a = c.base + o, n = Math.min(0x2000, c.len - o); out.push({ label: `Cartridge ${h4(a)}h-${h4(a + n - 1)}h (slot 1)`, base: a, bytes: n, read: x => c.rom[x - c.base], cpu: live(1, a) }); }
+    else if (c) for (let i = 0; i < 4; i++) { const a = 0x4000 + i * 0x2000; out.push({ label: `Cartridge ${h4(a)}h-${h4(a + 0x1FFF)}h (slot 1, segment ${h2(c.bank[i])}h of ${c.len / 0x2000})`, base: a, bytes: 0x2000, read: x => c.read(x), cpu: live(1, a) }); }
+    for (let a = msx.ramBase; a < 0x10000; a += 0x2000) out.push({ label: `RAM ${h4(a)}h-${h4(a + 0x1FFF)}h (slot ${msx.ramSlot})`, base: a, bytes: 0x2000, read: x => msx.ram[x], cpu: live(msx.ramSlot, a) });
+    for (let a = 0; a < 0x4000; a += 0x2000) out.push({ label: `Video RAM ${h4(a)}h-${h4(a + 0x1FFF)}h (inside the video processor)`, base: a, bytes: 0x2000, read: x => msx.vram[x], cpu: false, space: 'v' });
     return out;
   },
   regions() {
-    const R = [], top = 0x4000 + zx.ramSize, w = a => zx.peekW(a), romSize = zx.rom8k ? 0x2000 : 0x1000, fp = (cpu.i & 0xFE) << 8;
-    if (zxRom && fp < romSize) R.push([fp, fp + 0x200, 'font']);
-    if (zx.hires) R.push([0x2000, 0x4000, 'hires']);
-    const seq = zx.rom8k
-      ? [[0x4000, 'sys'], [0x407D, 'prog'], [w(0x400C), 'disp'], [w(0x4010), 'vars'], [w(0x4014), 'edit'], [w(0x401A), 'calc'], [w(0x401C), 'free'], [cpu.sp, 'stack'], [w(0x4004), 'above']]
-      : [[0x4000, 'sys'], [0x4028, 'prog'], [w(0x4008), 'vars'], [w(0x400A), 'edit'], [w(0x400C), 'disp'], [(w(0x4010) + 1) & 0xFFFF, 'free'], [cpu.sp, 'stack']];
-    let ok = zxRom; for (let i = 1; i < seq.length; i++) if (seq[i][0] < seq[i - 1][0] || seq[i][0] > top) ok = false;
-    if (!ok) { R.push([0x4000, top, 'ram']); return R; }
-    seq.forEach(([a, k], i) => { const e = i + 1 < seq.length ? seq[i + 1][0] : top; if (e > a && k !== 'free') R.push([a, e, k]); });
+    const R = [], w = a => msx.ram[a] | msx.ram[(a + 1) & 0xFFFF] << 8;
+    if (msx.hasBios) { const f = msx.bios[4] | msx.bios[5] << 8; if (f && f < 0x7800) R.push([f, f + 0x800, 'font']); }
+    const txt = w(0xF676), stk = w(0xF674), sp = cpu.sp;
+    const seq = [[txt, 'prog'], [w(0xF6C2), 'vars'], [w(0xF6C6), 'free'], [sp >= w(0xF6C6) && sp <= stk ? sp : stk, 'stack'], [stk, 'str'], [w(0xF672), 'fcb'], [w(0xFC4A), 'above'], [0xF380, 'sys']];
+    let ok = msx.hasBios && txt >= msx.ramBase && txt >= 0x8000; for (let i = 1; i < seq.length; i++) if (seq[i][0] < seq[i - 1][0]) ok = false;
+    if (!ok) R.push([msx.ramBase, 0x10000, 'ram']);
+    else { if (txt > msx.ramBase) R.push([msx.ramBase, txt, 'ram']); seq.forEach(([a, k], i) => { const e = i + 1 < seq.length ? seq[i + 1][0] : 0x10000; if (e > a && k !== 'free') R.push([a, e, k]); }); }
+    const T = msx.tables();
+    if (T.mode !== 'text') { R.push([T.sprPattern, T.sprPattern + 0x800, 'vspr', 'v']); R.push([T.sprAttr, T.sprAttr + 128, 'vsat', 'v']); }
+    if (T.colourLen) R.push([T.colour, T.colour + T.colourLen, 'vcol', 'v']);
+    R.push([T.pattern, T.pattern + (T.mode === 'mc' ? 0x800 : T.patternLen), 'vpat', 'v']);
+    R.push([T.name, T.name + T.nameLen, 'vname', 'v']);
     return R;
   },
-  markers() { const cs = getComputedStyle(document.documentElement); return [[cpu.sp, cs.getPropertyValue('--sel').trim() || '#2a6fb0'], [cpu.pc >= 0xC000 || zx.ramSize <= 0x4000 ? cpu.pc & 0x7FFF : cpu.pc, '#e0322d']]; }   // the display file runs in the echo above 8000h
+  markers() { const cs = getComputedStyle(document.documentElement); return [[cpu.sp, cs.getPropertyValue('--sel').trim() || '#2a6fb0'], [cpu.pc, '#e0322d']]; }
 };
-function zxApplyRom() { const r = zxRoms[zxSlot(zx.machine)]; zx.rom.fill(0); if (r) zx.rom.set(r); zxRom = !!r; disDirty = true; }
-function zxSetMachine(m, quiet) {
-  zx.setMachine(m); $('zxMachine').value = m; zxApplyRom(); zxRenderKb(); zxHintText();
-  $('zxLogicKind').textContent = zx.ula ? 'ZX81 ULA' : 'ZX80 TTL';
-  try { localStorage.setItem(ZX_MACHINE_KEY, m); } catch (e) {}
-  if (!quiet) { if (zxRom) zxPowerOn(); else { if (running) stopRun(); resetCPU(); setStatus(`Load the ${zx.rom8k ? 'ZX81 (8K)' : 'ZX80 (4K)'} ROM to switch on the ${zxName()}`); render(); } }
-}
-function zxHintText() {
-  const tape = zx.rom8k
-    ? 'Tape: insert a .p program file, then type LOAD "" (J, SHIFT+P twice, NEW LINE); SAVE "NAME" (S, SHIFT+P, the name, SHIFT+P, NEW LINE) downloads the program as NAME.p. Both are instant. FUNCTION is SHIFT+NEW LINE: the next key gives the green word.'
-    : 'Tape: insert a .o program file, then type LOAD (W, then NEW LINE); SAVE (E, then NEW LINE) downloads the program as a .o file. Both are instant.';
-  const pic = zx.ula ? 'In SLOW mode the ULA\'s NMIs keep the picture on while BASIC runs; FAST blanks it while busy.' : 'The picture is built from the machine\'s own sync pulses, so it blanks while BASIC is busy, as on the real machine' + (zx.rom8k ? ' (the 8K ROM finds no NMI hardware on a ZX80, so it stays in FAST mode).' : '.');
-  $('zxHint').textContent = `Click the picture and type, or use the keyboard above: keywords (white, top) come from the key pressed at the K cursor, red symbols need SHIFT, which latches for one key. Enter is NEWLINE and Backspace is RUBOUT (SHIFT+0). ${tape} RAM listing gives the system variables, the BASIC program as text and a hex dump. ${pic} Bigger RAM packs and the hi-res board (8K RAM at 2000h that answers refresh cycles, as the SCRAM and WRX boards did) are for programs that need them. The ROMs are not included: load your own 4 KB ZX80 or 8 KB ZX81 image; your browser keeps them.`;
-}
-function zxPowerOn() {
-  if (!zxRom) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = `Load the ${zx.rom8k ? 'ZX81 (8K)' : 'ZX80 (4K)'} ROM first.`; return; }
-  if (running) stopRun();
-  zx.ram.fill(0); resetCPU(); disDirty = true; $('speed').value = 'real'; runRate = 'real'; startRun(); zscr.focus();
-}
-$('zxMachine').onchange = () => zxSetMachine($('zxMachine').value);
-$('zxLoadRom').onclick = () => $('zxRomFile').click();
-$('zxRomFile').onchange = () => { const f = $('zxRomFile').files[0]; $('zxRomFile').value = ''; if (f) f.arrayBuffer().then(buf => { if (zxUseRom(new Uint8Array(buf), false)) zxPowerOn(); }); };
-$('zxRestart').onclick = zxPowerOn;
-// ---------- tape and RAM dump ----------
+// ---------- file downloads ----------
 // Files leave through the claude.ai viewer's save prompt when this page runs there (it accepts .txt and .zip, so
 // binary files go inside a .zip); anywhere else, through an ordinary browser download.
-const zxSaver = window.claude && typeof window.claude.use === 'function' ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
-function zxZip(name, bytes) {   // one stored (uncompressed) file
-  const n = new TextEncoder().encode(name), crc = zxCrc(bytes), len = bytes.length;
+const mxSaver = window.claude && typeof window.claude.use === 'function' ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+function mxZip(name, bytes) {   // one stored (uncompressed) file
+  const n = new TextEncoder().encode(name), crc = mxCrc(bytes), len = bytes.length;
   const le = (v, w) => Array.from({ length: w }, (_, i) => (v >>> (8 * i)) & 0xFF);
   const common = [...le(20, 2), 0, 0, 0, 0, 0, 0, 0x21, 0, ...le(crc, 4), ...le(len, 4), ...le(len, 4), ...le(n.length, 2), 0, 0];
   const local = [0x50, 0x4B, 3, 4, ...common], central = [0x50, 0x4B, 1, 2, 20, 0, ...common, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -1844,11 +1895,11 @@ function zxZip(name, bytes) {   // one stored (uncompressed) file
   const end = [0x50, 0x4B, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, ...le(cdLen, 4), ...le(cdOff, 4), 0, 0];
   return new Blob([new Uint8Array(local), n, bytes, new Uint8Array(central), n, new Uint8Array(end)]);
 }
-async function zxDownload(name, data, type) {   // resolves to the name given to the viewer, or null if they declined
-  const saver = await zxSaver;
+async function mxDownload(name, data, type) {   // resolves to the name given to the viewer, or null if they declined
+  const saver = await mxSaver;
   if (saver) {
     let fname = name, body = data;
-    if (!/\.txt$/i.test(name)) { fname = name + '.zip'; body = zxZip(name, data); }
+    if (!/\.txt$/i.test(name)) { fname = name + '.zip'; body = mxZip(name, data); }
     try { await saver.save({ filename: fname, data: body }); return fname; }
     catch (e) { if (e && e.code === 'declined') return null; throw e; }
   }
@@ -1856,73 +1907,14 @@ async function zxDownload(name, data, type) {   // resolves to the name given to
   a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
   return name;
 }
-function zxSaved(p, ok) {
-  p.then(n => { const m = $('zxMsg'); if (n) { m.className = 'msg ok'; m.textContent = ok(n); } else { m.className = 'msg'; m.textContent = 'Not saved: the download was declined.'; } })
-   .catch(e => { const m = $('zxMsg'); m.className = 'msg err'; m.textContent = 'Could not save the file' + (e && e.message ? ': ' + e.message : '.'); });
+function mxSaved(p, ok) {
+  p.then(n => { const m = $('mxMsg'); if (n) { m.className = 'msg ok'; m.textContent = ok(n); } else { m.className = 'msg'; m.textContent = 'Not saved: the download was declined.'; } })
+   .catch(e => { const m = $('mxMsg'); m.className = 'msg err'; m.textContent = 'Could not save the file' + (e && e.message ? ': ' + e.message : '.'); });
 }
-function zxStamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
-let zxTapeName = '';
-function zxTapeShow() { $('zxTapeInfo').textContent = zx.tape ? `Tape in: ${zxTapeName} (${zx.tape.length} bytes)` : 'No tape'; }
-zx.onTape = (kind, arg, name) => {
-  const msg = $('zxMsg');
-  if (kind === 'save') {
-    const n = arg.length, base = (name || '').replace(/[^A-Za-z0-9 _.$£-]/g, '').trim().replace(/ +/g, '-');
-    const fname = zx.rom8k ? `${base || 'zx81-program-' + zxStamp()}.p` : `zx80-program-${zxStamp()}.o`;
-    zxSaved(zxDownload(fname, arg, 'application/octet-stream'), f => `SAVE: ${n} bytes written to ${f} (look in your downloads).`);
-  }
-  else if (kind === 'load') { msg.className = 'msg ok'; msg.textContent = `LOAD: ${arg} bytes loaded from ${zxTapeName}. ${zx.rom8k ? 'Type LIST (K) or RUN (R), unless it started by itself.' : 'Type LIST (A) or RUN (R).'}`; zxTapeName = ''; disDirty = true; }
-  else if (kind === 'idle') { if (/listening/.test(msg.textContent)) msg.textContent = ''; }
-  else if (kind === 'wait') { msg.className = 'msg'; msg.textContent = `LOAD is listening for a tape: insert a ${zx.rom8k ? '.p' : '.o'} file (or press SPACE for BREAK).`; }
-  else { msg.className = 'msg err'; msg.textContent = arg; if (!zx.tape) zxTapeName = ''; }
-  zxTapeShow();
-};
-$('zxTapeIn').onclick = () => $('zxTapeFile').click();
-$('zxTapeFile').onchange = () => {
-  const f = $('zxTapeFile').files[0]; $('zxTapeFile').value = ''; if (!f) return;
-  const msg = $('zxMsg');
-  if (/\.(p81|tzx|tap|wav)$/i.test(f.name)) { msg.className = 'msg err'; msg.textContent = `${f.name}: only .o (ZX80) and .p (ZX81) program files can be loaded.`; return; }
-  f.arrayBuffer().then(buf => {
-    const bytes = new Uint8Array(buf); let note = '';
-    // phones may drop or change the extension, so a file without .o or .p is recognised by its contents:
-    // a .o file ends exactly where its E_LINE (offset 0Ah) says, a .p file where its E_LINE (offset 0Bh) says
-    let isP = /\.(p|81)$/i.test(f.name);
-    if (!/\.(o|80|p|81)$/i.test(f.name)) {
-      const fitsP = bytes.length > 0x74 && ZX80.tapeNeeds81(bytes) - 9 === bytes.length, fitsO = bytes.length > 0x28 && ZX80.tapeNeeds(bytes) === bytes.length;
-      if (!fitsP && !fitsO) { msg.className = 'msg err'; msg.textContent = `${f.name} doesn't look like a ZX80 (.o) or ZX81 (.p) program file.`; return; }
-      isP = fitsP;
-    }
-    if (isP !== zx.rom8k) {   // the file is for the other BASIC: switch machine if that ROM is here
-      const want = isP ? 'zx81' : 'zx80';
-      if (!zxRoms[zxSlot(want)]) { msg.className = 'msg err'; msg.textContent = `${f.name} is a ${isP ? 'ZX81 .p' : 'ZX80 .o'} file: load the ${isP ? 'ZX81 (8K)' : 'ZX80 (4K)'} ROM first.`; return; }
-      zxSetMachine(want, true); zxPowerOn(); note = ` It's a ${isP ? 'ZX81' : 'ZX80'} program, so the machine is now the ${zxName()}.`;
-    }
-    const need = isP ? ZX80.tapeNeeds81(bytes) : ZX80.tapeNeeds(bytes);
-    if (need > zx.ramSize && need <= 0x4000 && zxRom) {   // plug in the RAM pack first: a LOAD would replace the RAM anyway
-      zx.ramSize = 0x4000; $('zxRam').value = '16384'; disDirty = true; zxPowerOn();
-      note += ` It needs ${Math.ceil(need / 1024)}K, so the 16K RAM pack has been plugged in and the ${zxName()} restarted.`;
-    }
-    zx.insertTape(bytes); zxTapeName = f.name; zxTapeShow();
-    const how = zx.rom8k ? 'LOAD "" (J, SHIFT+P twice, NEW LINE)' : 'LOAD (W, then NEW LINE)';
-    msg.className = 'msg ok'; msg.textContent = (zx.tapeWaiting && !note ? `${f.name} inserted: loading…` : `${f.name} inserted. Type ${how}.`) + note;
-    zscr.focus();
-  });
-};
-$('zxDumpBin').onclick = () => { const sz = zx.ramSize; zxSaved(zxDownload(`${zx.rom8k ? 'zx81' : 'zx80'}-ram-${sz / 1024}k-${zxStamp()}.bin`, zx.ram.slice(0, sz), 'application/octet-stream'), f => `RAM dumped to ${f}: ${sz} bytes, 4000h-${(0x3FFF + sz).toString(16).toUpperCase()}h (byte 0 of the file is address 4000h).`); };
-$('zxDumpTxt').onclick = () => zxSaved(zxDownload(`${zx.rom8k ? 'zx81' : 'zx80'}-ram-${zxStamp()}.txt`, zx.ramReport(), 'text/plain;charset=utf-8'), f => `RAM listing saved to ${f}: system variables, memory areas, the BASIC program and a hex dump.`);
-$('zxRam').onchange = () => {
-  zx.ramSize = +$('zxRam').value; disDirty = true; if (zxRom) zxPowerOn(); else render();
-  if (zx.ramSize > 0x4000) {   // the ROMs only look for RAM up to 7FFFh, as on the real machines
-    const hi = zx.ramSize === 0x8000 ? 192 : 255;
-    $('zxMsg').className = 'msg'; $('zxMsg').textContent = zx.rom8k
-      ? `${zx.ramSize / 1024}K fitted. BASIC only finds 16K by itself: type POKE 16389,${hi} then NEW (as on a real ZX81) before loading a program that needs more.`
-      : `${zx.ramSize / 1024}K fitted, but the ZX80's 4K BASIC only uses the first 16K; the rest is there for machine code.`;
-  }
-};
-$('zxHires').onchange = () => {
-  zx.hires = $('zxHires').checked; disDirty = true; try { localStorage.setItem('zx.hires', zx.hires ? '1' : '0'); } catch (e) {}
-  $('zxMsg').className = 'msg'; $('zxMsg').textContent = zx.hires ? 'Hi-res board fitted: 8K of RAM at 2000h-3FFFh (it keeps its contents through a restart, like the battery-backed original), and RAM now answers refresh cycles, so hi-res programs can draw from it.' : 'Hi-res board removed: 2000h-3FFFh is the ROM\'s echo again.';
-  render();
-};
+function mxStamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
+$('mxDumpBin').onclick = () => mxSaved(mxDownload(`msx-ram-${msx.ramSize / 1024}k-${mxStamp()}.bin`, msx.ram.slice(msx.ramBase), 'application/octet-stream'), f => `RAM dumped to ${f}: ${msx.ramSize} bytes, ${h4(msx.ramBase)}h-FFFFh (byte 0 of the file is address ${h4(msx.ramBase)}h).`);
+$('mxDumpVram').onclick = () => mxSaved(mxDownload(`msx-vram-${mxStamp()}.bin`, msx.vram.slice(), 'application/octet-stream'), f => `Video RAM dumped to ${f}: 16,384 bytes.`);
+$('mxDumpTxt').onclick = () => mxSaved(mxDownload(`msx-listing-${mxStamp()}.txt`, msx.ramReport(), 'text/plain;charset=utf-8'), f => `Listing saved to ${f}: registers, slots, system variables, the video processor, the BASIC program, the screen as text and hex dumps of RAM and video RAM.`);
 
 // ---------- collapsible side panels ----------
 for (const sec of document.querySelectorAll('.side .panel')) {
@@ -1937,18 +1929,20 @@ for (const sec of document.querySelectorAll('.side .panel')) {
 // ---------- init ----------
 buildChip(); buildRegs(); bind();
 let savedHex = null, savedAsm = null, savedMode = null;
-try { savedHex = localStorage.getItem('z80bench.hex'); savedAsm = localStorage.getItem('z80bench.asm'); savedMode = localStorage.getItem('z80bench.mode'); const la = localStorage.getItem('z80bench.loadAddr'); if (la && /^[0-9A-F]{4}$/.test(la)) $('loadAddr').value = la; } catch (e) {}
+try { savedHex = localStorage.getItem('msxbench.hex'); savedAsm = localStorage.getItem('msxbench.asm'); savedMode = localStorage.getItem('msxbench.mode'); const la = localStorage.getItem('msxbench.loadAddr'); if (la && /^[0-9A-F]{4}$/.test(la)) $('loadAddr').value = la; } catch (e) {}
 $('hexIn').value = savedHex || SAMPLE;
 $('asmIn').value = savedAsm || SAMPLE_ASM;
 portIn.set(0x02, 0x5A);
 setMode(savedMode === 'hex' ? 'hex' : 'asm');
-{ for (const k of [4, 8]) { let s = null; try { s = localStorage.getItem(ZX_ROM_KEYS[k]); } catch (e) {}
-    if (s) { s = atob(s); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); if (b.length === k * 1024) zxRoms[k] = b; } }
-  let m = null; try { m = localStorage.getItem(ZX_MACHINE_KEY); zx.hires = localStorage.getItem('zx.hires') === '1'; $('zxHires').checked = zx.hires; } catch (e) {}
-  if (!ZX_NAMES[m]) m = zxRoms[4] || !zxRoms[8] ? 'zx80' : 'zx81';
-  zxSetMachine(m, true);
-  if (zxRom) { $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = `${zxName()} ROM loaded from this browser.`; zxPowerOn(); }
-  else { setStatus(`Load the ${zx.rom8k ? 'ZX81 (8K)' : 'ZX80 (4K)'} ROM to switch on the ${zxName()}`); render(); } }
+{ const get = k => { let s = null; try { s = localStorage.getItem(k); } catch (e) {} if (!s) return null; s = atob(s); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; };
+  let m = null; try { m = localStorage.getItem(MX_MACHINE_KEY); msx.fwOn = localStorage.getItem('msx.fwOn') !== '0'; } catch (e) {}
+  $('mxFw').checked = msx.fwOn;
+  mxSetMachine(MX_NAMES[m] ? m : 'hb55p', true);
+  const fw = get(MX_ROM_KEYS.fw), bios = get(MX_ROM_KEYS.bios);
+  if (fw) mxUseRom(fw, true); if (bios) mxUseRom(bios, true);
+  mxCartShow();
+  if (mxOn()) { $('mxMsg').textContent = `${MX_NAMES[msx.machine]}: BIOS${msx.hasFw ? ' and firmware' : ''} ROM loaded from this browser.`; mxPowerOn(); }
+  else { resetCPU(); mxNoRom(); render(); } }
 })();
 </script>
 </html>

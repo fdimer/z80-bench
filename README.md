@@ -1,3 +1,20 @@
+# Z80 Bench: MSX branch (Sony HB-55P / HB-75P)
+
+This branch turns Z80 Bench into an MSX1 computer: the Z80 with its pinout, bus timing, disassembly and debug points, wired to the three MSX support chips.
+
+- **Machines**: Sony HB-55P (16K RAM at C000h in slot 0) and HB-75P (64K RAM in slot 2). Slots are switched by PPI port A, as on the real machine.
+- **Video**: TMS9929A with its own 16K of video RAM, all four screen modes, sprites (four per line, fifth-sprite and collision flags), 50 frame interrupts a second. The picture is drawn line by line as the CPU runs.
+- **Keyboard**: the international MSX matrix, from the PC keyboard by key position or the on-screen keyboard.
+- **Cartridges** in slot 1: plain ROMs and the Konami, Konami SCC, ASCII 8K and ASCII 16K mega-ROM mappers.
+- **Debugging**: memory bitmap of the ROMs, RAM and video RAM tinted by use (BASIC's areas, the VDP's tables), an MSX hardware panel (slots, VDP registers, PPI, sound chip registers), RAM and video RAM dumps, and a text listing with the system variables and the BASIC program.
+- **Not yet**: sound output and cassette.
+
+**ROMs are not included.** Load your own 32 KB BIOS (`hb-55p_basicbios1.rom`) and, optionally, the 16 KB Personal Data Bank firmware (`hb-55p_firmware.rom`) with the Load ROM button; the browser keeps them. Open `z80-bench.html` from this folder. The model is `src/msx.js`; `node tests/msx-test.js` checks it with a small synthetic program.
+
+The rest of this file describes the Z80 Bench base.
+
+---
+
 # Z80 Bench
 
 A Z80 CPU emulator for debugging programs and designing hardware around the chip. It runs in a web browser and shows the state of all 40 pins on every T-state.
