@@ -348,6 +348,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <button id="mxRestart" type="button">Power on / restart</button>
           <label class="inline" for="mxMachine">Machine <select id="mxMachine"><option value="hb55p">Sony HB-55P (16K RAM)</option><option value="hb75p">Sony HB-75P (64K RAM)</option></select></label>
           <label class="inline" for="mxFw" title="The Sony Personal Data Bank ROM at 8000h in slot 0. When it is fitted the machine starts in it instead of BASIC."><input type="checkbox" id="mxFw" checked> Built-in software</label>
+          <label class="inline" for="mxSound" title="The AY-3-8910 sound generator and the key click, played while the machine runs in real time."><input type="checkbox" id="mxSound" checked> Sound</label>
           <span class="osbkeys mono" id="mxKeysDown"></span>
         </div>
         <div class="row">
@@ -369,7 +370,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         </div>
         <div class="msg" id="mxMsg"></div>
         <div class="mxkb" id="mxKb" aria-label="Keyboard"></div>
-        <p class="hint" id="mxHint">Click the picture and type: the PC keyboard is mapped by key position to the MSX international layout. F1–F5 are the function keys, F8 (or End) is STOP, F7 is SELECT, left Alt is GRAPH and right Alt is CODE; CTRL+STOP breaks into a running BASIC program. On the keyboard above, SHIFT, CTRL, GRAPH and CODE stay down for the next key. Load ROM takes the 32 KB BIOS (hb-55p_basicbios1.rom) and, if you want Sony's built-in Personal Data Bank, the 16 KB firmware (hb-55p_firmware.rom); you can pick both files at once. Untick Built-in software to start in MSX BASIC. Cartridge ROMs go in slot 1; plain ROMs and the four common mega-ROM mappers are supported. Listing gives the system variables, the BASIC program as text, the screen and hex dumps. Cassette: insert a .cas tape file and type the command shown (CLOAD for BASIC programs, BLOAD"CAS:",R for machine code, RUN"CAS:" for ASCII files); loading is instant and the tape moves on to the next file each time. CSAVE, BSAVE and SAVE"CAS:" record to a new tape that Save recording downloads as a .cas file. Many tape programs need more than 16K: choose the HB-75P for those. Sound is not connected yet: the sound chip's registers are shown in the MSX hardware panel. The ROMs are not included; your browser keeps the BIOS and firmware once loaded.</p>
+        <p class="hint" id="mxHint">Click the picture and type: the PC keyboard is mapped by key position to the MSX international layout. F1–F5 are the function keys, F8 (or End) is STOP, F7 is SELECT, left Alt is GRAPH and right Alt is CODE; CTRL+STOP breaks into a running BASIC program. On the keyboard above, SHIFT, CTRL, GRAPH and CODE stay down for the next key. Load ROM takes the 32 KB BIOS (hb-55p_basicbios1.rom) and, if you want Sony's built-in Personal Data Bank, the 16 KB firmware (hb-55p_firmware.rom); you can pick both files at once. Untick Built-in software to start in MSX BASIC. Cartridge ROMs go in slot 1; plain ROMs and the four common mega-ROM mappers are supported. Listing gives the system variables, the BASIC program as text, the screen and hex dumps. Cassette: insert a .cas tape file and type the command shown (CLOAD for BASIC programs, BLOAD"CAS:",R for machine code, RUN"CAS:" for ASCII files); loading is instant and the tape moves on to the next file each time. CSAVE, BSAVE and SAVE"CAS:" record to a new tape that Save recording downloads as a .cas file. Many tape programs need more than 16K: choose the HB-75P for those. Sound plays while the machine runs in real time (it starts with your first click or key press, as browsers require); the sound chip's registers are also shown in the MSX hardware panel. The ROMs are not included; your browser keeps the BIOS and firmware once loaded.</p>
       </section>
   </div>
 
@@ -1956,6 +1957,32 @@ $('mxTapeSave').onclick = () => {
   const data = new Uint8Array(msx.rec), n = data.length;
   mxSaved(mxDownload(`msx-tape-${mxStamp()}.cas`, data, 'application/octet-stream').then(f => { if (f) { msx.rec = []; mxTapeShow(); } return f; }), f => `Recording saved to ${f}: ${n.toLocaleString('en-AU')} bytes. The recording has been cleared for the next one.`);
 };
+
+// ---------- sound ----------
+// The machine model fills a ring buffer with samples as emulated time passes; a script processor plays them.
+// Sound is only played in real time, and browsers only allow it to start from a click or a key press.
+let mxAudio = null, mxAr = 0, mxLast = 0, mxHp = 0;
+function mxSoundOn() { return $('mxSound').checked; }
+function mxAudioStart() {
+  if (!mxSoundOn()) return;
+  if (mxAudio) { if (mxAudio.state === 'suspended') mxAudio.resume().catch(() => {}); return; }
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    mxAudio = new AC(); const node = mxAudio.createScriptProcessor(1024, 0, 1);
+    node.onaudioprocess = e => {
+      const out = e.outputBuffer.getChannelData(0), live = running && runRate === 'real' && mxSoundOn(), rate = msx.audioRate;
+      if (msx.aw - mxAr > rate * 0.2 || msx.aw < mxAr) mxAr = Math.max(0, msx.aw - Math.round(rate * 0.06));      // fell behind: skip ahead
+      for (let i = 0; i < out.length; i++) {
+        if (live && mxAr < msx.aw) mxLast = msx.abuf[mxAr++ & 32767]; else if (!live) { mxLast = 0; mxAr = msx.aw; }
+        mxHp += (mxLast - mxHp) * 0.002; out[i] = Math.max(-1, Math.min(1, (mxLast - mxHp) * 2));                                          // remove the DC level
+      }
+    };
+    node.connect(mxAudio.destination); msx.audioRate = mxAudio.sampleRate; mxAr = msx.aw;
+  } catch (e) { mxAudio = null; }
+}
+for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, mxAudioStart, { passive: true });
+$('mxSound').onchange = () => { try { localStorage.setItem('msx.sound', mxSoundOn() ? '1' : '0'); } catch (e) {} if (mxSoundOn()) mxAudioStart(); else if (mxAudio) mxAudio.suspend().catch(() => {}); };
+try { if (localStorage.getItem('msx.sound') === '0') $('mxSound').checked = false; } catch (e) {}
 
 // ---------- collapsible side panels ----------
 for (const sec of document.querySelectorAll('.side .panel')) {

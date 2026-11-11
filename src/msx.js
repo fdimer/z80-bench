@@ -14,6 +14,9 @@
 // Cassette: .cas tape images are handled by trapping the BIOS tape routines (TAPION 00E1h, TAPIN 00E4h, TAPIOF
 // 00E7h, TAPOON 00EAh, TAPOUT 00EDh, TAPOOF 00F0h) instead of modelling the audio signal, so loading and saving
 // are instant. A .cas file is the bytes of each tape block, every block preceded by an 8-byte marker.
+// Sound: the AY-3-8910's three square-wave tone channels, noise generator and envelope are computed sample by
+// sample as emulated time passes (when audioRate is set) into a ring buffer the page plays; the 1-bit key click
+// on PPI port C bit 7 is mixed in.
 // The Z80 on an MSX gets one wait state in every opcode fetch, so M1 cycles take 5 T-states.
 
 const MSX = {
@@ -41,6 +44,8 @@ const MSX_KEYS = [
 ];
 const MSX_KEYPOS = {}; MSX_KEYS.forEach((row, r) => row.forEach((k, c) => { MSX_KEYPOS[k] = [r, c]; }));
 const MSX_CAS_HDR = [0x1F, 0xA6, 0xDE, 0xBA, 0xCC, 0x13, 0x7D, 0x74];
+const MSX_PSG_VOL = [0, 0.0078, 0.011, 0.0156, 0.0221, 0.0313, 0.0442, 0.0625, 0.0884, 0.125, 0.1768, 0.25, 0.3536, 0.5, 0.7071, 1];
+const MSX_PSG_TICK_HZ = MSX.CPU_HZ / 16;      // a tone output flips every (period) of these ticks; noise and envelope step every 2 x period
 const MSX_CYC_T = { M1: 5, MR: 3, MW: 3, IR: 4, IW: 4, IA: 7 };
 
 // MSX BASIC keywords: tokens 81h-FCh, and the functions that follow an FFh prefix (81h-B0h)
@@ -134,6 +139,7 @@ class MSXMachine {
     this.bus = { read: a => this.read(a), write: (a, v) => this.write(a, v), input: p => this.input(p), output: (p, v) => this.output(p, v) };
     this.cpu = new Z80(this.bus);
     this.cpu.intVector = 0xFF;
+    this.audioRate = 0; this.abuf = new Float32Array(32768); this.aw = 0; this.audioT = 0;
     this.tape = null; this.tapePos = 0; this.rec = []; this.onTape = () => {};
     this.reset();
   }
@@ -145,6 +151,7 @@ class MSXMachine {
     this.ppiA = 0; this.ppiC = 0; this.ppiCtl = 0x82;
     this.vreg.fill(0); this.vstat = 0; this.vaddr = 0; this.vbuf = 0; this.vlatch = -1;
     this.psg.fill(0); this.psgAddr = 0; this.psg[7] = 0xFF;
+    this.toneCnt = [0, 0, 0]; this.toneOut = [0, 0, 0]; this.noiseCnt = 0; this.lfsr = 1; this.envCnt = 0; this.envPos = 0;
     for (const c of this.carts) if (c) c.reset();
     this.fb.fill(1); this.front.fill(1);
     this.vdpWrites = 0; this.ints = 0;
@@ -195,7 +202,7 @@ class MSXMachine {
         else { this.vaddr = ((v & 0x3F) << 8) | this.vlatch; if (!(v & 0x40)) { this.vbuf = this.vram[this.vaddr]; this.vaddr = (this.vaddr + 1) & 0x3FFF; } }
         this.vlatch = -1; break;
       case 0xA0: this.psgAddr = v & 15; break;
-      case 0xA1: this.psg[this.psgAddr] = v; break;
+      case 0xA1: this.psg[this.psgAddr] = v; if (this.psgAddr === 13) { this.envPos = 0; this.envCnt = 0; } break;      // writing the shape restarts the envelope
       case 0xA8: this.ppiA = v; break;
       case 0xAA: this.ppiC = v; break;
       case 0xAB:
@@ -282,6 +289,29 @@ class MSXMachine {
     this.frames++;
   }
   // ---- per instruction ----
+  // ---- sound ----
+  envLevel() {      // 0-15 from the envelope shape (register 13: continue, attack, alternate, hold) and position
+    const sh = this.psg[13], cyc = this.envPos >> 4, i = this.envPos & 15, up0 = !!(sh & 4), alt = !!(sh & 2);
+    if (cyc >= 1) { if (!(sh & 8)) return 0; if (sh & 1) return up0 !== alt ? 15 : 0; }
+    const up = alt && (cyc & 1) ? !up0 : up0;
+    return up ? i : 15 - i;
+  }
+  audioSample() {
+    const g = this.psg, ticks = MSX_PSG_TICK_HZ / this.audioRate, mix = g[7];
+    const np = ((g[6] & 31) || 1) * 2; this.noiseCnt += ticks;
+    while (this.noiseCnt >= np) { this.noiseCnt -= np; const b = (this.lfsr ^ (this.lfsr >> 3)) & 1; this.lfsr = (this.lfsr >> 1) | (b << 16); }
+    const ep = ((g[11] | g[12] << 8) || 1) * 2; this.envCnt += ticks;
+    while (this.envCnt >= ep) { this.envCnt -= ep; if (++this.envPos >= 64) this.envPos -= 32; }
+    const noise = this.lfsr & 1; let out = 0;
+    for (let ch = 0; ch < 3; ch++) {
+      const p = (g[ch * 2] | (g[ch * 2 + 1] & 15) << 8) || 1;
+      this.toneCnt[ch] += ticks;
+      if (this.toneCnt[ch] >= p) { const n = Math.floor(this.toneCnt[ch] / p); this.toneCnt[ch] -= n * p; if (n & 1) this.toneOut[ch] ^= 1; }
+      const on = (this.toneOut[ch] | ((mix >> ch) & 1)) & (noise | ((mix >> (ch + 3)) & 1));
+      if (on) { const v = g[8 + ch]; out += MSX_PSG_VOL[v & 16 ? this.envLevel() : v & 15]; }
+    }
+    return out / 3 + (this.ppiC & 0x80 ? 0.25 : 0);
+  }
   // ---- cassette ----
   insertTape(bytes) { this.tape = bytes; this.tapePos = 0; }
   casHeaderAt(p) { const t = this.tape; for (let i = 0; i < 8; i++) if (t[p + i] !== MSX_CAS_HDR[i]) return false; return true; }
@@ -322,6 +352,7 @@ class MSXMachine {
   afterStep(cyc) {
     let t = 0; for (const c of cyc) t += MSX_CYC_T[c.k] || c.n || 0;
     this.t += t;
+    if (this.audioRate) { this.audioT += t * this.audioRate; while (this.audioT >= MSX.CPU_HZ) { this.audioT -= MSX.CPU_HZ; this.abuf[this.aw++ & 32767] = this.audioSample(); } }
     if (this.cpu.lastEvent === 'INT') this.ints++;
     while (this.t >= this.nextLine) {
       this.nextLine += MSX.LINE_T;
