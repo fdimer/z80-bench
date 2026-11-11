@@ -3,7 +3,7 @@
 // Interrupts follow the Z80 daisy-chain scheme: six sources in fixed priority, mode 2 vectors
 // ("status affects vector"), interrupt acknowledge, and RETI decoded by watching M1 fetches.
 class SIOChannel {
-  constructor(id, sio) { this.id = id; this.sio = sio; this.cts = 0; this.dcd = 0; this.lineQ = []; this.reset(); }
+  constructor(id, sio) { this.id = id; this.sio = sio; this.cts = 0; this.dcd = 0; this.lineQ = []; this.fc = {}; this.ext = { cts: 0, dcd: 0 }; this.reset(); }
   reset() {
     this.wr = [0, 0, 0, 0, 0, 0, 0, 0]; this.ptr = 0;
     this.fifo = []; this.lastRx = 0; this.errs = 0;
@@ -35,8 +35,10 @@ class SIOChannel {
   rtsPin() { return this.wr[5] & 0x02 ? 0 : 1; }
   dtrPin() { return this.wr[5] & 0x80 ? 0 : 1; }
   // modem inputs from the outside world (pin levels: 0 = active)
-  setInput(name, level) {
-    const old = this[name]; this[name] = level ? 1 : 0;
+  setInput(name, level, byForce) {
+    level = level ? 1 : 0;
+    if (!byForce) { this.ext[name] = level; if (name in this.fc) return; }   // a forced input ignores whatever drives it
+    const old = this[name]; this[name] = level;
     if (old !== this[name] && (this.wr[1] & 1) && !this.extIP) { this.extIP = true; this.extLatch = { cts: this.cts, dcd: this.dcd }; }
   }
   clock(n) {
@@ -71,6 +73,8 @@ class SIOChannel {
       }
     }
   }
+  // debug: stick /CTS or /DCD at a level, or release it (null) back to what the outside drives
+  force(name, l) { if (l === null) delete this.fc[name]; else this.fc[name] = l ? 1 : 0; this.setInput(name, l === null ? this.ext[name] : l, true); }
   receive(v) {
     if (!this.rxEnabled()) return;
     const mode = this.rxIntMode();
