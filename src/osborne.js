@@ -25,6 +25,58 @@ const OSB_KEYS = [
   ['', '', '', '', 'AlphaLock', '', '', '']
 ];
 
+// Memory chips, for the pin display and for fault simulation.
+// Main logic board (schematic sheets 5, 9 and 10): UD18 is the 2764 boot ROM (ROM 0); UD15 is the ROM 1 socket,
+// fitted with a 6116 as scratch RAM; UC3, UC6, UA3 and UA4 are the four 6116 video RAMs (characters C000h-C7FFh
+// and C800h-CFFFh, attributes D000h-D7FFh and D800h-DFFFh); UB12 and UA11 are the two 6116 font RAMs.
+// The 128K of dynamic RAM is on the separate RAM board (connector P11), which the main-board schematic does not
+// show: it is modelled as sixteen 4164s, one per data bit per bank, with the usual multiplexing (A0-A7 = row,
+// A8-A15 = column), so a chip's address pin n carries CPU address lines n and n+8.
+// Each chip pin can be given a fault: 'z' (disconnected), 0 (stuck low) or 1 (stuck high).
+//   address pin: that address bit is forced (a disconnected input floats high)
+//   data pin: the bit reads as the forced level and is stored as the forced level (disconnected: reads and stores 1)
+//   CE (or RAS, CAS on a 4164) stuck high or disconnected: the chip is never selected; reads float to 1s, writes are lost
+//   CE stuck low: the chip drives the data bus during every memory read, and the bus carries the AND of the two
+//   OE stuck high or disconnected: the chip never drives the bus; WE stuck high or disconnected: writes are lost
+//   WE stuck low: every access is a write, so the cell is overwritten with 1s and reads float to 1s
+const OSB_PINOUTS = {
+  '2764': [[1, 'VPP', 'p'], [2, 'A12', 'i'], [3, 'A7', 'i'], [4, 'A6', 'i'], [5, 'A5', 'i'], [6, 'A4', 'i'], [7, 'A3', 'i'], [8, 'A2', 'i'], [9, 'A1', 'i'], [10, 'A0', 'i'], [11, 'O0', 'i'], [12, 'O1', 'i'], [13, 'O2', 'i'], [14, 'GND', 'g'],
+    [15, 'O3', 'i'], [16, 'O4', 'i'], [17, 'O5', 'i'], [18, 'O6', 'i'], [19, 'O7', 'i'], [20, 'CE', 'i'], [21, 'A10', 'i'], [22, 'OE', 'i'], [23, 'A11', 'i'], [24, 'A9', 'i'], [25, 'A8', 'i'], [26, 'NC', 'c'], [27, 'PGM', 'p'], [28, 'VCC', 'p']],
+  '6116': [[1, 'A7', 'i'], [2, 'A6', 'i'], [3, 'A5', 'i'], [4, 'A4', 'i'], [5, 'A3', 'i'], [6, 'A2', 'i'], [7, 'A1', 'i'], [8, 'A0', 'i'], [9, 'D0', 'i'], [10, 'D1', 'i'], [11, 'D2', 'i'], [12, 'GND', 'g'],
+    [13, 'D3', 'i'], [14, 'D4', 'i'], [15, 'D5', 'i'], [16, 'D6', 'i'], [17, 'D7', 'i'], [18, 'CE', 'i'], [19, 'A10', 'i'], [20, 'OE', 'i'], [21, 'WE', 'i'], [22, 'A9', 'i'], [23, 'A8', 'i'], [24, 'VCC', 'p']],
+  '4164': [[1, 'NC', 'c'], [2, 'DIN', 'i'], [3, 'WE', 'i'], [4, 'RAS', 'i'], [5, 'A0', 'i'], [6, 'A2', 'i'], [7, 'A1', 'i'], [8, 'VCC', 'p'],
+    [9, 'A7', 'i'], [10, 'A5', 'i'], [11, 'A4', 'i'], [12, 'A3', 'i'], [13, 'A6', 'i'], [14, 'DOUT', 'i'], [15, 'CAS', 'i'], [16, 'GND', 'g']]
+};
+class OsbChip {
+  constructor(id, part, what, range, arr, base, abits, extra) {
+    Object.assign(this, { id, part, what, range, arr, base, abits, mask: (1 << abits) - 1, f: {} }, extra || {});
+    this.recalc();
+  }
+  setFault(pin, v) { if (v === null || v === undefined) delete this.f[pin]; else this.f[pin] = v; this.recalc(); }
+  get faulty() { for (const k in this.f) return true; return false; }
+  recalc() {
+    const f = this.f, lvl = k => f[k] === 'z' ? 1 : f[k], dead = k => k in f && lvl(k) === 1;
+    let aAnd = 0xFFFF, aOr = 0, dAnd = 0xFF, dOr = 0;
+    for (const k in f) {
+      let m;
+      if ((m = /^A(\d+)$/.exec(k))) { const bits = this.dram ? (1 << +m[1]) | (0x100 << +m[1]) : 1 << +m[1]; if (lvl(k)) aOr |= bits; else aAnd &= ~bits; }
+      else if ((m = /^[DO](\d)$/.exec(k))) { if (lvl(k)) dOr |= 1 << +m[1]; else dAnd &= ~(1 << +m[1]); }
+    }
+    Object.assign(this, { aAnd, aOr, dAnd, dOr });
+    const off = this.dram ? dead('RAS') || dead('CAS') || f.RAS === 0 || f.CAS === 0 : dead('CE');
+    this.weLow = !off && f.WE === 0;
+    this.noRead = off || dead('OE') || this.weLow; this.noWrite = off || dead('WE') || this.rom;
+    this.always = !this.dram && f.CE === 0;            // selected all the time: fights whatever else is driving the bus
+    this.dout = 'DOUT' in f ? lvl('DOUT') : -1; this.din = 'DIN' in f ? lvl('DIN') : -1;
+  }
+  // byte-wide chips: off is the address within the chip's part of memory
+  rd(off, quiet) {
+    if (this.noRead) { if (this.weLow && !quiet) this.arr[this.base + ((off & this.aAnd | this.aOr) & this.mask)] = 0xFF; return 0xFF; }
+    return this.arr[this.base + ((off & this.aAnd | this.aOr) & this.mask)] & this.dAnd | this.dOr;
+  }
+  wr(off, v) { if (!this.noWrite) this.arr[this.base + ((off & this.aAnd | this.aOr) & this.mask)] = v & this.dAnd | this.dOr; }
+}
+
 const CYC_T = { M1: 4, MR: 3, MW: 3, IR: 4, IW: 4, IA: 6 };
 
 class Osborne {
@@ -47,6 +99,22 @@ class Osborne {
       read: a => this.read(a), write: (a, v) => this.write(a, v),
       input: p => this.input(p), output: (p, v) => this.output(p, v)
     };
+    const C = (id, part, what, range, arr, base, abits, extra) => new OsbChip(id, part, what, range, arr, base, abits, extra);
+    this.chips = [
+      C('UD18', '2764', 'ROM 0: boot ROM', '0000h-1FFFh while the ROM bank is on', this.rom, 0, 13, { rom: true }),
+      C('UD15', '6116', 'ROM 1 socket: scratch RAM', '2000h-3FFFh while the ROM bank is on (2K, repeated)', this.xram, 0, 11),
+      C('UC3', '6116', 'video RAM: characters', 'C000h-C7FFh while the video bank is on', this.vchar, 0, 11),
+      C('UC6', '6116', 'video RAM: characters', 'C800h-CFFFh while the video bank is on', this.vchar, 0x800, 11),
+      C('UA3', '6116', 'video RAM: attributes (D7-D4)', 'D000h-D7FFh while the video bank is on', this.vattr, 0, 11),
+      C('UA4', '6116', 'video RAM: attributes (D7-D4)', 'D800h-DFFFh while the video bank is on', this.vattr, 0x800, 11),
+      C('UB12', '6116', 'font RAM: first 128 character shapes', 'written through 0000h-07FFh (and 1000h-17FFh) while the ROM bank is on', this.font, 0, 11),
+      C('UA11', '6116', 'font RAM: alternate character shapes', 'written through 0800h-0FFFh (and 1800h-1FFFh) while the ROM bank is on', this.font, 0x800, 11)
+    ];
+    for (let bank = 0; bank < 2; bank++) for (let bit = 0; bit < 8; bit++)
+      this.chips.push(C(`RAM${bank}.D${bit}`, '4164', `RAM board: bank ${bank}, data bit ${bit}`, bank ? '0000h-EFFFh while bank 1 is selected' : '0000h-EFFFh while bank 0 is selected, and F000h-FFFFh always', this.dram[bank], 0, 16, { dram: true, bank, bit }));
+    this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
+    this.acc = new Uint32Array(10);          // accesses: 0-7 the byte-wide chips in the order above, 8 and 9 the two DRAM banks
+    this.faulty = false;
     this.conn = { pia0: true, pia1: true, sio: true };   // debug: a disconnected chip no longer sees the CPU bus
     this.cpu = new Z80(this.bus);
     this.reset();
@@ -60,35 +128,89 @@ class Osborne {
   }
   // ---- memory ----
   read(a) {
+    if (this.faulty) return this.readF(a, false);
     const pa = this.pa;
-    if (a >= 0xF000) return this.dram[0][a];
-    if (pa & 0x80 && a < 0x4000) return a < 0x2000 ? this.rom[a] : this.xram[a & 0x7FF];
+    if (a >= 0xF000) { this.acc[8]++; return this.dram[0][a]; }
+    if (pa & 0x80 && a < 0x4000) { if (a < 0x2000) { this.acc[0]++; return this.rom[a]; } this.acc[1]++; return this.xram[a & 0x7FF]; }
     if (pa & 0x40 && a >= 0xC000 && a < 0xE000) {
-      const o = a & 0xFFF;
+      const o = a & 0xFFF; this.acc[2 + ((a >> 11) & 3)]++;
       if (a < 0xD000) { this.attrLatch = this.vattr[o]; return this.vchar[o]; }
       return this.vattr[o] | 0x0F;          // only D7-D4 are driven
     }
+    this.acc[8 + (pa & 1)]++;
     return this.dram[pa & 1][a];
   }
   write(a, v) {
+    if (this.faulty) return this.writeF(a, v);
     const pa = this.pa;
-    if (a >= 0xF000) { this.dram[0][a] = v; return; }
-    if (pa & 0x80 && a < 0x4000) { if (a < 0x2000) this.font[a & 0xFFF] = v; else this.xram[a & 0x7FF] = v; return; }
+    if (a >= 0xF000) { this.acc[8]++; this.dram[0][a] = v; return; }
+    if (pa & 0x80 && a < 0x4000) { if (a < 0x2000) { this.acc[6 + ((a >> 11) & 1)]++; this.font[a & 0xFFF] = v; } else { this.acc[1]++; this.xram[a & 0x7FF] = v; } return; }
     if (pa & 0x40 && a >= 0xC000 && a < 0xE000) {
-      const o = a & 0xFFF;
+      const o = a & 0xFFF; this.acc[2 + ((a >> 11) & 3)]++;
       if (a < 0xD000) { this.vchar[o] = v; this.vattr[o] = this.attrLatch; }   // the latched attribute is written alongside
       else this.vattr[o] = v & 0xF0;
       return;
     }
+    this.acc[8 + (pa & 1)]++;
     this.dram[pa & 1][a] = v;
   }
   // what the CPU would see, without side effects (for the memory view and disassembler)
   peek(a) {
+    if (this.faulty) return this.readF(a, true);
     const pa = this.pa;
     if (a >= 0xF000) return this.dram[0][a];
     if (pa & 0x80 && a < 0x4000) return a < 0x2000 ? this.rom[a] : this.xram[a & 0x7FF];
     if (pa & 0x40 && a >= 0xC000 && a < 0xE000) return a < 0xD000 ? this.vchar[a & 0xFFF] : this.vattr[a & 0xFFF] | 0x0F;
     return this.dram[pa & 1][a];
+  }
+  // ---- memory with chip faults (used only while at least one pin fault is set) ----
+  setFault(id, pin, v) { this.chipById[id].setFault(pin, v); this.faulty = this.chips.some(c => c.faulty); }
+  clearFaults() { for (const c of this.chips) { c.f = {}; c.recalc(); } this.faulty = false; }
+  faultList() { const out = []; for (const c of this.chips) for (const k in c.f) out.push([c.id, k, c.f[k]]); return out; }
+  dramRead(bank, a, quiet) {
+    let v = this.dram[bank][a];
+    for (let b = 0; b < 8; b++) {
+      const c = this.chips[8 + bank * 8 + b]; if (!c.faulty) continue;
+      const o = a & c.aAnd | c.aOr; let bit;
+      if (c.noRead) { bit = 1; if (c.weLow && !quiet) this.dram[bank][o] |= 1 << b; }
+      else bit = c.dout >= 0 ? c.dout : (this.dram[bank][o] >> b) & 1;
+      v = v & ~(1 << b) | bit << b;
+    }
+    return v;
+  }
+  dramWrite(bank, a, v) {
+    const arr = this.dram[bank]; let keep = 0;
+    for (let b = 0; b < 8; b++) {
+      const c = this.chips[8 + bank * 8 + b]; if (!c.faulty) continue;
+      keep |= 1 << b; if (c.noWrite) continue;
+      const o = a & c.aAnd | c.aOr, bit = c.din >= 0 ? c.din : (v >> b) & 1;
+      arr[o] = arr[o] & ~(1 << b) | bit << b;
+    }
+    arr[a] = arr[a] & keep | v & ~keep;
+  }
+  readF(a, quiet) {
+    const pa = this.pa, ch = this.chips; let v, sel = -1;
+    if (a >= 0xF000) { if (!quiet) this.acc[8]++; v = this.dramRead(0, a, quiet); }
+    else if (pa & 0x80 && a < 0x4000) { sel = a < 0x2000 ? 0 : 1; if (!quiet) this.acc[sel]++; v = ch[sel].rd(a, quiet); }
+    else if (pa & 0x40 && a >= 0xC000 && a < 0xE000) {
+      sel = 2 + ((a >> 11) & 3); if (!quiet) this.acc[sel]++;
+      if (a < 0xD000) { if (!quiet) this.attrLatch = ch[sel + 2].rd(a, true); v = ch[sel].rd(a, quiet); }
+      else v = ch[sel].rd(a, quiet) | 0x0F;
+    } else { if (!quiet) this.acc[8 + (pa & 1)]++; v = this.dramRead(pa & 1, a, quiet); }
+    // a chip whose CE is stuck low also drives the bus (its output enable permitting): the lines carry the AND
+    for (let i = 0; i < 8; i++) { const c = ch[i]; if (!c.always || i === sel || c.noRead) continue; if (i === 0 && a & 0x2000) continue; if (i === 1 && !(a & 0x2000)) continue; v &= c.rd(a, true) | (i === 4 || i === 5 ? 0x0F : 0); }
+    return v;
+  }
+  writeF(a, v) {
+    const pa = this.pa, ch = this.chips;
+    if (a >= 0xF000) { this.acc[8]++; this.dramWrite(0, a, v); return; }
+    if (pa & 0x80 && a < 0x4000) { const i = a < 0x2000 ? 6 + ((a >> 11) & 1) : 1; this.acc[i]++; ch[i].wr(a, v); return; }
+    if (pa & 0x40 && a >= 0xC000 && a < 0xE000) {
+      const i = 2 + ((a >> 11) & 3); this.acc[i]++;
+      if (a < 0xD000) { ch[i].wr(a, v); ch[i + 2].wr(a, this.attrLatch); } else ch[i].wr(a, v & 0xF0);
+      return;
+    }
+    this.acc[8 + (pa & 1)]++; this.dramWrite(pa & 1, a, v);
   }
   // ---- I/O: 74LS138 on A2-A4, enabled when A7 = 0 (A5, A6 not decoded) ----
   input(p) {
@@ -171,20 +293,21 @@ class Osborne {
   // pixel intensities 0 (off), 1 (half), 2 (full) for a 640 x 240 frame
   renderFrame(px) {
     if (!this.vidEna) { px.fill(0); return; }
-    const blinkOff = (this.rtc >> 4) & 1;
+    const blinkOff = (this.rtc >> 4) & 1, ch = this.chips, vf = this.faulty && ch.slice(2, 8).some(c => c.faulty);
     for (let y = 0; y < OSB.ROWS * OSB.CELL_H; y++) {
       const row = (y / OSB.CELL_H) | 0, line = y % OSB.CELL_H, base = row * OSB.ROW_STRIDE;
       for (let x = 0; x < OSB.COLS; x++) {
-        const ch = this.vchar[base + x], at = this.vattr[base + x];
+        const o = base + x, hi = o >> 11;
+        const ch = vf ? this.chips[2 + hi].rd(o, true) : this.vchar[o], at = vf ? this.chips[4 + hi].rd(o, true) : this.vattr[o];
         const fg = at & 0x80 ? 2 : 1;
-        let bits = this.font[(at & 0x10 ? 0x800 : 0) + (ch & 0x7F) * 16 + line];
+        let bits = vf ? this.chips[at & 0x10 ? 7 : 6].rd((ch & 0x7F) * 16 + line, true) : this.font[(at & 0x10 ? 0x800 : 0) + (ch & 0x7F) * 16 + line];
         if (at & 0x40 && line === 9) bits = 0xFF;            // underline
         if (at & 0x20 && blinkOff) bits = 0;                  // blink
         if (ch & 0x80 && !(at & 0x10)) bits ^= 0xFF;          // reverse video
-        const o = y * 640 + x * 8;
-        for (let b = 0; b < 8; b++) px[o + b] = bits & (0x80 >> b) ? fg : 0;
+        const po = y * 640 + x * 8;
+        for (let b = 0; b < 8; b++) px[po + b] = bits & (0x80 >> b) ? fg : 0;
       }
     }
   }
 }
-if (typeof module !== 'undefined') module.exports = { Osborne, OSB, OSB_KEYS };
+if (typeof module !== 'undefined') module.exports = { Osborne, OSB, OSB_KEYS, OsbChip, OSB_PINOUTS };
