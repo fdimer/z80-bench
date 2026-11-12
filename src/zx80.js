@@ -84,6 +84,18 @@ class ZX80 {
     this.ramSize = 0x400;                      // 1K as supplied; 16K with the RAM pack; 32K or 48K with bigger packs
     this.lowRam = new Uint8Array(0x2000);      // 8K of RAM at 2000h-3FFFh in place of the ROM's echo (a hi-res board)
     this.hires = false;                        // hi-res board fitted: RAM at 2000h, and RAM answers refresh cycles (WRX)
+    // memory chips (src/memchips.js), for the pin display and fault simulation: the ROM (IC2: a 4K 2332 on the ZX80,
+    // an 8K 2364 with the 8K ROM), the two 2114s of the built-in 1K (IC3 and IC4 on the ZX80, IC4a and IC4b on the ZX81;
+    // which holds which half of the byte is assumed: bits 0-3 in the first) and the 4116s of the RAM packs, one per data bit per 16K
+    const C = (id, part, what, range, arr, base, abits, extra) => new MemChip(id, part, what, range, arr, base, abits, extra);
+    this.romChips = [C('IC2', '2332', 'ROM: 4K BASIC', '0000h-0FFFh, repeated up to 3FFFh', this.rom, 0, 12, { rom: true, en: 'CS' }), C('IC2-8K', '2364', 'ROM: 8K BASIC', '0000h-1FFFh, repeated up to 3FFFh', this.rom, 0, 13, { rom: true, en: 'CS' })];
+    this.ram1k = [C('IC3', '2114', 'built-in RAM, data bits 0-3', '4000h-43FFh, repeated', this.ram, 0, 10, { nib: 0, en: 'CS' }), C('IC4', '2114', 'built-in RAM, data bits 4-7', '4000h-43FFh, repeated', this.ram, 0, 10, { nib: 4, en: 'CS' })];
+    this.packs = [0, 1, 2].map(k => [0, 1, 2, 3, 4, 5, 6, 7].map(bit => C(`PACK${k + 1}.D${bit}`, '4116', `RAM pack: ${k ? ['', 'second', 'third'][k] + ' 16K' : '16K'}, data bit ${bit}`, `${(0x4000 + k * 0x4000).toString(16).toUpperCase()}h-${(0x7FFF + k * 0x4000).toString(16).toUpperCase()}h`, this.ram, k * 0x4000, 14, { dram: true, bit, mux: 7, pack: k })));
+    this.chips = [...this.romChips, ...this.ram1k, ...this.packs[0], ...this.packs[1], ...this.packs[2]];
+    this.banks = [[this.romChips[0]], [this.romChips[1]], this.ram1k, ...this.packs];
+    this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
+    this.acc = new Uint32Array(5);             // accesses: 0 the ROM, 1 the built-in 1K, 2-4 the RAM pack's 16K banks
+    this.faulty = false;
     this.keys = new Uint8Array(8);             // bit set = key down
     this.fb = new Uint8Array(ZX.W * ZX.H);      // TV picture being built: 1 = ink (black)
     this.front = new Uint8Array(ZX.W * ZX.H);   // last complete picture
@@ -127,14 +139,29 @@ class ZX80 {
     a &= 0x7FFF;
     return a & 0x4000 ? (a - 0x4000) & (this.ramSize - 1) & 0x3FFF : -1;
   }
-  read(a, m1) {
-    const i = this.ramAt(a, m1); if (i >= 0) return this.ram[i];
-    a &= 0x7FFF;
-    return this.hires && a >= 0x2000 ? this.lowRam[a - 0x2000] : this.rom[a & this.romMask];
+  // memory through the chips; quiet = no side effects and no access counting (the panes, the display)
+  ramBank(i) { return this.ramSize <= 0x400 ? this.ram1k : this.packs[i >> 14]; }
+  ramGet(i, quiet) {
+    if (!quiet) this.acc[this.ramSize <= 0x400 ? 1 : 2 + (i >> 14)]++;
+    if (!this.faulty) return this.ram[i];
+    const bank = this.ramBank(i); let v = bank.faulty ? memBankRead(bank, i & 0x3FFF, quiet) : this.ram[i];
+    const r = this.romChips[this.rom8k ? 1 : 0]; if (r.always) v &= memBankRead([r], i & this.romMask, true);      // ROM chip select stuck low: it drives the bus too
+    return v;
   }
-  peek(a) { return this.read(a); }
+  romGet(o, quiet) {
+    if (!quiet) this.acc[0]++;
+    const r = this.romChips[this.rom8k ? 1 : 0];
+    return this.faulty && r.faulty ? memBankRead([r], o, quiet) : this.rom[o];
+  }
+  read(a, m1, quiet) {
+    const i = this.ramAt(a, m1); if (i >= 0) return this.ramGet(i, quiet);
+    a &= 0x7FFF;
+    return this.hires && a >= 0x2000 ? this.lowRam[a - 0x2000] : this.romGet(a & this.romMask, quiet);
+  }
+  peek(a) { return this.read(a, false, true); }
   write(a, v) {
-    const i = this.ramAt(a, false); if (i >= 0) { this.ram[i] = v; return; }
+    const i = this.ramAt(a, false);
+    if (i >= 0) { this.acc[this.ramSize <= 0x400 ? 1 : 2 + (i >> 14)]++; const bank = this.faulty ? this.ramBank(i) : null; if (bank && bank.faulty) memBankWrite(bank, i & 0x3FFF, v); else this.ram[i] = v; return; }
     a &= 0x7FFF; if (this.hires && a >= 0x2000) this.lowRam[a - 0x2000] = v;
   }
   // the byte RAM puts on the bus during a refresh cycle (address I:R), or -1 if no RAM answers. A plain ZX81's
@@ -142,7 +169,7 @@ class ZX80 {
   // high resolution works: the picture byte comes straight from RAM instead of the ROM's character set.
   refreshRam(ra) {
     if (!this.hires) return -1;
-    const i = this.ramAt(ra, false); if (i >= 0) return this.ram[i];
+    const i = this.ramAt(ra, false); if (i >= 0) return this.ramGet(i, true);
     ra &= 0x7FFF; return ra >= 0x2000 && ra < 0x4000 ? this.lowRam[ra - 0x2000] : -1;
   }
   // opcode fetch: above 8000h a byte with bit 6 clear is a character; the CPU is given a NOP
@@ -330,7 +357,7 @@ class ZX80 {
         const v = this.read(c.a, true);
         if (!(v & 0x40)) {   // a character: font byte from I:R with the character code and line counter
           const fa = (c.rf & 0xFE00) | ((v & 0x3F) << 3) | this.lcntr, hr = this.refreshRam(c.rf);
-          let bits = hr >= 0 ? hr : fa & 0x4000 ? 0 : this.rom[fa & this.romMask];
+          let bits = hr >= 0 ? hr : fa & 0x4000 ? 0 : this.romGet(fa & this.romMask, true);
           if (hr >= 0) this.hiresBytes++;
           if (v & 0x80) bits ^= 0xFF;
           this.plot(t0 + off + 4, bits); this.lastChar = v;

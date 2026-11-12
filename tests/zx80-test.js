@@ -1,7 +1,7 @@
 // ZX80 video-logic checks with a synthetic ROM (no Sinclair code): node tests/zx80-test.js
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const ctx = { console }; vm.createContext(ctx);
-for (const f of ['z80core.js', 'z80asm.js', 'zx80.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
+for (const f of ['z80core.js', 'z80asm.js', 'memchips.js', 'zx80.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
 vm.runInContext('this.ZX80 = ZX80; this.ZX = ZX; this.assemble = assemble;', ctx);
 let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 // A tiny display driver in the ZX80 style: 4 characters then HALT, 8 scan lines per frame.

@@ -298,6 +298,36 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .zxstate .hd { font-weight: 600; margin-bottom: 3px; }
 .zxstate .kv { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); line-height: 1.55; }
 .zxstate .kv b { color: var(--ink); font-weight: 500; }
+/* memory chips panel */
+.mcwrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 330px); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .mcwrap { grid-template-columns: minmax(0, 1fr); } }
+.mctiles { display: grid; gap: 10px; }
+.mctiles h3 { margin: 0 0 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.mctiles .grp { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 700px) { .mctiles .grp { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.mctile { position: relative; display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 8px 4px 6px; text-align: center; background: #26282c; color: #e9e9ea; border: 2px solid #26282c; border-radius: 4px; font-family: var(--font-mono); cursor: pointer; }
+.mctile b { font-size: 12.5px; }
+.mctile span { font-size: 9.5px; opacity: 0.75; line-height: 1.2; overflow-wrap: anywhere; }
+.mctile .dot { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: #4a4d52; }
+.mctile.act .dot { background: #5fd97a; }
+.mctile.sel { border-color: var(--sel); }
+.mctile.fault { background: #5a2a22; border-color: #5a2a22; }
+.mctile.fault.sel { border-color: var(--sel); }
+.mctile .nf { font-size: 9.5px; color: #ffb4a6; opacity: 1; }
+.mcfig { margin: 0; min-width: 0; position: relative; }
+.mcfig svg.chip { display: block; width: 100%; max-width: 330px; margin: 0 auto; height: auto; }
+.mcfig figcaption { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+.mcfig figcaption b { color: var(--ink); font-weight: 600; }
+.mcfaults { font-size: 11.5px; color: var(--warn); margin-top: 6px; text-align: center; line-height: 1.5; }
+.mcbtns { justify-content: center; margin-top: 6px; }
+#mcChip .pin.forced .ring { stroke: var(--warn); stroke-width: 2.6; stroke-dasharray: 4 2; }
+#mcChip .pin.forced .nm { fill: var(--warn); }
+#mcChip .pin.forced.fz .ring { stroke-dasharray: 2 3; }
+.mcpop { position: absolute; z-index: 30; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2); padding: 8px 10px; font-size: 12.5px; width: max-content; max-width: 250px; }
+.mcpop .ttl { font-weight: 600; margin-bottom: 2px; }
+.mcpop .sub { color: var(--muted); margin-bottom: 6px; font-family: var(--font-mono); font-size: 11.5px; }
+.mcpop .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.mcpop button { padding: 4px 10px; font-size: 12.5px; }
 </style>
 
 <div class="wrap">
@@ -351,6 +381,20 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <div class="msg" id="zxMsg"></div>
         <div class="zxkb" id="zxKb" aria-label="Keyboard"></div>
         <p class="hint" id="zxHint">Click the picture and type, or use the keyboard above: keywords (white, top) come from the key pressed at the K cursor, red symbols need SHIFT, which latches for one key. Enter is NEWLINE and Backspace is RUBOUT (SHIFT+0). Tape: insert a .o program file, then type LOAD (W, then NEW LINE); SAVE (E, then NEW LINE) downloads the program as a .o file. Both are instant. RAM listing gives the system variables, the BASIC program as text and a hex dump. The picture is built the way a TV would, from the ZX80's own sync pulses, so it blanks while BASIC is busy, as on the real machine. The ROM is not included: load your own 4 KB image; your browser keeps it.</p>
+      </section>
+      <section class="panel" id="pMemChips">
+        <h2>Memory chips <span class="aside" id="mcInfo">live pins · click a pin to disconnect it or hold it high or low</span></h2>
+        <div class="mcwrap">
+          <div class="mctiles" id="mcTiles"></div>
+          <figure class="mcfig" id="mcFig">
+            <svg class="chip" id="mcChip" role="group" aria-label="Selected memory chip pinout"></svg>
+            <figcaption id="mcCap"></figcaption>
+            <div class="mcfaults mono" id="mcFaults"></div>
+            <div class="row mcbtns"><button id="mcClear" type="button">Clear this chip's faults</button><button id="mcClearAll" type="button">Clear all memory faults</button></div>
+          </figure>
+        </div>
+        <p class="hint">The machine's memory chips: the ROM (IC2: the 4K 2332 of the ZX80, or the 8K 2364), the two 2114s of the built-in 1K (IC3 and IC4 on the ZX80, IC4a and IC4b on the ZX81) or, with a RAM pack, its 4116 dynamic RAMs, one per data bit in each 16K. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the bus on every clock. Assumed: the first 2114 holds data bits 0–3, and the RAM pack is wired in the usual way (its chips have no board numbers here). The 8K of the hi-res board is not included.</p>
+        <p class="hint">To simulate a fault, click a pin: Disconnected lifts the pin from the board (an input then floats high, an output no longer reaches the bus), Stuck high and Stuck low hold it at that level. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. Faults are listed in the Debug panel and cleared there, here, or by Master reset. The memory view and the disassembly show what the CPU reads through the faults.</p>
       </section>
   </div>
 
@@ -513,6 +557,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 
 <script src="src/z80core.js"></script>
 <script src="src/z80asm.js"></script>
+<script src="src/memchips.js"></script>
 <script src="src/zx80.js"></script>
 <script>
 (() => {
@@ -1056,7 +1101,7 @@ function renderIO() {
 function render() {
   const pcNow = regsView().pc, focus = pcNow !== lastFocusPc || tTotal !== lastFocusT;
   lastFocusPc = pcNow; lastFocusT = tTotal;
-  renderPins(); renderRegs(); renderStops(); renderDebug(); renderZx(); mmDraw(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
+  renderPins(); renderRegs(); renderStops(); renderDebug(); renderZx(); mmDraw(); if (mcReady) renderMemChips(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
   $('cntPC').textContent = h4(pcNow) + 'h';
   $('cntT').textContent = tTotal.toLocaleString('en-AU');
   $('cntI').textContent = instrCount.toLocaleString('en-AU');
@@ -1543,7 +1588,7 @@ function dbgRemove(k) {
   const i = k.indexOf(':'), t = k.slice(0, i), v = k.slice(i + 1);
   if (t === 'at') breakpoints.delete(+v); else if (t === 'after') afterBps.delete(+v);
   else if (t === 'reg') { watches.delete(v); if (hitReg === v) hitReg = null; }
-  else if (t === 'mem') memWatches.delete(+v); else if (t === 'pin') pinWatches.delete(v); else if (t === 'bus') busWatches.delete(v);
+  else if (t === 'mem') memWatches.delete(+v); else if (t === 'pin') pinWatches.delete(v); else if (t === 'bus') busWatches.delete(v); else if (t === 'mfault') mcDebugRemove(t, v);
   if (dbgHit === k) dbgHit = null;
   render();
 }
@@ -1566,6 +1611,7 @@ function renderDebug() {
   for (const a of sorted(memWatches.keys())) { const w = memWatches.get(a); items.push(['mem:' + a, 'memory', h4(a) + 'h ' + (w.to === null ? 'changes' : 'becomes ' + h2(w.to) + 'h') + (now ? ', now ' + h2(peekMem(a)) + 'h' : '')]); }
   for (const [n, w] of pinWatches) items.push(['pin:' + n, 'pin', pinLabel(n) + ' ' + { any: 'changes', rise: 'goes high', fall: 'goes low' }[w.edge] + (now ? ', now ' + pv(pinValue(n)) : '')]);
   for (const w of [...busWatches.values()].sort((x, y) => (x.bus > y.bus) - (x.bus < y.bus) || x.v - y.v)) { const cur = busVal(w.bus); items.push(['bus:' + w.bus + ':' + w.v, w.bus === 'a' ? 'address bus' : 'data bus', 'becomes ' + (w.bus === 'a' ? h4(w.v) : h2(w.v)) + 'h' + (now ? ', now ' + (cur === null ? 'floating' : (w.bus === 'a' ? h4(cur) : h2(cur)) + 'h') : '')]); }
+  if (mcReady) for (const it of mcDebugItems()) items.push(it);
   $('dbgCount').textContent = items.length ? items.length + ' active' : '';
   const sig = JSON.stringify(items) + dbgHit;
   if (sig === dbgSig) return;
@@ -1578,7 +1624,7 @@ $('dbgType').onchange = dbgFields; $('dbgMemCond').onchange = dbgFields;
 $('dbgAdd').onclick = dbgAdd;
 for (const id of ['dbgAddr', 'dbgMemVal', 'dbgBusVal']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); dbgAdd(); } });
 $('dbgList').addEventListener('click', e => { const b = e.target.closest('button[data-key]'); if (!b) return; b.classList.contains('x') ? dbgRemove(b.dataset.key) : dbgGo(b.dataset.key); });
-$('dbgClear').onclick = () => { breakpoints.clear(); afterBps.clear(); watches.clear(); memWatches.clear(); pinWatches.clear(); busWatches.clear(); hitReg = null; dbgHit = null; render(); };
+$('dbgClear').onclick = () => { if (mcReady) { memClearFaults(MC.m); disDirty = true; } breakpoints.clear(); afterBps.clear(); watches.clear(); memWatches.clear(); pinWatches.clear(); busWatches.clear(); hitReg = null; dbgHit = null; render(); };
 // ---------- master reset: memory, ROM, every debug point and the input pins ----------
 function masterReset() {
   if (running) stopRun();
@@ -1923,6 +1969,133 @@ $('zxHires').onchange = () => {
   $('zxMsg').className = 'msg'; $('zxMsg').textContent = zx.hires ? 'Hi-res board fitted: 8K of RAM at 2000h-3FFFh (it keeps its contents through a restart, like the battery-backed original), and RAM now answers refresh cycles, so hi-res programs can draw from it.' : 'Hi-res board removed: 2000h-3FFFh is the ROM\'s echo again.';
   render();
 };
+
+// ---------- memory chips: what this machine has, and what each pin's board net is doing ----------
+const MC = {
+  m: zx,
+  groups() {
+    const g = [['ROM', [zx.rom8k ? 1 : 0]]];
+    if (zx.ramSize <= 0x400) g.push(['Built-in 1K RAM · two 2114s, four bits each', [3, 2]]);
+    else for (let k = 0; k < zx.ramSize >> 14; k++) g.push([`RAM pack · ${k ? ['', 'second', 'third'][k] + ' 16K' : '16K'} at ${h4(0x4000 + k * 0x4000)}h · one 4116 per data bit`, [7, 6, 5, 4, 3, 2, 1, 0].map(b => 4 + k * 8 + b)]);
+    return g;
+  },
+  tile(c, i) { return i < 2 ? ['IC2', c.part + ' · ROM'] : i < 4 ? [zx.machine === 'zx81' ? 'IC4' + 'ab'[i - 2] : c.id, '2114 · D' + (c.nib ? '4–7' : '0–3')] : ['D' + c.bit, '4116']; },
+  acc(i) { return i < 2 ? 0 : i < 4 ? 1 : 2 + ((i - 4) >> 3); },
+  bus() {
+    const T = curT, A = T.a === null || T.a === 'z' ? null : T.a, mem = T.mreq === 0 && T.rfsh !== 0 && A !== null;
+    const ri = mem ? zx.ramAt(A, T.m1 === 0) : -1, low = mem && ri < 0 && zx.hires && (A & 0x7FFF) >= 0x2000;
+    return { T, A, mem, rd: mem && T.rd === 0, wr: mem && T.wr === 0, ri, rom: mem && ri < 0 && !low };
+  },
+  net(c, i, name, B) {
+    const A = B.A, D = n => pinValue('D' + n); let m = /^A(\d+)$/.exec(name), d;
+    if (i < 2) {                        // the ROM: selected whenever the RAM is not
+      if (m) return A === null ? 'z' : (A >> +m[1]) & 1;
+      if ((d = /^D(\d)$/.exec(name))) return B.rom && B.rd ? D(+d[1]) : 'z';
+      return name === 'CS' ? (B.rom ? 0 : 1) : 1;
+    }
+    if (i < 4) {                        // the two 2114s
+      const sel = B.ri >= 0 && zx.ramSize <= 0x400;
+      if (m) return A === null ? 'z' : (A >> +m[1]) & 1;
+      if (name === 'CS') return sel ? 0 : 1; if (name === 'WE') return sel && B.wr ? 0 : 1;
+      if ((d = /^I\/O(\d)$/.exec(name))) return sel && (B.rd || B.wr) ? D(+d[1] - 1 + c.nib) : 'z';
+      return 'z';
+    }
+    {                                   // RAM pack 4116s: seven address pins carry the row, then the column
+      const sel = B.ri >= 0 && zx.ramSize > 0x400 && (B.ri >> 14) === c.pack, o = B.ri & 0x3FFF;
+      if (m) return A === null ? 'z' : sel && (B.rd || B.wr) ? (o >> (7 + +m[1])) & 1 : (A >> +m[1]) & 1;
+      switch (name) { case 'RAS': return B.T.mreq === 0 ? 0 : 1; case 'CAS': return sel && (B.rd || B.wr) ? 0 : 1; case 'WE': return sel && B.wr ? 0 : 1; case 'DIN': return D(c.bit); case 'DOUT': return sel && B.rd ? D(c.bit) : 'z'; }
+      return 'z';
+    }
+  }
+};
+// ---------- memory chips: tiles, a live pinout of the selected chip, and pin faults ----------
+// The page supplies MC: { m (the machine: chips, acc, faulty), groups(), tile(c, i), acc(i), bus(), net(c, i, name, B) }.
+let mcSel = 0, mcEls = {}, mcDrawn = '', mcPrevAcc = null, mcTileSig = '', mcPop = null;
+const mcFaultText = v => v === 'z' ? 'disconnected' : v ? 'stuck high' : 'stuck low';
+function mcSetFault(id, pin, v) { memSetFault(MC.m, id, pin, v); disDirty = true; }
+function mcClosePop() { if (mcPop) { mcPop.remove(); mcPop = null; } }
+document.addEventListener('click', e => { if (mcPop && !mcPop.contains(e.target) && !e.target.closest('#mcChip .pin.input')) mcClosePop(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') mcClosePop(); });
+// debug-pane entries for the faults
+function mcDebugItems() { return memFaultList(MC.m).map(([id, pin, v]) => ['mfault:' + id + ':' + pin, 'chip fault', `${id} (${MC.m.chipById[id].part}) pin ${pin} ${mcFaultText(v)}`]); }
+function mcDebugRemove(t, v) { if (t !== 'mfault') return false; const i = v.lastIndexOf(':'); mcSetFault(v.slice(0, i), v.slice(i + 1), null); return true; }
+// a DIP of any size, drawn the same way as the CPU
+function mcDraw() {
+  const ch = MC.m.chips; if (mcSel >= ch.length) mcSel = 0;
+  const c = ch[mcSel], list = MEM_PINOUTS[c.part], half = list.length / 2, s = $('mcChip');
+  const top = 26, pitch = 24, bx = 128, bw = 124, bh = half * pitch + 12;
+  s.innerHTML = ''; s.setAttribute('viewBox', `0 0 380 ${bh + 34}`); mcEls = {}; mcDrawn = c.id + '/' + c.part;
+  svg('rect', { class: 'body-rect', x: bx, y: top - 6, width: bw, height: bh, rx: 5 }, s);
+  svg('path', { d: `M ${bx + bw / 2 - 12} ${top - 6} a 12 12 0 0 0 24 0`, fill: 'var(--bg)' }, s);
+  const t1 = svg('text', { class: 'chiptitle', x: bx + bw / 2, y: top + bh / 2 - 8, 'text-anchor': 'middle', 'font-size': 24 }, s); t1.textContent = c.part;
+  const t2 = svg('text', { class: 'chipsub', x: bx + bw / 2, y: top + bh / 2 + 12, 'text-anchor': 'middle' }, s); t2.textContent = c.id;
+  for (const [n, name, kind] of list) {
+    const left = n <= half, idx = left ? n - 1 : list.length - n, y = top + idx * pitch + 6, sx = left ? bx - 30 : bx + bw + 4;
+    const g = svg('g', { class: 'pin' + (kind === 'i' ? ' input' : ''), 'data-pin': name }, s);
+    if (kind === 'i') { svg('rect', { x: left ? sx - 70 : sx - 4, y: y - 11, width: 104, height: 22, fill: 'transparent' }, g); svg('rect', { class: 'ring', x: sx - 3, y: y - 9, width: 32, height: 18, rx: 3 }, g); }
+    svg('rect', { class: 'stub', x: sx, y: y - 6, width: 26, height: 12, rx: 2 }, g);
+    const sv = svg('text', { class: 'sv', x: sx + 13, y: y + 0.5 }, g);
+    const num = svg('text', { class: 'num', x: left ? bx + 7 : bx + bw - 7, y, 'text-anchor': left ? 'start' : 'end' }, g); num.textContent = n;
+    const nm = svg('text', { class: 'nm', x: left ? sx - 8 : sx + 34, y, 'text-anchor': left ? 'end' : 'start' }, g);
+    if (MEM_ACTIVE_LOW.has(name)) { const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = name; } else nm.textContent = name;
+    const title = svg('title', {}, g); title.textContent = kind === 'i' ? `${c.id} pin ${n}, ${name}: click to disconnect it or hold it high or low` : `${c.id} pin ${n}, ${name}`;
+    if (kind === 'i') {
+      g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
+      g.addEventListener('click', ev => mcMenu(name, ev));
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const r = g.getBoundingClientRect(); mcMenu(name, { clientX: r.left, clientY: r.top }); } });
+    }
+    mcEls[name] = { g, sv, prev: null, kind };
+  }
+  $('mcCap').innerHTML = `<b>${esc(c.id)} · ${esc(c.part)}</b><br>${esc(c.what)}<br>${esc(c.range)}`;
+}
+function mcMenu(name, ev) {
+  mcClosePop();
+  const c = MC.m.chips[mcSel], f = name in c.f ? c.f[name] : null, fig = $('mcFig'), r = fig.getBoundingClientRect();
+  const el = document.createElement('div'); el.className = 'mcpop';
+  el.innerHTML = `<div class="ttl">${esc(c.id)} · ${esc(name)}</div><div class="sub">${f === null ? 'normal: connected to the board' : mcFaultText(f)}</div><div class="btns">` +
+    `<button type="button" data-a="z"${f === 'z' ? ' disabled' : ''}>Disconnected</button><button type="button" data-a="1"${f === 1 ? ' disabled' : ''}>Stuck high</button><button type="button" data-a="0"${f === 0 ? ' disabled' : ''}>Stuck low</button>` +
+    (f !== null ? '<button type="button" class="primary" data-a="r">Normal</button>' : '') + '</div>';
+  fig.appendChild(el); mcPop = el;
+  el.style.left = Math.max(4, Math.min(ev.clientX - r.left, r.width - el.offsetWidth - 4)) + 'px'; el.style.top = (ev.clientY - r.top + 10) + 'px';
+  el.addEventListener('click', e2 => { e2.stopPropagation(); const a = e2.target.dataset.a; if (!a) return; mcSetFault(c.id, name, a === 'r' ? null : a === 'z' ? 'z' : +a); mcClosePop(); render(); });
+  const b0 = el.querySelector('button:not([disabled])'); if (b0) b0.focus();
+}
+function mcTiles() {
+  const ch = MC.m.chips, groups = MC.groups();
+  const sig = mcSel + '|' + groups.map(g => g[0] + g[1].join(',')).join(';') + '|' + ch.map(c => c.id + Object.keys(c.f).length).join('');
+  if (sig === mcTileSig) return; mcTileSig = sig;
+  const q = t => esc(t).replace(/"/g, '&quot;');
+  const tile = i => { const c = ch[i], n = Object.keys(c.f).length, [lab, sub] = MC.tile(c, i); return `<button type="button" class="mctile${i === mcSel ? ' sel' : ''}${n ? ' fault' : ''}" data-i="${i}" title="${q(c.id + ': ' + c.part + ', ' + c.what + '. ' + c.range + '.')}"><i class="dot"></i><b>${esc(lab)}</b><span>${esc(sub)}</span>${n ? `<span class="nf">${n} fault${n === 1 ? '' : 's'}</span>` : ''}</button>`; };
+  $('mcTiles').innerHTML = groups.map(([title, idx]) => `<div><h3>${esc(title)}</h3><div class="grp">${idx.map(tile).join('')}</div></div>`).join('');
+}
+$('mcTiles').addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (!b) return; mcSel = +b.dataset.i; mcClosePop(); mcDraw(); render(); });
+$('mcClear').onclick = () => { const c = MC.m.chips[mcSel]; for (const k of Object.keys(c.f)) mcSetFault(c.id, k, null); render(); };
+$('mcClearAll').onclick = () => { memClearFaults(MC.m); disDirty = true; render(); };
+function renderMemChips() {
+  const ch = MC.m.chips; if (mcSel >= ch.length) mcSel = 0;
+  if (mcDrawn !== ch[mcSel].id + '/' + ch[mcSel].part) mcDraw();
+  mcTiles();
+  const acc = MC.m.acc; if (!mcPrevAcc || mcPrevAcc.length !== acc.length) mcPrevAcc = new Uint32Array(acc.length);
+  for (const t of $('mcTiles').querySelectorAll('.mctile')) { const a = MC.acc(+t.dataset.i); t.classList.toggle('act', a >= 0 && acc[a] !== mcPrevAcc[a]); }
+  mcPrevAcc.set(acc);
+  const c = ch[mcSel], B = MC.bus();
+  for (const [, name, kind] of MEM_PINOUTS[c.part]) {
+    const el = mcEls[name], f = name in c.f;
+    const v = kind === 'p' ? 'p' : kind === 'g' ? 'g' : f ? c.f[name] : MC.net(c, mcSel, name, B);
+    const cls = v === 'z' ? 'vz' : v === 'p' ? 'vp' : v === 'g' ? 'vg' : v ? 'v1' : 'v0';
+    const changed = el.prev !== null && el.prev !== v && v !== 'p' && v !== 'g';
+    el.g.classList.remove('v1', 'v0', 'vz', 'vp', 'vg', 'changed'); el.g.classList.add(cls);
+    if (changed && !running) el.g.classList.add('changed');
+    el.g.classList.toggle('forced', f); el.g.classList.toggle('fz', f && c.f[name] === 'z');
+    el.sv.textContent = v === 'z' ? 'Z' : v === 'p' ? '+' : v === 'g' ? '⏚' : v; el.prev = v;
+  }
+  const fl = Object.entries(c.f), total = memFaultList(MC.m).length;
+  $('mcFaults').textContent = fl.length ? fl.map(([k, v]) => `${k} ${mcFaultText(v)}`).join(' · ') : '';
+  $('mcClear').disabled = !fl.length; $('mcClearAll').disabled = !total;
+  $('mcInfo').textContent = total ? `${total} pin fault${total === 1 ? '' : 's'} set` : 'live pins · click a pin to disconnect it or hold it high or low';
+}
+mcDraw();
+var mcReady = true;      // (var: render can run before this point)
 
 // ---------- collapsible side panels ----------
 for (const sec of document.querySelectorAll('.side .panel')) {
