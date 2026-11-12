@@ -11,6 +11,14 @@
 // (bits 1-0 page 0 ... bits 7-6 page 3). Slot 0 holds the 32K BIOS + BASIC ROM, on these Sonys also the 16K
 // Personal Data Bank firmware at 8000h, and on the HB-55P its 16K of RAM at C000h. Slots 1 and 3 are the
 // cartridge slots. The HB-75P has 64K of RAM in slot 2.
+// Memory chips (src/memchips.js), for the pin display and fault simulation, from the Sony service manual's
+// schematic (MAIN 1/2): IC42 (BIOS) and IC43 (BASIC) are the two 16K halves of the system ROM (one 32K mask ROM in
+// IC42 on some boards), IC44 is the firmware ROM; IC58-IC65 are the main RAM, one chip per data bit D0-D7 (4116s
+// for the HB-55P's 16K, 64K chips for the HB-75P); IC3-IC6 and IC9-IC12 are the eight 4116s of the video RAM,
+// IC3 holding the video processor's RD0 (the most significant bit) and IC12 its RD7.
+// Address multiplexing as drawn: main RAM pins A0-A6 carry AB0-AB6 then AB7-AB13, and A7 carries AB14 then AB15;
+// video RAM pin An is the video processor's AD(n+1), which carries address bit 6-n (row) then 13-n (column).
+// IC62-IC65 are taken to continue the pattern of IC58-IC61 (D4-D7).
 // Cassette: .cas tape images are handled by trapping the BIOS tape routines (TAPION 00E1h, TAPIN 00E4h, TAPIOF
 // 00E7h, TAPOON 00EAh, TAPOUT 00EDh, TAPOOF 00F0h) instead of modelling the audio signal, so loading and saving
 // are instant. A .cas file is the bytes of each tape block, every block preceded by an 8-byte marker.
@@ -126,9 +134,19 @@ class MSXMachine {
     this.bios = new Uint8Array(0x8000); this.hasBios = false;
     this.fw = new Uint8Array(0x4000); this.hasFw = false; this.fwOn = true;
     this.ram = new Uint8Array(0x10000);
+    this.vram = new Uint8Array(0x4000);
+    const C = (id, part, what, range, arr, base, abits, extra) => new MemChip(id, part, what, range, arr, base, abits, extra);
+    this.romChips = [C('IC42', '27128', 'system ROM: BIOS', '0000h-3FFFh in slot 0', this.bios, 0, 14, { rom: true }), C('IC43', '27128', 'system ROM: BASIC', '4000h-7FFFh in slot 0', this.bios, 0x4000, 14, { rom: true }),
+      C('IC44', '27128', 'firmware ROM: Personal Data Bank', '8000h-BFFFh in slot 0', this.fw, 0, 14, { rom: true })];
+    const amap16 = [0, 1, 2, 3, 4, 5, 6].map(n => (1 << n) | (1 << (n + 7))), amap64 = [...amap16, 0xC000];
+    this.ram16 = [0, 1, 2, 3, 4, 5, 6, 7].map(bit => C('IC' + (58 + bit), '4116', `main RAM, data bit ${bit}`, 'C000h-FFFFh in slot 0', this.ram, 0xC000, 14, { dram: true, bit, mux: 7, amap: amap16 }));
+    this.ram64 = [0, 1, 2, 3, 4, 5, 6, 7].map(bit => C('IC' + (58 + bit), '4164', `main RAM, data bit ${bit}`, '0000h-FFFFh in slot 2', this.ram, 0, 16, { dram: true, bit, mux: 8, amap: amap64 }));
+    const vmap = [0, 1, 2, 3, 4, 5, 6].map(n => (1 << (6 - n)) | (1 << (13 - n)));
+    this.vBank = [3, 4, 5, 6, 9, 10, 11, 12].map((ic, k) => C('IC' + ic, '4116', `video RAM, data bit ${7 - k} (RD${k})`, 'video RAM 0000h-3FFFh, reached through the video processor', this.vram, 0, 14, { dram: true, bit: 7 - k, mux: 7, amap: vmap }));
+    this.acc = new Uint32Array(5);                  // accesses: 0 BIOS, 1 BASIC, 2 firmware, 3 main RAM, 4 video RAM
+    this.faulty = false; this.vview = null;
     this.setMachine('hb55p');
     this.carts = [null, null, null, null];          // by primary slot; 1 and 3 are the cartridge slots
-    this.vram = new Uint8Array(0x4000);
     this.vreg = new Uint8Array(8);
     this.psg = new Uint8Array(16);
     this.keys = new Uint8Array(11);                 // bit set = key down
@@ -144,7 +162,15 @@ class MSXMachine {
     this.reset();
   }
   // HB-55P: 16K of RAM at C000h in slot 0. HB-75P: 64K of RAM in slot 2.
-  setMachine(m) { this.machine = m; this.ramSlot = m === 'hb75p' ? 2 : 0; this.ramBase = m === 'hb75p' ? 0 : 0xC000; this.ramSize = 0x10000 - this.ramBase; }
+  setMachine(m) {
+    this.machine = m; this.ramSlot = m === 'hb75p' ? 2 : 0; this.ramBase = m === 'hb75p' ? 0 : 0xC000; this.ramSize = 0x10000 - this.ramBase;
+    if (this.chips) memClearFaults(this);           // the RAM chips change with the machine
+    this.ramBank = m === 'hb75p' ? this.ram64 : this.ram16;
+    this.chips = [...this.romChips, ...this.ramBank, ...this.vBank];
+    this.banks = [[this.romChips[0]], [this.romChips[1]], [this.romChips[2]], this.ramBank, this.vBank];
+    this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
+    this.vview = null;
+  }
   reset() {
     this.cpu.reset();
     this.t = 0; this.nextLine = MSX.LINE_T; this.line = 0; this.frames = 0;
@@ -164,26 +190,29 @@ class MSXMachine {
     if (slot === 0) { if (a < 0x8000) return 'bios'; if (a < 0xC000 && this.hasFw && this.fwOn) return 'fw'; return null; }
     return this.carts[slot] ? 'cart' : null;
   }
-  readSlot(slot, a) {
+  readSlot(slot, a, quiet) {
+    const f = this.faulty; let v = 0xFF, sel = -1;
     switch (this.device(slot, a)) {
-      case 'ram': return this.ram[a];
-      case 'bios': return this.bios[a];
-      case 'fw': return this.fw[a - 0x8000];
-      case 'cart': return this.carts[slot].read(a);
+      case 'ram': if (!quiet) this.acc[3]++; v = f && this.ramBank.faulty ? memBankRead(this.ramBank, a - this.ramBase, quiet) : this.ram[a]; break;
+      case 'bios': sel = a >> 14; if (!quiet) this.acc[sel]++; v = f && this.romChips[sel].faulty ? memBankRead(this.banks[sel], a & 0x3FFF, quiet) : this.bios[a]; break;
+      case 'fw': sel = 2; if (!quiet) this.acc[2]++; v = f && this.romChips[2].faulty ? memBankRead(this.banks[2], a - 0x8000, quiet) : this.fw[a - 0x8000]; break;
+      case 'cart': v = this.carts[slot].read(a); break;
     }
-    return 0xFF;
+    // a ROM whose chip enable is stuck low drives the bus during every memory read: the lines carry the AND of the two
+    if (f) for (let i = 0; i < 3; i++) { const c = this.romChips[i]; if (c.always && i !== sel && (i < 2 ? this.hasBios : this.hasFw)) v &= memBankRead(this.banks[i], a & 0x3FFF, true); }
+    return v;
   }
   read(a) { return this.readSlot((this.ppiA >> ((a >> 14) * 2)) & 3, a); }
-  peek(a) { return this.read(a); }
+  peek(a) { return this.readSlot((this.ppiA >> ((a >> 14) * 2)) & 3, a, true); }
   peekW(a) { return this.read(a) | this.read((a + 1) & 0xFFFF) << 8; }
   write(a, v) {
     const slot = (this.ppiA >> ((a >> 14) * 2)) & 3, d = this.device(slot, a);
-    if (d === 'ram') this.ram[a] = v; else if (d === 'cart') this.carts[slot].write(a, v);
+    if (d === 'ram') { this.acc[3]++; if (this.faulty && this.ramBank.faulty) memBankWrite(this.ramBank, a - this.ramBase, v); else this.ram[a] = v; } else if (d === 'cart') this.carts[slot].write(a, v);
   }
   // ---- I/O ports ----
   input(p) {
     switch (p & 0xFF) {
-      case 0x98: { const v = this.vbuf; this.vbuf = this.vram[this.vaddr]; this.vaddr = (this.vaddr + 1) & 0x3FFF; this.vlatch = -1; return v; }
+      case 0x98: { const v = this.vbuf; this.vbuf = this.vget(this.vaddr); this.vaddr = (this.vaddr + 1) & 0x3FFF; this.vlatch = -1; return v; }
       case 0x99: { const v = this.vstat; this.vstat &= 0x1F; this.vlatch = -1; return v; }
       case 0xA2: return this.psgAddr === 14 ? (this.joy & 0x3F) | 0x40 | 0x80 : this.psg[this.psgAddr & 15];   // bit 6: ANSI keyboard; bit 7: cassette input
       case 0xA8: return this.ppiA;
@@ -195,11 +224,11 @@ class MSXMachine {
   }
   output(p, v) {
     switch (p & 0xFF) {
-      case 0x98: this.vram[this.vaddr] = v; this.vbuf = v; this.vaddr = (this.vaddr + 1) & 0x3FFF; this.vlatch = -1; this.vdpWrites++; break;
+      case 0x98: this.vput(this.vaddr, v); this.vbuf = v; this.vaddr = (this.vaddr + 1) & 0x3FFF; this.vlatch = -1; this.vdpWrites++; break;
       case 0x99:
         if (this.vlatch < 0) { this.vlatch = v; break; }
         if (v & 0x80) this.vreg[v & 7] = this.vlatch;
-        else { this.vaddr = ((v & 0x3F) << 8) | this.vlatch; if (!(v & 0x40)) { this.vbuf = this.vram[this.vaddr]; this.vaddr = (this.vaddr + 1) & 0x3FFF; } }
+        else { this.vaddr = ((v & 0x3F) << 8) | this.vlatch; if (!(v & 0x40)) { this.vbuf = this.vget(this.vaddr); this.vaddr = (this.vaddr + 1) & 0x3FFF; } }
         this.vlatch = -1; break;
       case 0xA0: this.psgAddr = v & 15; break;
       case 0xA1: this.psg[this.psgAddr] = v; if (this.psgAddr === 13) { this.envPos = 0; this.envCnt = 0; } break;      // writing the shape restarts the envelope
@@ -210,6 +239,15 @@ class MSXMachine {
         else { const b = 1 << ((v >> 1) & 7); this.ppiC = v & 1 ? this.ppiC | b : this.ppiC & ~b; }   // set or clear one bit of port C
         break;
     }
+  }
+  // the video processor's own reads and writes of its RAM
+  vget(a) { this.acc[4]++; return this.faulty && this.vBank.faulty ? memBankRead(this.vBank, a, false) : this.vram[a]; }
+  vput(a, v) { this.acc[4]++; if (this.faulty && this.vBank.faulty) memBankWrite(this.vBank, a, v); else this.vram[a] = v; }
+  // with a video RAM fault, the display reads a copy of the RAM as seen through the faulty chips, refreshed every frame
+  videoView() {
+    if (!(this.faulty && this.vBank.faulty)) { this.vview = null; return; }
+    if (!this.vview) this.vview = new Uint8Array(0x4000);
+    for (let a = 0; a < 0x4000; a++) this.vview[a] = memBankRead(this.vBank, a, true);
   }
   key(name, down) { const p = MSX_KEYPOS[name]; if (!p) return; if (down) this.keys[p[0]] |= 1 << p[1]; else this.keys[p[0]] &= ~(1 << p[1]); }
   // ---- video ----
@@ -226,7 +264,7 @@ class MSXMachine {
     };
   }
   renderLine(y) {
-    const r = this.vreg, vr = this.vram, fb = this.fb, B = MSX.BORDER, FW = MSX.FW;
+    const r = this.vreg, vr = this.vview || this.vram, fb = this.fb, B = MSX.BORDER, FW = MSX.FW;
     const bd = r[7] & 15 || 1, row = (y + B) * FW;
     for (let x = 0; x < B; x++) { fb[row + x] = bd; fb[row + B + 256 + x] = bd; }
     const out = row + B;
@@ -286,7 +324,7 @@ class MSXMachine {
     const bd = this.vreg[7] & 15 || 1, B = MSX.BORDER, FW = MSX.FW;
     this.fb.fill(bd, 0, B * FW); this.fb.fill(bd, (B + 192) * FW);
     const f = this.front; this.front = this.fb; this.fb = f;
-    this.frames++;
+    this.frames++; this.videoView();
   }
   // ---- per instruction ----
   // ---- sound ----

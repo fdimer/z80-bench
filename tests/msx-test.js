@@ -1,7 +1,7 @@
 // MSX model checks with a synthetic program (no Microsoft or Sony code): node tests/msx-test.js
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const ctx = { console }; vm.createContext(ctx);
-for (const f of ['z80core.js', 'z80asm.js', 'msx.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
+for (const f of ['z80core.js', 'z80asm.js', 'memchips.js', 'msx.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
 vm.runInContext('this.MSXMachine = MSXMachine; this.MSXCart = MSXCart; this.MSX = MSX; this.assemble = assemble;', ctx);
 let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 // A tiny "BIOS": text mode, one character pattern, a letter on screen, frame interrupts counted in RAM.
