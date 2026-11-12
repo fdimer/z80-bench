@@ -13,12 +13,11 @@
 // cartridge slots. The HB-75P has 64K of RAM in slot 2.
 // Memory chips (src/memchips.js), for the pin display and fault simulation, from the Sony service manual's
 // schematic (MAIN 1/2): IC42 (BIOS) and IC43 (BASIC) are the two 16K halves of the system ROM (one 32K mask ROM in
-// IC42 on some boards), IC44 is the firmware ROM; IC58-IC65 are the main RAM, one chip per data bit D0-D7 (4116s
+// IC42 on some boards), IC44 is the firmware ROM; IC58-IC61 and IC65-IC68 are the main RAM, one chip per data bit D0-D7 (4116s
 // for the HB-55P's 16K, 64K chips for the HB-75P); IC3-IC6 and IC9-IC12 are the eight 4116s of the video RAM,
 // IC3 holding the video processor's RD0 (the most significant bit) and IC12 its RD7.
 // Address multiplexing as drawn: main RAM pins A0-A6 carry AB0-AB6 then AB7-AB13, and A7 carries AB14 then AB15;
 // video RAM pin An is the video processor's AD(n+1), which carries address bit 6-n (row) then 13-n (column).
-// IC62-IC65 are taken to continue the pattern of IC58-IC61 (D4-D7).
 // Cassette: .cas tape images are handled by trapping the BIOS tape routines (TAPION 00E1h, TAPIN 00E4h, TAPIOF
 // 00E7h, TAPOON 00EAh, TAPOUT 00EDh, TAPOOF 00F0h) instead of modelling the audio signal, so loading and saving
 // are instant. A .cas file is the bytes of each tape block, every block preceded by an 8-byte marker.
@@ -139,8 +138,8 @@ class MSXMachine {
     this.romChips = [C('IC42', '27128', 'system ROM: BIOS', '0000h-3FFFh in slot 0', this.bios, 0, 14, { rom: true }), C('IC43', '27128', 'system ROM: BASIC', '4000h-7FFFh in slot 0', this.bios, 0x4000, 14, { rom: true }),
       C('IC44', '27128', 'firmware ROM: Personal Data Bank', '8000h-BFFFh in slot 0', this.fw, 0, 14, { rom: true })];
     const amap16 = [0, 1, 2, 3, 4, 5, 6].map(n => (1 << n) | (1 << (n + 7))), amap64 = [...amap16, 0xC000];
-    this.ram16 = [0, 1, 2, 3, 4, 5, 6, 7].map(bit => C('IC' + (58 + bit), '4116', `main RAM, data bit ${bit}`, 'C000h-FFFFh in slot 0', this.ram, 0xC000, 14, { dram: true, bit, mux: 7, amap: amap16 }));
-    this.ram64 = [0, 1, 2, 3, 4, 5, 6, 7].map(bit => C('IC' + (58 + bit), '4164', `main RAM, data bit ${bit}`, '0000h-FFFFh in slot 2', this.ram, 0, 16, { dram: true, bit, mux: 8, amap: amap64 }));
+    this.ram16 = [0, 1, 2, 3, 4, 5, 6, 7].map(bit => C('IC' + [58, 59, 60, 61, 65, 66, 67, 68][bit], '4116', `main RAM, data bit ${bit}`, 'C000h-FFFFh in slot 0', this.ram, 0xC000, 14, { dram: true, bit, mux: 7, amap: amap16 }));
+    this.ram64 = [0, 1, 2, 3, 4, 5, 6, 7].map(bit => C('IC' + [58, 59, 60, 61, 65, 66, 67, 68][bit], '4164', `main RAM, data bit ${bit}`, '0000h-FFFFh in slot 2', this.ram, 0, 16, { dram: true, bit, mux: 8, amap: amap64 }));
     const vmap = [0, 1, 2, 3, 4, 5, 6].map(n => (1 << (6 - n)) | (1 << (13 - n)));
     this.vBank = [3, 4, 5, 6, 9, 10, 11, 12].map((ic, k) => C('IC' + ic, '4116', `video RAM, data bit ${7 - k} (RD${k})`, 'video RAM 0000h-3FFFh, reached through the video processor', this.vram, 0, 14, { dram: true, bit: 7 - k, mux: 7, amap: vmap }));
     this.acc = new Uint32Array(5);                  // accesses: 0 BIOS, 1 BASIC, 2 firmware, 3 main RAM, 4 video RAM
