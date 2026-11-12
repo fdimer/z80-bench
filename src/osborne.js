@@ -29,9 +29,13 @@ const OSB_KEYS = [
 // Main logic board (schematic sheets 5, 9 and 10): UD18 is the 2764 boot ROM (ROM 0); UD15 is the ROM 1 socket,
 // fitted with a 6116 as scratch RAM; UC3, UC6, UA3 and UA4 are the four 6116 video RAMs (characters C000h-C7FFh
 // and C800h-CFFFh, attributes D000h-D7FFh and D800h-DFFFh); UB12 and UA11 are the two 6116 font RAMs.
-// The 128K of dynamic RAM is on the separate RAM board (connector P11), which the main-board schematic does not
-// show: it is modelled as sixteen 4164s, one per data bit per bank, with the usual multiplexing (A0-A7 = row,
-// A8-A15 = column), so a chip's address pin n carries CPU address lines n and n+8.
+// The 128K of dynamic RAM is on the separate RAM board RD1140 (connector P11), which the main-board schematic does
+// not show. Its wiring was worked out from photos and continuity readings of a real board: sixteen OKI M3764-20RS
+// (4164 type), U8-U15 = D0-D7 of the row selected while PRI1 (PIA PA0) is low, U17-U24 = D0-D7 of the row selected
+// while PRI1 is high. A 74LS20 decodes A15-A12 all high, which keeps F000h-FFFFh in U8-U15 whatever PRI1 says.
+// Neither row gets CAS during a ROM or video RAM access. U25 (74LS244, enabled by RAE*) passes the row address and
+// U16 the column address; which CPU address line reaches which RAM address pin has not been measured, so the usual
+// order is assumed (A0-A7 = row, A8-A15 = column: a chip's address pin n carries CPU address lines n and n+8).
 // Each chip pin can be given a fault: 'z' (disconnected), 0 (stuck low) or 1 (stuck high).
 //   address pin: that address bit is forced (a disconnected input floats high)
 //   data pin: the bit reads as the forced level and is stored as the forced level (disconnected: reads and stores 1)
@@ -47,6 +51,7 @@ const OSB_PINOUTS = {
   '4164': [[1, 'NC', 'c'], [2, 'DIN', 'i'], [3, 'WE', 'i'], [4, 'RAS', 'i'], [5, 'A0', 'i'], [6, 'A2', 'i'], [7, 'A1', 'i'], [8, 'VCC', 'p'],
     [9, 'A7', 'i'], [10, 'A5', 'i'], [11, 'A4', 'i'], [12, 'A3', 'i'], [13, 'A6', 'i'], [14, 'DOUT', 'i'], [15, 'CAS', 'i'], [16, 'GND', 'g']]
 };
+OSB_PINOUTS.M3764 = OSB_PINOUTS['4164'];   // OKI's 64K x 1 dynamic RAM, same pinout
 class OsbChip {
   constructor(id, part, what, range, arr, base, abits, extra) {
     Object.assign(this, { id, part, what, range, arr, base, abits, mask: (1 << abits) - 1, f: {} }, extra || {});
@@ -111,7 +116,7 @@ class Osborne {
       C('UA11', '6116', 'font RAM: alternate character shapes', 'written through 0800h-0FFFh (and 1800h-1FFFh) while the ROM bank is on', this.font, 0x800, 11)
     ];
     for (let bank = 0; bank < 2; bank++) for (let bit = 0; bit < 8; bit++)
-      this.chips.push(C(`RAM${bank}.D${bit}`, '4164', `RAM board: bank ${bank}, data bit ${bit}`, bank ? '0000h-EFFFh while bank 1 is selected' : '0000h-EFFFh while bank 0 is selected, and F000h-FFFFh always', this.dram[bank], 0, 16, { dram: true, bank, bit }));
+      this.chips.push(C('U' + ((bank ? 17 : 8) + bit), 'M3764', `RAM board: data bit ${bit}, ${bank ? 'bank 1 row (PRI1 high)' : 'bank 0 row (PRI1 low)'}`, bank ? '0000h-EFFFh while bank 1 is selected' : '0000h-EFFFh while bank 0 is selected, and F000h-FFFFh always', this.dram[bank], 0, 16, { dram: true, bank, bit }));
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
     this.acc = new Uint32Array(10);          // accesses: 0-7 the byte-wide chips in the order above, 8 and 9 the two DRAM banks
     this.faulty = false;
