@@ -27,4 +27,36 @@ const px = new Uint8Array(640 * 240); m.vidEna = true; m.renderFrame(px); ok(tru
 m.setFault('UC3', 'D0', null); m.setFault('UC3', 'CE', 0); m.pa = 0; m.write(0x4010, 0xFF); m.vchar[0x010] = 0x0F;
 ok(m.read(0x4010) === 0x0F, 'chip enable stuck low: the video RAM fights the DRAM on the bus (AND of the two)');
 m.clearFaults(); ok(!m.faulty && m.read(0x4010) === 0xFF && m.faultList().length === 0, 'clearing the faults restores normal reads');
+// ---- faults on P1, the RAM board's connector ----
+vm.runInContext('this.OSB = OSB;', ctx);
+m.pa = 0x00; m.write(0x1000, 0x5A); m.write(0x1200, 0x00);
+m.setFault('P1', 'A9', 'z'); ok(m.faulty && m.read(0x1000) === 0x00, 'P1 A9 disconnected: the board sees A9 high, so 1000h reads the cell at 1200h');
+m.write(0x1000, 0x77); m.setFault('P1', 'A9', null); ok(m.read(0x1000) === 0x5A && m.read(0x1200) === 0x77, 'and a write to 1000h lands at 1200h');
+m.setFault('P1', 'D3', 0); m.write(0x2100, 0xFF); ok(m.read(0x2100) === 0xF7, 'P1 D3 stuck low: the bit reads 0'); m.setFault('P1', 'D3', null); ok(m.read(0x2100) === 0xF7, 'and was stored as 0');
+m.dram[1][0x3000] = 0x11; m.dram[0][0x3000] = 0x22; m.dram[0][0xF800] = 0x33;
+m.setFault('P1', 'PRI1', 'z'); ok(m.read(0x3000) === 0x11 && m.read(0xF800) === 0x33, 'P1 PRI1 disconnected: bank 1 answers below F000h whatever port A says, and F000h up is still bank 0'); m.setFault('P1', 'PRI1', null);
+m.pa = 0x80; m.dram[1][0x0100] = 0x0F; ok(m.read(0x0100) === 0xA5, 'ROM bank on: the RAM board stands aside');
+m.setFault('P1', 'ROMDEC', 'z'); ok(m.read(0x0100) === (0xA5 & m.dram[0][0x0100]), 'P1 ROMDEC* disconnected: the RAM board answers as well, and the bus carries the AND of ROM and RAM');
+m.write(0x0100, 0x3C); ok(m.dram[0][0x0100] === 0x3C && m.font[0x100] === 0x3C, 'and a write goes to the font RAM and to the DRAM'); m.setFault('P1', 'ROMDEC', null);
+m.pa = 0x00; m.write(0x4000, 0x99);
+m.setFault('P1', 'ROMDEC', 0); ok(m.read(0x4000) === 0xFF, 'P1 ROMDEC* stuck low: the board never answers, reads float'); m.setFault('P1', 'ROMDEC', null);
+m.setFault('P1', 'CAS', 1); m.write(0x4000, 0x00); ok(m.read(0x4000) === 0xFF, 'P1 CAS* stuck high: no cell is read'); m.setFault('P1', 'CAS', null); ok(m.read(0x4000) === 0x99, 'or written');
+m.setFault('P1', 'RD', 0); m.write(0x4000, 0x00); m.setFault('P1', 'RD', null); ok(m.read(0x4000) === 0x99, 'P1 RD* stuck low: write enable never goes low, the write is lost');
+m.setFault('P1', 'RD', 'z'); m.read(0x4000); m.setFault('P1', 'RD', null); ok(m.read(0x4000) === 0xFF, 'P1 RD* disconnected: every access is a write, a read overwrites the cell with 1s');
+m.write(0x5512, 0x42); m.write(0x55FF, 0x24); m.setFault('P1', 'RAE', 1); ok(m.read(0x5512) === 0x24, 'P1 RAE* stuck high: the row address floats to FFh'); m.setFault('P1', 'RAE', null);
+m.write(0x1234, 0x01); m.write(0x1210, 0xAB); m.setFault('P1', 'CAE', 0); ok(m.read(0x1234) === 0xAB, 'P1 CAE* stuck low: the row is the AND of the two address bytes, so 1234h reads the cell at 1210h'); m.setFault('P1', 'CAE', null);
+m.write(0x6010, 0x12); m.write(0x6090, 0x34); m.setFault('P1', 'RFSH', 0); ok(m.read(0x6010) === 0x34, 'P1 RFSH* stuck low: row bit 7 comes from the refresh bit, 6010h reads the cell at 6090h'); m.setFault('P1', 'RFSH', null);
+m.setFault('P1', 'MREQ', 'z'); ok(m.read(0x6010) === 0x12, 'P1 MREQ* disconnected: no effect'); m.setFault('P1', 'MREQ', null);
+// refresh: run a small loop in bank 0 for longer than the RAMs hold their data
+{ const run = t => { let n = 0; while (n < t) n += m.step(); };
+  m.clearFaults(); m.reset(); m.pia0.onPA = () => {}; m.pa = 0x00;
+  m.dram[0].fill(0); m.dram[1].fill(0x55); m.dram[0][0] = 0x18; m.dram[0][1] = 0xFE;      // JR $ at 0000h
+  m.setFault('P1', 'D0', 0); run(3 * ctx.OSB.DRAM_HOLD_T); m.setFault('P1', 'D0', null);
+  ok(m.dram[1][0x1234] === 0x55 && m.dram[0][0x4321] === 0x00, 'with a fault that leaves refresh alone, both banks keep their data');
+  m.cpu.i = 0xFF; m.setFault('P1', 'RFSH', 'z'); run(3 * ctx.OSB.DRAM_HOLD_T); m.setFault('P1', 'RFSH', null);
+  ok(m.dram[0][0x4321] === 0x00 && m.dram[0][0] === 0x18, 'P1 RFSH* disconnected, I = FFh: refresh still reaches bank 0 (its address is F000h up)');
+  ok(m.dram[1][0x1234] === 0xFF && m.dram[1][0xE0FF] === 0xFF, 'but bank 1 gets no RAS and forgets');
+  m.dram[0][0x4321] = 0x77; m.setFault('P1', 'RAS', 0); run(3 * ctx.OSB.DRAM_HOLD_T); m.setFault('P1', 'RAS', null);
+  ok(m.dram[0][0x4321] === 0xFF, 'P1 RAS stuck low: nothing is refreshed and everything is forgotten'); }
+m.clearFaults(); ok(!m.faulty && m.faultList().length === 0, 'all P1 faults cleared');
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);

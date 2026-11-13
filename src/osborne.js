@@ -12,6 +12,7 @@ const OSB = {
   COLS: 80, ROWS: 24, ROW_STRIDE: 128, CELL_H: 10
 };
 OSB.FRAME_T = OSB.LINE_T * OSB.LINES;   // 66,560 T-states = 60 Hz
+OSB.DRAM_HOLD_T = 2 * OSB.CPU_HZ;       // how long a dynamic RAM row keeps its data with no RAS (the datasheet promises 2 ms; real chips last far longer)
 
 // Keyboard matrix: KEYMAP[row][bit] (bit 7 first). Rows are selected by A8-A15 during IN A,(14h).
 const OSB_KEYS = [
@@ -83,6 +84,50 @@ class OsbChip {
   wr(off, v) { if (!this.noWrite) this.arr[this.base + ((off & this.aAnd | this.aOr) & this.mask)] = v & this.dAnd | this.dOr; }
 }
 
+// P1, the RAM board's 72-way connector to the main logic board (the main board calls it P11). Signals as measured on
+// the RD1140 board; the power, ground and spare pins from the main board schematic (sheet 5).
+// A fault on a P1 pin is on the RAM board's side of the contact: the board sees a floating input (which a TTL input
+// reads as high), or a level held high or low, while the rest of the machine still sees the true signal.
+//   A0-A15: the address bit the board's buffers (and its F000h decoder, for A12-A15) see is forced
+//   D0-D7: the bit reads as the forced level and is stored as the forced level (disconnected: reads and stores 1)
+//   PRI1: the bank select is forced (disconnected: bank 1 always, below F000h)
+//   ROMDEC*, VRAMDEC*: high or disconnected, the board no longer stands aside for the ROM bank or the video RAM, so it
+//     answers as well (reads carry the AND of the two, writes go to both); low, the board never answers
+//   RAS, CAS*: any fault stops the strobe's edges, so no cell is read or written; without RAS nothing is refreshed either
+//   RD*: write enable is RD* inverted (latched as the row address ends). High or disconnected, every access is a write,
+//     so cells are overwritten with 1s and reads float to 1s; low, writes are lost
+//   RAE*: high or disconnected, the row buffer never drives, so the row address floats to FFh; low, it also drives during
+//     the column, and the column the RAMs see is the AND of the two address bytes. Either way the write-enable latch is
+//     never clocked, so writes are lost
+//   CAE*: high or disconnected, the column address floats to FFh; low, the row the RAMs see is the AND of the two bytes
+//   RFSH*: high or disconnected, a refresh cycle only gives RAS to the row of chips its address happens to select, so
+//     the other bank is refreshed only by being used, and forgets; low, row address bit 7 is replaced by the board's
+//     refresh bit all the time, and half the cells can no longer be reached
+//   MREQ*: only clocks the board's unused eighth refresh bit; a fault has no effect
+const OSB_P1_PINS = (() => {
+  const sig = { 2: 'ROMDEC', 3: 'MREQ', 4: 'VRAMDEC', 5: 'RFSH', 7: 'RAS', 13: 'CAS', 16: 'RD', 17: 'CAE', 19: 'RAE', 27: 'A15', 28: 'A14', 29: 'A13', 30: 'A12',
+    31: 'A11', 33: 'A10', 34: 'A9', 35: 'A8', 36: 'A7', 37: 'A6', 39: 'A5', 40: 'A4', 41: 'A3', 42: 'A2', 43: 'A1', 44: 'A0',
+    47: 'D7', 48: 'D6', 49: 'D5', 50: 'D4', 51: 'D3', 53: 'D2', 54: 'D1', 55: 'D0', 61: 'PRI1' };
+  const gnd = new Set([1, 9, 10, 11, 12, 23, 24, 25, 26, 32, 38, 45, 46, 52, 60, 64]), nc = { 15: 'WR n/c', 21: 'CAS n/c', 62: 'PRI2 n/c' };
+  const pin = n => sig[n] ? [n, sig[n], 'i'] : gnd.has(n) ? [n, n === 1 ? 'FRAME' : 'GND', 'g'] : n === 63 ? [n, '−12V', 'p'] : n >= 65 && n <= 68 ? [n, '+5V', 'p'] : n >= 69 ? [n, '+12V', 'p'] : [n, nc[n] || (n >= 56 && n <= 59 ? 'n/c' : 'spare'), 'c'];
+  const odd = [], even = []; for (let n = 1; n <= 72; n += 2) { odd.push(pin(n)); even.push(pin(n + 1)); }
+  return odd.concat(even.reverse());      // drawn as two columns: odd pins down the left, even pins down the right
+})();
+OSB_PINOUTS.P1 = OSB_P1_PINS;
+class OsbP1 {
+  constructor() { Object.assign(this, { id: 'P1', part: 'P1', what: 'RAM board connector: 72 ways to the main logic board', range: 'a fault here is on the RAM board\'s side of the contact', f: {}, fresh: true }); this.recalc(); }
+  setFault(pin, v) { if (v === null || v === undefined) delete this.f[pin]; else this.f[pin] = v; this.recalc(); }
+  get faulty() { for (const k in this.f) return true; return false; }
+  recalc() {
+    const f = this.f, lvl = k => f[k] === 'z' ? 1 : f[k]; let aAnd = 0xFFFF, aOr = 0, dAnd = 0xFF, dOr = 0, m;
+    for (const k in f) {
+      if ((m = /^A(\d+)$/.exec(k))) { if (lvl(k)) aOr |= 1 << +m[1]; else aAnd &= ~(1 << +m[1]); }
+      else if ((m = /^D(\d)$/.exec(k))) { if (lvl(k)) dOr |= 1 << +m[1]; else dAnd &= ~(1 << +m[1]); }
+    }
+    Object.assign(this, { aAnd, aOr, dAnd, dOr, fresh: true });      // fresh: the refresh bookkeeping starts again from now
+  }
+}
+
 const CYC_T = { M1: 4, MR: 3, MW: 3, IR: 4, IW: 4, IA: 6 };
 
 class Osborne {
@@ -118,6 +163,8 @@ class Osborne {
     ];
     for (let bank = 0; bank < 2; bank++) for (let bit = 0; bit < 8; bit++)
       this.chips.push(C('U' + ((bank ? 17 : 8) + bit), 'M3764', `RAM board: data bit ${bit}, ${bank ? 'bank 1 row (PRI1 high)' : 'bank 0 row (PRI1 low)'}`, bank ? '0000h-EFFFh while bank 1 is selected' : '0000h-EFFFh while bank 0 is selected, and F000h-FFFFh always', this.dram[bank], 0, 16, { dram: true, bank, bit }));
+    this.p1 = new OsbP1(); this.chips.push(this.p1);      // the RAM board's connector, last so the chip indexes stay put
+    this.rasT = new Float64Array(256);                    // when each group of rows last had RAS: bank * 128 + (row & 7Fh); kept only while P1 has a fault
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
     this.acc = new Uint32Array(10);          // accesses: 0-7 the byte-wide chips in the order above, 8 and 9 the two DRAM banks
     this.faulty = false;
@@ -130,6 +177,7 @@ class Osborne {
     this.pa = this.pia0.pa();               // PIA lines are inputs after reset; the bank lines float high
     this.attrLatch = 0; this.vidEna = false; this.rtc = 0;
     this.frameT = 0; this.frames = 0; this.vblank = false; this.pia0.setCB1(0);
+    this.now = 0; this.lastR = 0; this.p1.fresh = true;      // T-states since reset, for the DRAM refresh bookkeeping
     this.fdcStatus = 0x80;                  // "not ready": no drive emulated yet
   }
   // ---- memory ----
@@ -194,29 +242,79 @@ class Osborne {
     }
     arr[a] = arr[a] & keep | v & ~keep;
   }
+  // ---- the RAM board seen through the faults on its connector P1 ----
+  // What the board makes of a memory cycle at address a: which row of chips it selects (-1 none, 0 or 1), the cell they
+  // address, and what its strobes and write enable do. See the notes above OSB_P1_PINS.
+  ramBoard(a) {
+    const P = this.p1, f = P.f, pa = this.pa, lv = (k, v) => k in f ? (f[k] === 'z' ? 1 : f[k]) : v;
+    const ab = a & P.aAnd | P.aOr;
+    const romdec = lv('ROMDEC', pa & 0x80 && a < 0x4000 ? 0 : 1), vramdec = lv('VRAMDEC', pa & 0x40 && a >= 0xC000 && a < 0xE000 ? 0 : 1), pri1 = lv('PRI1', pa & 1);
+    const below = ab >= 0xF000 ? 0 : 1;                        // BELOW*: low for F000h up, as the board's 74LS20 sees A12-A15
+    let row = ab & 0xFF, col = ab >> 8;
+    if ('RAE' in f) { if (lv('RAE', 0)) row = 0xFF; else col &= ab & 0xFF; }
+    if ('CAE' in f) { if (lv('CAE', 0)) col = 0xFF; else row &= ab >> 8; }
+    if (f.RFSH === 0) row |= 0x80;                             // the refresh bit (it never toggles; taken as leaving the line high)
+    const rae = 'RAE' in f;
+    return { sel: romdec && vramdec ? (pri1 && below ? 1 : 0) : -1, below, cell: col << 8 | row, dead: 'RAS' in f || 'CAS' in f,
+      weLow: !rae && 'RD' in f && lv('RD', 0) === 1, noWrite: rae || f.RD === 0 };
+  }
+  boardRead(b, rb, quiet) {
+    if (!quiet && !('RAS' in this.p1.f)) this.rasT[b * 128 + (rb.cell & 0x7F)] = this.now;
+    if (rb.dead) return 0xFF;
+    if (rb.weLow) { if (!quiet) this.dramWrite(b, rb.cell, 0xFF); return 0xFF; }
+    return this.dramRead(b, rb.cell, quiet) & this.p1.dAnd | this.p1.dOr;
+  }
+  // refresh, while P1 has a fault: which groups of rows the refresh cycles of the last instruction gave RAS to
+  refreshRas() {
+    const P = this.p1, f = P.f, cpu = this.cpu, r = cpu.r & 0x7F;
+    if (P.fresh) { this.rasT.fill(this.now); P.fresh = false; this.lastR = r; return; }
+    const n = (r - this.lastR) & 0x7F; this.lastR = r;
+    if (!n || 'RAS' in f) return;
+    const rf = 'RFSH' in f ? (f.RFSH === 'z' ? 1 : f.RFSH) : 0;      // RFSH* as the board sees it during a refresh cycle
+    for (let k = 0; k < n; k++) {
+      const rb = this.ramBoard((cpu.i << 8 | cpu.r & 0x80 | (r - k) & 0x7F) & 0xFFFF), g = rb.cell & 0x7F;
+      if (!rf || rb.sel === 0 || !rb.below) this.rasT[g] = this.now;          // RAS0 EN = NAND(RFSH*, SEL0*, SEL0*, BELOW*)
+      if (!rf || rb.sel === 1) this.rasT[128 + g] = this.now;                 // RAS1 EN = NAND(SEL1*, RFSH*)
+    }
+  }
+  // once a frame, while P1 has a fault: rows that have gone too long without RAS lose their data
+  decay() {
+    if (this.p1.fresh) return;
+    for (let g = 0; g < 256; g++) if (this.now - this.rasT[g] > OSB.DRAM_HOLD_T) {
+      const arr = this.dram[g >> 7], r = g & 0x7F;
+      for (let c = 0; c < 0x10000; c += 0x100) { arr[c | r] = 0xFF; arr[c | r | 0x80] = 0xFF; }
+      this.rasT[g] = this.now;
+    }
+  }
   readF(a, quiet) {
-    const pa = this.pa, ch = this.chips; let v, sel = -1;
-    if (a >= 0xF000) { if (!quiet) this.acc[8]++; v = this.dramRead(0, a, quiet); }
-    else if (pa & 0x80 && a < 0x4000) { sel = a < 0x2000 ? 0 : 1; if (!quiet) this.acc[sel]++; v = ch[sel].rd(a, quiet); }
+    const pa = this.pa, ch = this.chips; let v = 0xFF, sel = -1, main = true;
+    if (pa & 0x80 && a < 0x4000) { sel = a < 0x2000 ? 0 : 1; if (!quiet) this.acc[sel]++; v = ch[sel].rd(a, quiet); }
     else if (pa & 0x40 && a >= 0xC000 && a < 0xE000) {
       sel = 2 + ((a >> 11) & 3); if (!quiet) this.acc[sel]++;
       if (a < 0xD000) { if (!quiet) this.attrLatch = ch[sel + 2].rd(a, true); v = ch[sel].rd(a, quiet); }
       else v = ch[sel].rd(a, quiet) | 0x0F;
-    } else { if (!quiet) this.acc[8 + (pa & 1)]++; v = this.dramRead(pa & 1, a, quiet); }
+    } else main = false;
+    // the RAM board: normally it answers whenever the main board's chips do not; through a P1 fault it decides for itself
+    if (this.p1.faulty) {
+      const rb = this.ramBoard(a), b = rb.sel;
+      if (b >= 0) { if (!quiet) this.acc[8 + b]++; const d = this.boardRead(b, rb, quiet); v = main ? v & d : d; }
+    } else if (!main) { const b = a >= 0xF000 ? 0 : pa & 1; if (!quiet) this.acc[8 + b]++; v = this.dramRead(b, a, quiet); }
     // a chip whose CE is stuck low also drives the bus (its output enable permitting): the lines carry the AND
     for (let i = 0; i < 8; i++) { const c = ch[i]; if (!c.always || i === sel || c.noRead) continue; if (i === 0 && a & 0x2000) continue; if (i === 1 && !(a & 0x2000)) continue; v &= c.rd(a, true) | (i === 4 || i === 5 ? 0x0F : 0); }
     return v;
   }
   writeF(a, v) {
-    const pa = this.pa, ch = this.chips;
-    if (a >= 0xF000) { this.acc[8]++; this.dramWrite(0, a, v); return; }
-    if (pa & 0x80 && a < 0x4000) { const i = a < 0x2000 ? 6 + ((a >> 11) & 1) : 1; this.acc[i]++; ch[i].wr(a, v); return; }
-    if (pa & 0x40 && a >= 0xC000 && a < 0xE000) {
+    const pa = this.pa, ch = this.chips; let main = true;
+    if (pa & 0x80 && a < 0x4000) { const i = a < 0x2000 ? 6 + ((a >> 11) & 1) : 1; this.acc[i]++; ch[i].wr(a, v); }
+    else if (pa & 0x40 && a >= 0xC000 && a < 0xE000) {
       const i = 2 + ((a >> 11) & 3); this.acc[i]++;
       if (a < 0xD000) { ch[i].wr(a, v); ch[i + 2].wr(a, this.attrLatch); } else ch[i].wr(a, v & 0xF0);
-      return;
-    }
-    this.acc[8 + (pa & 1)]++; this.dramWrite(pa & 1, a, v);
+    } else main = false;
+    if (this.p1.faulty) {
+      const P = this.p1, rb = this.ramBoard(a), b = rb.sel; if (b < 0) return;
+      this.acc[8 + b]++; if (!('RAS' in P.f)) this.rasT[b * 128 + (rb.cell & 0x7F)] = this.now;
+      if (!rb.dead && !rb.noWrite) this.dramWrite(b, rb.cell, v & P.dAnd | P.dOr);
+    } else if (!main) { const b = a >= 0xF000 ? 0 : pa & 1; this.acc[8 + b]++; this.dramWrite(b, a, v); }
   }
   // ---- I/O: 74LS138 on A2-A4, enabled when A7 = 0 (A5, A6 not decoded) ----
   input(p) {
@@ -269,11 +367,12 @@ class Osborne {
   afterStep(cyc, sioReq) {
     if (sioReq && this.cpu.lastEvent === 'INT') this.sio.ack();
     if (this.conn.sio) for (const c of cyc) if (c.k === 'M1') this.sio.m1(c.d);
+    if (this.p1.faulty) this.refreshRas();
   }
   // ---- time: raster position, VBLANK into PIA CB1, RTC counter ----
   advance(t) {
-    this.frameT += t;
-    while (this.frameT >= OSB.FRAME_T) { this.frameT -= OSB.FRAME_T; this.frames++; }
+    this.frameT += t; this.now += t;
+    while (this.frameT >= OSB.FRAME_T) { this.frameT -= OSB.FRAME_T; this.frames++; if (this.p1.faulty) this.decay(); }
     const vb = this.frameT >= OSB.VBL_LINE * OSB.LINE_T;
     if (vb !== this.vblank) {
       this.vblank = vb; this.pia0.setCB1(vb ? 1 : 0);
@@ -316,4 +415,4 @@ class Osborne {
     }
   }
 }
-if (typeof module !== 'undefined') module.exports = { Osborne, OSB, OSB_KEYS, OsbChip, OSB_PINOUTS };
+if (typeof module !== 'undefined') module.exports = { Osborne, OSB, OSB_KEYS, OsbChip, OsbP1, OSB_PINOUTS };
