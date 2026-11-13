@@ -9,7 +9,8 @@
 //          interrupt-acknowledge cycle is stretched until its WAIT sample falls on that clock. Instructions
 //          therefore take whole microseconds: LD A,n takes 8 clocks, not 7; PUSH takes 16, not 11.
 //   IC103  32K ROM (23256): firmware in the lower half, at 0000h-3FFFh; BASIC in the upper half, at C000h-FFFFh.
-//          The chip's A14 is the CPU's A15. Each half can be switched off through the gate array (port 7Fxxh,
+//          The chip's fifteen address pins are the CPU's A0-A14, so A14 picks the half. CS is the gate array's
+//          ROMEN; OE is the expansion bus's ROMDIS, pulled low. Each half can be switched off through the gate array (port 7Fxxh,
 //          data bits 7-6 = 10: bit 2 set = lower ROM off, bit 3 set = upper ROM off). Writes always go to the RAM
 //          underneath.
 //   IC117-IC124  eight 4164 dynamic RAMs, one per data bit: IC120 D0, IC119 D1, IC118 D2, IC117 D3, IC121 D4,
@@ -43,7 +44,14 @@ const CPC = {
   ],
   // which CPU address bits each RAM address pin carries: [row, column]
   RAM_PINS: [[2, 9], [1, 0], [4, 11], [3, 10], [6, 13], [5, 12], [8, 15], [7, 14]],
-  RAM_ICS: [120, 119, 118, 117, 121, 122, 123, 124]   // by data bit
+  RAM_ICS: [120, 119, 118, 117, 121, 122, 123, 124],  // by data bit
+  // the gate array's 32 colour numbers as red, green, blue (three levels each)
+  PALETTE: [[128, 128, 128], [128, 128, 128], [0, 255, 128], [255, 255, 128], [0, 0, 128], [255, 0, 128], [0, 128, 128], [255, 128, 128],
+    [255, 0, 128], [255, 255, 128], [255, 255, 0], [255, 255, 255], [255, 0, 0], [255, 0, 255], [255, 128, 0], [255, 128, 255],
+    [0, 0, 128], [0, 255, 128], [0, 255, 0], [0, 255, 255], [0, 0, 0], [0, 0, 255], [0, 128, 0], [0, 128, 255],
+    [128, 0, 128], [128, 255, 128], [128, 255, 0], [128, 255, 255], [128, 0, 0], [128, 0, 255], [128, 128, 0], [128, 128, 255]],
+  COLOUR_NAMES: ['white', 'white', 'sea green', 'pastel yellow', 'blue', 'purple', 'cyan', 'pink', 'purple', 'pastel yellow', 'bright yellow', 'bright white', 'bright red', 'bright magenta', 'orange', 'pastel magenta',
+    'blue', 'sea green', 'bright green', 'bright cyan', 'black', 'bright blue', 'green', 'sky blue', 'magenta', 'pastel green', 'lime', 'pastel cyan', 'red', 'mauve', 'yellow', 'pastel blue']
 };
 CPC.KEYPOS = {}; CPC.KEYS.forEach((row, r) => row.forEach((k, b) => { CPC.KEYPOS[k] = [r, b]; }));
 if (typeof MEM_PINOUTS !== 'undefined' && !MEM_PINOUTS['23256'])
@@ -60,7 +68,7 @@ class CPCMachine {
     this.banks = [[this.romChip], this.ramBank];
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
     this.faulty = false;
-    this.acc = new Uint32Array(3);                    // accesses: 0 lower ROM, 1 upper ROM, 2 RAM
+    this.acc = new Uint32Array(2);                    // accesses: 0 ROM, 1 RAM
     this.crtc = new Uint8Array(18); this.crtcSel = 0;
     this.psg = new Uint8Array(16); this.keys = new Uint8Array(10);      // keys: bit set = key down
     this.pens = new Uint8Array(17);                   // gate array colours for pens 0-15 and the border
@@ -80,22 +88,22 @@ class CPCMachine {
   reset() {
     this.cpu.reset();
     this.t = 0; this.nextHs = 0; this.line = 0; this.frames = 0; this.vsync = false; this.vsDelay = 0;
-    this.gaMode = 0; this.gaPen = 0; this.intCnt = 0; this.ints = 0; this.cpu.intLine = false;
+    this.gaMode = 0; this.gaPen = 0; this.intCnt = 0; this.ints = 0; this.intReq = false; this.cpu.intLine = false;
     this.romSel = 0;
     this.ppiA = 0; this.ppiC = 0; this.ppiCtl = 0x9B; this.psgSel = 0; this.printer = 0;
     this.waits = 0;
   }
   // ---- memory ----
   romOn(a) { return a < 0x4000 ? !(this.gaMode & 4) : a >= 0xC000 && !(this.gaMode & 8); }
-  romAddr(a) { return a & 0x3FFF | (a & 0x8000) >> 1; }
+  romAddr(a) { return a & 0x7FFF; }
   mem(a, quiet) {
     const f = this.faulty; let v;
     if (this.romOn(a)) {
-      const hi = a >= 0xC000; if (!quiet) this.acc[hi ? 1 : 0]++;
+      const hi = a >= 0xC000; if (!quiet) this.acc[0]++;
       if (!(hi ? this.hasHi : this.hasLo)) return 0xFF;                         // nothing in that half: the bus floats high
       return f && this.romChip.faulty ? memBankRead(this.banks[0], this.romAddr(a), quiet) : this.rom[this.romAddr(a)];
     }
-    if (!quiet) this.acc[2]++;
+    if (!quiet) this.acc[1]++;
     v = f && this.ramBank.faulty ? memBankRead(this.ramBank, a, quiet) : this.ram[a];
     // a ROM whose chip enable is stuck low drives the bus during RAM reads too: the lines carry the AND of the two
     if (f && this.romChip.always) v &= memBankRead(this.banks[0], this.romAddr(a), true);
@@ -104,7 +112,7 @@ class CPCMachine {
   read(a) { return this.mem(a, false); }
   peek(a) { return this.mem(a, true); }
   peekW(a) { return this.peek(a) | this.peek((a + 1) & 0xFFFF) << 8; }
-  write(a, v) { this.acc[2]++; if (this.faulty && this.ramBank.faulty) memBankWrite(this.ramBank, a, v); else this.ram[a] = v; }
+  write(a, v) { this.acc[1]++; if (this.faulty && this.ramBank.faulty) memBankWrite(this.ramBank, a, v); else this.ram[a] = v; }
   // ---- I/O ----
   psgBus() {                                           // PPI port C bits 7-6 are the sound chip's BDIR and BC1
     switch (this.ppiC >> 6) {
@@ -132,7 +140,7 @@ class CPCMachine {
       switch (v >> 6) {
         case 0: this.gaPen = v & 0x10 ? 16 : v & 15; break;
         case 1: this.pens[this.gaPen] = v & 31; break;
-        case 2: this.gaMode = v & 0x1F; if (v & 0x10) { this.intCnt = 0; this.cpu.intLine = false; } break;
+        case 2: this.gaMode = v & 0x1F; if (v & 0x10) { this.intCnt = 0; this.intReq = false; } break;
       }                                                // 3: RAM banking, not on a 464
     }
     if (!(p & 0x4000)) {                               // 6845
@@ -164,8 +172,8 @@ class CPCMachine {
     if (this.vsync && !was) this.vsDelay = 2;
     if (!(R[3] & 15) || R[2] > R[0]) return;           // no HSYNC pulse: the gate array has nothing to count
     this.intCnt++;
-    if (this.intCnt === 52) { this.intCnt = 0; this.cpu.intLine = true; }
-    if (this.vsDelay && --this.vsDelay === 0) { if (this.intCnt < 32) this.cpu.intLine = true; this.intCnt = 0; }
+    if (this.intCnt === 52) { this.intCnt = 0; this.intReq = true; }
+    if (this.vsDelay && --this.vsDelay === 0) { if (this.intCnt < 32) this.intReq = true; this.intCnt = 0; }
   }
   // WAIT: READY is high one clock in four. A cycle's WAIT sample is on T2 (memory), on the automatic wait state
   // (I/O) or on the second automatic wait state (interrupt acknowledge); the cycle waits until that falls on READY.
@@ -173,19 +181,36 @@ class CPCMachine {
   afterStep(cyc) {
     let t = 0;
     for (const c of cyc) {
-      if (c.k === 'ID') { t += c.n; continue; }
+      if (c.k === 'ID') { c.t0 = this.t + t; t += c.n; continue; }
       const off = c.k === 'IA' ? 3 : c.k === 'IR' || c.k === 'IW' ? 2 : 1, len = c.k === 'IA' ? 6 : c.k === 'M1' || off === 2 ? 4 : 3;
       const w = (1 - (this.t + t + off)) & 3;
-      c.w = w; this.waits += w; t += len + w;
+      c.w = w; c.t0 = this.t + t; this.waits += w; t += len + w;
     }
     this.t += t;
-    if (this.cpu.lastEvent === 'INT') { this.ints++; this.intCnt &= 31; this.cpu.intLine = false; }
+    if (this.cpu.lastEvent === 'INT') { this.ints++; this.intCnt &= 31; this.intReq = false; }
     while (this.t >= this.nextHs) { this.nextHs += this.lineT(); this.hsync(); }
     return t;
   }
-  step() { return this.afterStep(this.cpu.step()); }
+  preStep() {}
+  intOut() { return this.intReq; }                     // the gate array's INT output
+  syncInt() { this.cpu.intLine = this.intReq; }
+  step() { this.syncInt(); return this.afterStep(this.cpu.step()); }
   run(tStates) { let t = 0; while (t < tStates) t += this.step(); return t; }
   key(name, down) { const p = CPC.KEYPOS[name]; if (!p) return; if (down) this.keys[p[0]] |= 1 << p[1]; else this.keys[p[0]] &= ~(1 << p[1]); }
+  // ---- a plain picture of the screen memory: 200 lines of 640 dots, as gate array colour numbers ----
+  // This reads the RAM the way the 6845 is programmed at this moment (R12/R13 start address, R1 characters a line)
+  // in the gate array's current mode; it is not the video circuit, which comes in a later step.
+  drawLine(y, out) {
+    const mode = this.gaMode & 3, R = this.crtc, ma0 = ((R[12] & 0x3F) << 8 | R[13]) + (y >> 3) * R[1], pens = this.pens, cols = Math.min(R[1], 40);
+    let x = 0;
+    for (let ch = 0; ch < cols; ch++) for (let half = 0; half < 2; half++) {
+      const ma = ma0 + ch, v = this.ram[(ma & 0x3000) << 2 | (y & 7) << 11 | (ma & 0x3FF) << 1 | half];
+      if (mode === 0) { const p0 = pens[v >> 7 & 1 | (v >> 3 & 1) << 1 | (v >> 5 & 1) << 2 | (v >> 1 & 1) << 3], p1 = pens[v >> 6 & 1 | (v >> 2 & 1) << 1 | (v >> 4 & 1) << 2 | (v & 1) << 3]; for (let i = 0; i < 4; i++) { out[x + i] = p0; out[x + 4 + i] = p1; } x += 8; }
+      else if (mode === 1) for (let i = 0; i < 4; i++) { const p = pens[v >> (7 - i) & 1 | (v >> (3 - i) & 1) << 1]; out[x++] = p; out[x++] = p; }
+      else for (let i = 7; i >= 0; i--) out[x++] = pens[v >> i & 1];
+    }
+    const b = pens[16]; while (x < 640) out[x++] = b;
+  }
   // ---- the screen as text: only for the firmware's own 8 x 8 characters in ink 1 (there is no picture yet) ----
   screenText() {
     const mode = this.gaMode & 3, cols = [20, 40, 80][mode] || 80, bpc = 80 / cols, base = (this.crtc[12] & 0x30) << 10, off = ((this.crtc[12] & 3) << 8 | this.crtc[13]) * 2;

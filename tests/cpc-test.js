@@ -15,7 +15,7 @@ for (const [name, bytes, want, setup] of [
   ['ADD HL,BC', [0x09], 12], ['LDIR (last)', [0xED, 0xB0], 20, m => { m.cpu.b = 0; m.cpu.c = 1; }], ['EX (SP),HL', [0xE3], 24], ['LD (IX+d),n', [0xDD, 0x36, 0, 1], 24], ['RST 38h', [0xFF], 16]
 ]) { const t = timing(bytes, setup); ok('timing ' + name, t === want, `${t} clocks, expected ${want}`); }
 { // interrupt acknowledge: 20 clocks in mode 1, 28 in mode 2
-  for (const [im, want] of [[1, 20], [2, 28]]) { const m = new CPCMachine(); m.gaMode = 0x0C; m.cpu.pc = 0x100; m.cpu.sp = 0x8000; m.cpu.im = im; m.cpu.iff1 = m.cpu.iff2 = 1; m.cpu.intLine = true; const t = m.step(), line = m.cpu.intLine; ok('interrupt IM ' + im, t + m.step() - 4 === want && line === false, t); }
+  for (const [im, want] of [[1, 20], [2, 28]]) { const m = new CPCMachine(); m.gaMode = 0x0C; m.cpu.pc = 0x100; m.cpu.sp = 0x8000; m.cpu.im = im; m.cpu.iff1 = m.cpu.iff2 = 1; m.intReq = true; const t = m.step(), line = m.intReq; ok('interrupt IM ' + im, t + m.step() - 4 === want && line === false, t); }
 }
 { // ROM over RAM
   const m = new CPCMachine(), lo = new Uint8Array(0x4000).fill(0x11), hi = new Uint8Array(0x4000).fill(0x22); hi[0] = 0x80; lo[0] = 0x01;
@@ -46,7 +46,7 @@ for (const [name, bytes, want, setup] of [
   const m = new CPCMachine(); m.gaMode = 0x0C; [63, 40, 46, 0x8E, 38, 0, 25, 30, 0, 7].forEach((v, r) => { m.output(0xBC00, r); m.output(0xBD00, v); });
   ok('line is 256 clocks', m.lineT() === 256); ok('frame is 312 lines', m.frameLines() === 312);
   m.cpu.pc = 0x100; m.t = 0; m.nextHs = 256; let first = -1, n = 0, frames0 = m.frames;
-  for (let i = 0; i < 400000 && m.frames < frames0 + 3; i++) { m.step(); if (m.cpu.intLine) { n++; m.cpu.intLine = false; if (first < 0) first = m.line; } }
+  for (let i = 0; i < 400000 && m.frames < frames0 + 3; i++) { m.step(); if (m.intReq) { n++; m.intReq = false; if (first < 0) first = m.line; } }
   ok('six interrupts a frame', Math.abs(n - 18) <= 1, n);
   ok('VSYNC seen on port B', (() => { let seen = 0, not = 0; for (let i = 0; i < 20000; i++) { m.step(); if (m.input(0xF500) & 1) seen++; else not++; } return seen > 0 && not > seen; })());
 }
@@ -58,6 +58,7 @@ if (dir) {
   m.run(4000000 * 3);
   const scr = m.screenText(); console.log(scr.slice(0, 10).map(l => '  |' + l).join('\n'));
   ok('sign-on', /Amstrad 64K Microcomputer/.test(scr.join('\n'))); ok('BASIC 1.0', /BASIC 1\.0/.test(scr.join('\n'))); ok('Ready', scr.includes('Ready'));
+  { const row = new Uint8Array(640); m.drawLine(8, row); const ink = new Set(row); ok('picture: yellow on blue', ink.size === 2 && ink.has(10) && ink.has(4), [...ink].join()); }
   ok('interrupts running at 300 a second', Math.abs(m.ints / 3 - 300) < 20, m.ints);
   // type a line
   const type = s => { for (const ch of s) { const k = ch === '\n' ? 'Return' : ch === ' ' ? 'Space' : ch === '"' ? '2' : ch === '?' ? '/' : ch === '*' ? ':' : ch.toUpperCase(); const sh = '"?*'.includes(ch); if (sh) m.key('Shift', true); m.run(80000); m.key(k, true); m.run(240000); m.key(k, false); if (sh) m.key('Shift', false); m.run(160000); } };
