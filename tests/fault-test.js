@@ -13,6 +13,8 @@ m.setFault('U13', 'DIN', 0); m.write(0x2000, 0xFF); m.setFault('U13', 'DIN', nul
 m.setFault('U8', 'A4', 1); m.write(0x0000, 0x01); m.write(0x1010, 0x00);
 ok((m.read(0x0000) & 1) === 0, '4164 address pin stuck: two addresses share one cell (row and column bit 4)');
 m.setFault('U8', 'A4', null);
+m.write(0x0004, 0x00); m.write(0x0000, 0x00); m.setFault('U8', 'A1', 1); m.write(0x0000, 0x01); m.setFault('U8', 'A1', null);
+ok((m.read(0x0404) & 1) === 1 && (m.read(0x0000) & 1) === 0, 'RAM pin A1 carries A2 and A10 on the RD1140 board: stuck high, the write lands at 0404h');
 m.setFault('U15', 'WE', 1); m.write(0x3000, 0x80); m.setFault('U15', 'WE', null); ok((m.read(0x3000) & 0x80) === 0, '4164 WE stuck high: the write is lost');
 m.setFault('U9', 'RAS', 'z'); ok((m.read(0x3000) & 2) === 2, '4164 with RAS disconnected reads 1'); m.setFault('U9', 'RAS', null);
 m.pa = 0x80;                                  // ROM bank on

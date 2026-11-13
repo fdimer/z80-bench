@@ -30,12 +30,13 @@ const OSB_KEYS = [
 // fitted with a 6116 as scratch RAM; UC3, UC6, UA3 and UA4 are the four 6116 video RAMs (characters C000h-C7FFh
 // and C800h-CFFFh, attributes D000h-D7FFh and D800h-DFFFh); UB12 and UA11 are the two 6116 font RAMs.
 // The 128K of dynamic RAM is on the separate RAM board RD1140 (connector P11), which the main-board schematic does
-// not show. Its wiring was worked out from photos and continuity readings of a real board: sixteen OKI M3764-20RS
+// not show. Its schematic was reverse engineered from a real board by continuity measurement: sixteen OKI M3764-20RS
 // (4164 type), U8-U15 = D0-D7 of the row selected while PRI1 (PIA PA0) is low, U17-U24 = D0-D7 of the row selected
 // while PRI1 is high. A 74LS20 decodes A15-A12 all high, which keeps F000h-FFFFh in U8-U15 whatever PRI1 says.
-// Neither row gets CAS during a ROM or video RAM access. U25 (74LS244, enabled by RAE*) passes the row address and
-// U16 the column address; which CPU address line reaches which RAM address pin has not been measured, so the usual
-// order is assumed (A0-A7 = row, A8-A15 = column: a chip's address pin n carries CPU address lines n and n+8).
+// Neither row gets CAS during a ROM or video RAM access. U25 (74LS244, enabled by RAE*) passes the row address
+// A0-A7 and U16 (enabled by CAE*) the column address A8-A15, joined output for output. The RAM address pins are not
+// in straight order: RAM pin An carries CPU lines OSB_DRAM_ROW[n] (row) and OSB_DRAM_ROW[n] + 8 (column).
+const OSB_DRAM_ROW = [0, 2, 1, 5, 4, 3, 6, 7];
 // Each chip pin can be given a fault: 'z' (disconnected), 0 (stuck low) or 1 (stuck high).
 //   address pin: that address bit is forced (a disconnected input floats high)
 //   data pin: the bit reads as the forced level and is stored as the forced level (disconnected: reads and stores 1)
@@ -64,7 +65,7 @@ class OsbChip {
     let aAnd = 0xFFFF, aOr = 0, dAnd = 0xFF, dOr = 0;
     for (const k in f) {
       let m;
-      if ((m = /^A(\d+)$/.exec(k))) { const bits = this.dram ? (1 << +m[1]) | (0x100 << +m[1]) : 1 << +m[1]; if (lvl(k)) aOr |= bits; else aAnd &= ~bits; }
+      if ((m = /^A(\d+)$/.exec(k))) { const bits = this.dram ? 0x101 << OSB_DRAM_ROW[+m[1]] : 1 << +m[1]; if (lvl(k)) aOr |= bits; else aAnd &= ~bits; }
       else if ((m = /^[DO](\d)$/.exec(k))) { if (lvl(k)) dOr |= 1 << +m[1]; else dAnd &= ~(1 << +m[1]); }
     }
     Object.assign(this, { aAnd, aOr, dAnd, dOr });
