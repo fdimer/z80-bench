@@ -2,7 +2,7 @@
 //   CPC_ROMS=/folder/with/OS_464.ROM/and/BASIC_1.0.ROM node tests/cpc-test.js
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = { console }; vm.createContext(ctx);
-for (const f of ['z80core.js', 'memchips.js', 'cpc.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', f), 'utf8') + '\nthis.Z80 = Z80; this.CPCMachine = typeof CPCMachine !== "undefined" ? CPCMachine : undefined; this.CPC = typeof CPC !== "undefined" ? CPC : undefined; this.memSetFault = typeof memSetFault !== "undefined" ? memSetFault : undefined;', ctx);
+for (const f of ['z80core.js', 'memchips.js', 'cpc.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', f), 'utf8') + '\nthis.Z80 = Z80; this.CPCMachine = typeof CPCMachine !== "undefined" ? CPCMachine : undefined; this.CPC = typeof CPC !== "undefined" ? CPC : undefined; this.CPCGateArray = typeof CPCGateArray !== "undefined" ? CPCGateArray : undefined; this.memSetFault = typeof memSetFault !== "undefined" ? memSetFault : undefined;', ctx);
 const { CPCMachine, CPC, memSetFault } = ctx;
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => { if (cond) pass++; else { fail++; console.log('FAIL', name, extra === undefined ? '' : extra); } };
@@ -45,7 +45,7 @@ for (const [name, bytes, want, setup] of [
 { // interrupt counter: 52 HSYNCs, and VSYNC resynchronisation
   const m = new CPCMachine(); m.gaMode = 0x0C; [63, 40, 46, 0x8E, 38, 0, 25, 30, 0, 7].forEach((v, r) => { m.output(0xBC00, r); m.output(0xBD00, v); });
   ok('line is 256 clocks', m.lineT() === 256); ok('frame is 312 lines', m.frameLines() === 312);
-  m.cpu.pc = 0x100; m.t = 0; m.nextHs = 256; let first = -1, n = 0, frames0 = m.frames;
+  m.cpu.pc = 0x100; let first = -1, n = 0, frames0 = m.frames;
   for (let i = 0; i < 400000 && m.frames < frames0 + 3; i++) { m.step(); if (m.intReq) { n++; m.intReq = false; if (first < 0) first = m.line; } }
   ok('six interrupts a frame', Math.abs(n - 18) <= 1, n);
   ok('VSYNC seen on port B', (() => { let seen = 0, not = 0; for (let i = 0; i < 20000; i++) { m.step(); if (m.input(0xF500) & 1) seen++; else not++; } return seen > 0 && not > seen; })());
@@ -58,8 +58,15 @@ if (dir) {
   m.run(4000000 * 3);
   const scr = m.screenText(); console.log(scr.slice(0, 10).map(l => '  |' + l).join('\n'));
   ok('sign-on', /Amstrad 64K Microcomputer/.test(scr.join('\n'))); ok('BASIC 1.0', /BASIC 1\.0/.test(scr.join('\n'))); ok('Ready', scr.includes('Ready'));
-  { const row = new Uint8Array(640); m.drawLine(8, row); const ink = new Set(row); ok('picture: yellow on blue', ink.size === 2 && ink.has(10) && ink.has(4), [...ink].join()); }
-  ok('interrupts running at 300 a second', Math.abs(m.ints / 3 - 300) < 20, m.ints);
+  { // the picture: blue border, yellow text on blue, 4 characters of border each side, 36 lines above
+    const W = CPC.FW, px = (x, y) => m.fb[y * W + x], row = y => new Set(m.fb.subarray(y * W + 64, y * W + 704));
+    ok('picture: border is blue', px(8, 8) === 4 && px(760, 264) === 4 && px(63, 100) === 4, [px(8, 8), px(760, 264)].join());
+    ok('picture: text lines are yellow on blue', [44, 45, 46].every(y => { const r = row(y); return r.size === 2 && r.has(10) && r.has(4); }), [...row(45)].join());
+    ok('picture: blank row above the text', row(37).size === 1 && row(37).has(4));
+    ok('picture: first dot of the display is at 64, 36', (() => { const sv = m.ram[0xC000]; m.ram[0xC000] = 0xF0; m.run(4000000 / 25); const r = px(64, 36) === 10 && px(71, 36) === 10 && px(63, 36) === 4 && px(72, 36) === 4; m.ram[0xC000] = sv; return r; })(), px(64, 36));
+    { const p0 = m.pictures, f0 = m.frames; m.run(4000000); ok('50 pictures a second, one per 6845 frame', m.pictures - p0 === 50 && m.frames - f0 === 50, (m.pictures - p0) + ' ' + (m.frames - f0)); }
+  }
+  { const i0 = m.ints; m.run(4000000); ok('interrupts running at 300 a second', Math.abs(m.ints - i0 - 300) <= 1, m.ints - i0); }
   // type a line
   const type = s => { for (const ch of s) { const k = ch === '\n' ? 'Return' : ch === ' ' ? 'Space' : ch === '"' ? '2' : ch === '?' ? '/' : ch === '*' ? ':' : ch.toUpperCase(); const sh = '"?*'.includes(ch); if (sh) m.key('Shift', true); m.run(80000); m.key(k, true); m.run(240000); m.key(k, false); if (sh) m.key('Shift', false); m.run(160000); } };
   type('?3*4\n'); m.run(2000000); const s2 = m.screenText(); console.log(s2.slice(4, 10).map(l => '  |' + l).join('\n'));
@@ -67,5 +74,15 @@ if (dir) {
   // a RAM fault stops it
   const b = new CPCMachine(); b.rom.set(m.rom); b.hasLo = b.hasHi = true; memSetFault(b, 'IC120', 'DOUT', 0); b.run(4000000 * 3);
   ok('dead data bit 0: no Ready', !b.screenText().includes('Ready'));
+  { // gate array faults
+    const g = () => { const x = new CPCMachine(); x.rom.set(m.rom); x.hasLo = x.hasHi = true; return x; };
+    let x = g(); memSetFault(x, 'IC116', 'INT', 'z'); x.run(4000000 * 3); ok('INT disconnected: starts, but no interrupts taken', x.screenText().includes('Ready') && x.ints === 0, x.ints);
+    x = g(); memSetFault(x, 'IC116', 'ROMEN', 1); x.run(4000000); ok('ROMEN high: the ROM never answers', x.cpu.pc !== 0 && !x.screenText().includes('Ready'));
+    x = g(); memSetFault(x, 'IC116', 'RAMRD', 'z'); x.run(4000000 * 3); ok('RAMRD disconnected: RAM cannot be read', !x.screenText().includes('Ready') || x.read(0x4000) === 0xFF);
+    x = g(); memSetFault(x, 'IC116', 'MWE', 1); x.run(4000000 * 3); ok('MWE high: nothing is written', x.ram.every(v => v === 0));
+    x = g(); x.run(4000000 * 3); memSetFault(x, 'IC116', 'DISPEN', 0); x.run(4000000 / 10); ok('DISPEN low: all border', new Set(x.fb.subarray(60 * 768, 200 * 768)).size === 1);
+    memSetFault(x, 'IC116', 'DISPEN', null); memSetFault(x, 'IC116', 'VSYNC', 0); const p0 = x.pictures; x.run(4000000); ok('VSYNC missing: the picture rolls (monitor free-runs)', Math.abs((x.pictures - p0) - 50) > 2, x.pictures - p0);
+    memSetFault(x, 'IC116', 'VSYNC', null); x.setGateArray('40007'); ok('40007 pinout selected', x.ga.part === '40007' && !x.faulty);
+  }
 } else console.log('(set CPC_ROMS to run the boot checks)');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

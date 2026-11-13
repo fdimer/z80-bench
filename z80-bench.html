@@ -372,20 +372,21 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
   <div class="toprows">
       <section class="panel" id="pScreen">
         <h2>Screen <span class="aside" id="cpScrInfo"></span></h2>
-        <canvas id="cpScreen" class="zxscreen cpscreen" width="672" height="216" tabindex="0" aria-label="Picture of the screen memory: click it and type to use the keyboard"></canvas>
+        <canvas id="cpScreen" class="zxscreen cpscreen" width="768" height="272" tabindex="0" aria-label="Monitor picture: click it and type to use the keyboard"></canvas>
         <div class="row">
           <button id="cpLoadRom" class="primary" type="button">Load ROM…</button><input type="file" id="cpRomFile" multiple hidden>
           <button id="cpRestart" type="button">Power on / restart</button>
           <button id="cpDumpBin" type="button">Dump RAM (.bin)</button>
+          <label class="inline" for="cpGa" title="The gate array fitted at IC116. The two types behave alike; their pins are arranged differently.">Gate array <select id="cpGa"><option value="40010">40010</option><option value="40007">40007</option></select></label>
           <span class="osbkeys mono" id="cpKeysDown"></span>
         </div>
         <div class="msg" id="cpMsg"></div>
         <div class="cpkb" id="cpKb" aria-label="Keyboard"></div>
         <p class="hint" id="cpHint">Click the picture and type: letters, digits and symbols come out as typed (the page presses the CPC key, with or without SHIFT, that gives that character). Backspace is DEL, Delete is CLR, Alt is COPY, the numeric keypad gives the function keys f0–f9 and its Enter is the small ENTER key. On the keyboard above, SHIFT and CTRL stay down for the next key. Load ROM takes the 464's two 16 KB images, the firmware (OS_464, CRC 815752DF) and BASIC 1.0 (CRC 7D9A3BAC), together or one at a time, or one 32 KB image of both. They are not included; your browser keeps them, so you only load them once.</p>
-        <p class="hint">The picture is a plain view of the screen memory, redrawn as the 6845 and the gate array are set at this moment. It is not the video circuit yet: the beam, the border timing and mid-screen changes come in a later step, with sound and the cassette.</p>
+        <p class="hint">The picture is built the way the machine builds it: the 6845 counts characters and lines, the gate array turns two bytes of RAM into dots for each character, in the screen mode and colours it holds at that moment, with the border outside the display and black during the sync pulses. The monitor starts a new line at every HSYNC and a new picture at every VSYNC. When the machine is paused, the white mark shows where the beam is. Sound and the cassette are not emulated yet.</p>
       </section>
       <section class="panel" id="pMemChips">
-        <h2>Memory chips <span class="aside" id="mcInfo">live pins · click a pin to disconnect it or hold it high or low</span></h2>
+        <h2>Memory chips and gate array <span class="aside" id="mcInfo">live pins · click a pin to disconnect it or hold it high or low</span></h2>
         <div class="mcwrap">
           <div class="mctiles" id="mcTiles"></div>
           <figure class="mcfig" id="mcFig">
@@ -395,7 +396,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
             <div class="row mcbtns"><button id="mcClear" type="button">Clear this chip's faults</button><button id="mcClearAll" type="button">Clear all memory faults</button></div>
           </figure>
         </div>
-        <p class="hint">The machine's memory chips, from the CPC 464 circuit diagram: IC103, the 32K ROM holding the firmware and BASIC, and IC117–IC124, eight 4164 dynamic RAMs, one per data bit (IC124 is D7, IC120 is D0). Each RAM address pin is fed by a 74LS153 selector with a row bit and then a column bit of the CPU address: A0 carries A2 then A9, A1 carries A1 then A0, A2 A4/A11, A3 A3/A10, A4 A6/A13, A5 A5/A12, A6 A8/A15 and A7 A7/A14. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the CPU's bus cycles on every clock, wait states included. The display's own reads of the RAM are not shown yet.</p>
+        <p class="hint">The machine's memory chips, from the CPC 464 circuit diagram: IC103, the 32K ROM holding the firmware and BASIC, and IC117–IC124, eight 4164 dynamic RAMs, one per data bit (IC124 is D7, IC120 is D0). Each RAM address pin is fed by a 74LS153 selector with a row bit and then a column bit of the CPU address: A0 carries A2 then A9, A1 carries A1 then A0, A2 A4/A11, A3 A3/A10, A4 A6/A13, A5 A5/A12, A6 A8/A15 and A7 A7/A14. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the CPU's bus cycles on every clock, wait states included; the display's own reads of the RAM, which share every microsecond with the CPU, are not shown on the pins. IC116 is the gate array (choose 40010 or 40007 beside the screen: same behaviour, different pin arrangement). Faults can be put on its INT, ROMEN, RAMRD, MWE, RAS and CAS outputs, on R, G, B and SYNC to the monitor, and on its HSYNC, VSYNC and DISPEN inputs from the 6845; its other pins are shown only. Its video-side pins show the state at the end of the current instruction.</p>
         <p class="hint">To simulate a fault, click a pin: Disconnected lifts the pin from the board (an input then floats high, an output no longer reaches the bus), Stuck high and Stuck low hold it at that level. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. Faults are listed in the Debug panel and cleared there, here, or by Master reset. The memory view and the disassembly show what the CPU reads through the faults.</p>
       </section>
   </div>
@@ -519,7 +520,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
       <section class="panel" id="pMach">
         <h2>CPC hardware<button class="fold" type="button" aria-expanded="true" title="Collapse">»</button> <span class="aside">memory · gate array · 6845 · 8255</span></h2>
         <div class="zxstate" id="cpState"></div>
-        <p class="hint">The gate array (IC116) decides what the CPU reads: the 32K ROM lies over the RAM at 0000h–3FFFh (firmware) and C000h–FFFFh (BASIC), and two bits of its mode register switch each half off to reach the RAM underneath. It also makes READY, which holds the Z80 in wait states so that every bus cycle lines up with the video circuit: instructions take whole microseconds. I/O devices are picked by single address lines, so the port numbers are 16 bits: 7Fxxh gate array, BCxxh–BFxxh 6845, F4xxh–F7xxh 8255. Sound, cassette and the real video circuit are not emulated yet.</p>
+        <p class="hint">The gate array (IC116) decides what the CPU reads: the 32K ROM lies over the RAM at 0000h–3FFFh (firmware) and C000h–FFFFh (BASIC), and two bits of its mode register switch each half off to reach the RAM underneath. It also makes READY, which holds the Z80 in wait states so that every bus cycle lines up with the video circuit: instructions take whole microseconds. I/O devices are picked by single address lines, so the port numbers are 16 bits: 7Fxxh gate array, BCxxh–BFxxh 6845, F4xxh–F7xxh 8255. The 6845 (IC108) times the picture: its HSYNC also feeds the gate array's interrupt counter, which asks for an interrupt every 52 lines, 300 times a second. Sound and the cassette are not emulated yet.</p>
       </section>
 
       <section class="panel" id="pSystem" hidden>
@@ -1644,7 +1645,7 @@ function masterReset() {
   for (const k of Object.keys(pins)) pins[k] = 1;
   cpu.nmiPending = false;
   cpc.rom.fill(0xFF); for (const a of [cpc.ram, cpc.keys, mem]) a.fill(0);
-  cpc.hasLo = cpc.hasHi = false;
+  cpc.hasLo = cpc.hasHi = false; cpc.fb.fill(20);
   try { localStorage.removeItem(CP_ROM_KEYS.lo); localStorage.removeItem(CP_ROM_KEYS.hi); } catch (e) {}
   cpHeld.clear(); cpLatched.clear(); cpQueue.length = 0; cpWant.clear(); cpShow(); $('cpMsg').className = 'msg'; $('cpMsg').textContent = '';
   resetCPU();
@@ -1661,23 +1662,30 @@ $('btnMaster').onclick = () => {
 dbgFields();
 
 // ---------- CPC: picture of the screen memory, keyboard, ROMs, hardware panel ----------
-const CP_W = 672, CP_H = 216, CP_OX = 16, CP_OY = 8;
-const cscr = $('cpScreen'), cctx = cscr.getContext('2d'), cimg = cctx.createImageData(CP_W, CP_H), cimg32 = new Uint32Array(cimg.data.buffer), cpRow = new Uint8Array(640);
-const CP_PAL32 = (() => { const u = new Uint32Array(32), b = new Uint8Array(u.buffer); CPC.PALETTE.forEach((c, i) => { b[i * 4] = c[0]; b[i * 4 + 1] = c[1]; b[i * 4 + 2] = c[2]; b[i * 4 + 3] = 255; }); return u; })();
+const CP_W = CPC.FW, CP_H = CPC.FH;
+const cscr = $('cpScreen'), cctx = cscr.getContext('2d'), cimg = cctx.createImageData(CP_W, CP_H), cimg32 = new Uint32Array(cimg.data.buffer);
+// the gate array's 32 colours, through any fault on its R, G and B outputs
+let cpPalSig = null; const CP_PAL32 = new Uint32Array(32);
+function cpPal() {
+  const lv = cpc.ga.lv, sig = [lv.R, lv.G, lv.B].join(); if (sig === cpPalSig) return; cpPalSig = sig;
+  const b = new Uint8Array(CP_PAL32.buffer);
+  CPC.PALETTE.forEach((c, i) => { ['R', 'G', 'B'].forEach((k, n) => { b[i * 4 + n] = lv[k] === undefined ? c[n] : lv[k] ? 255 : 0; }); b[i * 4 + 3] = 255; });
+}
 const cpOn = () => cpc.hasLo;
 const cpCrc = cpcCrc32, cpCrcHex = b => cpCrc(b).toString(16).toUpperCase().padStart(8, '0');
 function drawCp() {
   if (!cpOn()) {
     cctx.fillStyle = '#000'; cctx.fillRect(0, 0, CP_W, CP_H); cctx.fillStyle = '#ddd'; cctx.textAlign = 'center';
-    cctx.font = '20px "IBM Plex Mono", monospace'; cctx.fillText('Load the CPC 464 ROMs to switch on', CP_W / 2, CP_H / 2 - 6);
-    cctx.font = '14px "IBM Plex Mono", monospace'; cctx.fillText('firmware and BASIC 1.0, 16 KB each, not included', CP_W / 2, CP_H / 2 + 18);
+    cctx.font = '22px "IBM Plex Mono", monospace'; cctx.fillText('Load the CPC 464 ROMs to switch on', CP_W / 2, CP_H / 2 - 6);
+    cctx.font = '15px "IBM Plex Mono", monospace'; cctx.fillText('firmware and BASIC 1.0, 16 KB each, not included', CP_W / 2, CP_H / 2 + 20);
     $('cpScrInfo').textContent = 'no ROM'; return;
   }
-  cimg32.fill(CP_PAL32[cpc.pens[16]]);
-  const lines = Math.min(200, cpc.crtc[6] * (cpc.crtc[9] + 1));
-  for (let y = 0; y < lines; y++) { cpc.drawLine(y, cpRow); const o = (y + CP_OY) * CP_W + CP_OX; for (let x = 0; x < 640; x++) cimg32[o + x] = CP_PAL32[cpRow[x]]; }
+  cpPal(); const fb = cpc.fb;
+  for (let i = 0; i < fb.length; i++) cimg32[i] = CP_PAL32[fb[i]];
   cctx.putImageData(cimg, 0, 0);
-  $('cpScrInfo').textContent = `mode ${cpc.gaMode & 3} · ${[20, 40, 80][cpc.gaMode & 3] || 80} columns · frame ${cpc.frames} · screen memory only`;
+  const b = cpc.beam();
+  if (!running && b.y >= 0 && b.y < CP_H) { cctx.fillStyle = 'rgba(255,255,255,0.75)'; cctx.fillRect(0, b.y, CP_W, 1); if (b.x >= 0 && b.x < CP_W) cctx.fillRect(b.x, b.y - 3, 4, 7); }
+  $('cpScrInfo').textContent = `mode ${cpc.vmode} · ${[20, 40, 80][cpc.vmode] || 20} columns · line ${cpc.line} · frame ${cpc.frames}`;
 }
 let cpSig = '';
 function renderCpState() {
@@ -1686,9 +1694,10 @@ function renderCpState() {
   const lo = g & 4 ? 'RAM' : cpc.hasLo ? 'firmware ROM' : none, hi = g & 8 ? 'RAM' : cpc.hasHi ? 'BASIC ROM' : none;
   const pen = n => `${n === 16 ? 'border' : 'pen ' + n} <b>${CPC.COLOUR_NAMES[cpc.pens[n]]}</b>`;
   const html = `<div class="blk"><div class="hd">Memory now</div><div class="kv">0000h–3FFFh → <b>${lo}</b><br>4000h–BFFFh → <b>RAM</b><br>C000h–FFFFh → <b>${hi}</b><br>Writes always go to the RAM</div></div>
-    <div class="blk"><div class="hd">Gate array IC116 · port 7Fxxh</div><div class="kv">Mode and ROM register <b>${h2(0x80 | g)}h</b>: screen mode <b>${g & 3}</b> · lower ROM <b>${g & 4 ? 'off' : 'on'}</b> · upper ROM <b>${g & 8 ? 'off' : 'on'}</b><br>Interrupt counter <b>${cpc.intCnt}</b> of 52 lines · INT <b>${cpc.intReq ? 'low (asking)' : 'high'}</b> · taken <b>${cpc.ints}</b><br>${pen(16)} · ${pen(0)} · ${pen(1)}<br>${pen(2)} · ${pen(3)}</div></div>
+    <div class="blk"><div class="hd">Gate array IC116 (${cpc.ga.part}) · port 7Fxxh</div><div class="kv">Mode and ROM register <b>${h2(0x80 | g)}h</b>: screen mode <b>${g & 3}</b>${cpc.vmode !== (g & 3) ? ' (mode ' + cpc.vmode + ' until the next HSYNC)' : ''} · lower ROM <b>${g & 4 ? 'off' : 'on'}</b> · upper ROM <b>${g & 8 ? 'off' : 'on'}</b><br>Interrupt counter <b>${cpc.intCnt}</b> of 52 lines · INT <b>${cpc.intReq ? 'low (asking)' : 'high'}</b>${cpc.ga.lv.INT !== undefined ? ' (pin fault: the Z80 sees ' + (cpc.ga.lv.INT ? 'high' : 'low') + ')' : ''} · taken <b>${cpc.ints}</b><br>${pen(16)} · ${pen(0)} · ${pen(1)}<br>${pen(2)} · ${pen(3)}</div></div>
     <div class="blk"><div class="hd">READY (the Z80's WAIT)</div><div class="kv">Clock <b>${cpc.t.toLocaleString('en-AU')}</b> · wait states added <b>${cpc.waits.toLocaleString('en-AU')}</b>${cpc.t ? ' (' + (100 * cpc.waits / cpc.t).toFixed(1) + '%)' : ''}<br>READY is high one clock in four; each cycle waits for it</div></div>
-    <div class="blk"><div class="hd">6845 IC108 · ports BCxxh–BFxxh</div><div class="kv">R0–R7 <b>${[...R.subarray(0, 8)].map(h2).join(' ')}</b><br>R8–R15 <b>${[...R.subarray(8, 16)].map(h2).join(' ')}</b><br>Line <b>${cpc.line}</b> of ${cpc.frameLines()} · frame <b>${cpc.frames}</b> · VSYNC <b>${cpc.vsync ? 'on' : 'off'}</b> · screen at <b>${h4((R[12] & 0x30) << 10)}h</b></div></div>
+    <div class="blk"><div class="hd">6845 IC108 · ports BCxxh–BFxxh</div><div class="kv">R0–R7 <b>${[...R.subarray(0, 8)].map(h2).join(' ')}</b><br>R8–R15 <b>${[...R.subarray(8, 16)].map(h2).join(' ')}</b><br>Character <b>${cpc.hcc}</b> of ${R[0] + 1} · row <b>${cpc.vcc}</b> line <b>${cpc.vlc}</b> · scan line <b>${cpc.line}</b> of ${cpc.frameLines()}<br>Display address <b>${h4((cpc.maRow + cpc.hcc) & 0x3FFF)}h</b> · DISPEN <b>${cpc.de ? 'high' : 'low'}</b> · HSYNC <b>${cpc.hs ? 'high' : 'low'}</b> · VSYNC <b>${cpc.vsync ? 'high' : 'low'}</b><br>Screen memory at <b>${h4((R[12] & 0x30) << 10)}h</b> · frame <b>${cpc.frames}</b></div></div>
+    <div class="blk"><div class="hd">Monitor</div><div class="kv">Beam <b>${cpc.mx}</b> characters after HSYNC, <b>${cpc.my}</b> lines after VSYNC · picture <b>${cpc.pictures}</b><br>Colour out <b>${CPC.COLOUR_NAMES[cpc.rgb]}</b></div></div>
     <div class="blk"><div class="hd">8255 IC107 · ports F4xxh–F7xxh</div><div class="kv">Port A <b>${h2(cpc.ppiA)}h</b> · port C <b>${h2(c)}h</b>: keyboard row <b>${c & 15}</b> · cassette motor <b>${c & 0x10 ? 'on' : 'off'}</b> · sound chip <b>${['idle', 'read', 'write', 'address'][c >> 6]}</b> (register ${cpc.psgSel})<br>Keys down <b>${keys.join(' ') || 'none'}</b></div></div>`;
   if (html !== cpSig) { cpSig = html; $('cpState').innerHTML = html; }
 }
@@ -1793,12 +1802,15 @@ function cpNoRom() { setStatus('Load the CPC 464 ROMs (firmware and BASIC, 16 KB
 function cpPowerOn() {
   if (!cpOn()) { $('cpMsg').className = 'msg err'; $('cpMsg').textContent = 'Load the firmware ROM first (16,384 bytes).'; return; }
   if (running) stopRun();
-  cpc.ram.fill(0); cpc.crtc.fill(0); cpc.pens.fill(20); resetCPU(); disDirty = true; $('speed').value = 'real'; runRate = 'real'; startRun(); cscr.focus();
+  cpc.ram.fill(0); cpc.crtc.fill(0); cpc.pens.fill(20); cpc.fb.fill(20); resetCPU(); disDirty = true; $('speed').value = 'real'; runRate = 'real'; startRun(); cscr.focus();
 }
 $('cpLoadRom').onclick = () => $('cpRomFile').click();
 $('cpRomFile').onchange = () => { const fs = [...$('cpRomFile').files]; $('cpRomFile').value = ''; if (!fs.length) return;
   Promise.all(fs.map(f => f.arrayBuffer())).then(bufs => { let ok = false; cpRomSaid = []; for (const b of bufs) ok = cpUseRom(new Uint8Array(b), false) || ok; if (ok && cpOn()) cpPowerOn(); else render(); }); };
 $('cpRestart').onclick = cpPowerOn;
+// which gate array is fitted: the 40010 and the 40007 behave alike but have different pin arrangements
+function cpSetGa(part, quiet) { cpc.setGateArray(part); $('cpGa').value = cpc.ga.part; try { localStorage.setItem('cpc.ga', cpc.ga.part); } catch (e) {} if (!quiet) { mcTileSig = ''; mcDrawn = ''; render(); } }
+$('cpGa').onchange = () => cpSetGa($('cpGa').value);
 // ---------- memory bitmap: every bit as a pixel, tinted by region ----------
 // Each byte is a row of 8 pixels (bit 7 on the left); each strip is one 256-byte page, top to bottom; a band holds
 // up to 32 pages (8K). The background of every byte is tinted by the region it belongs to (MM.regions, by address,
@@ -1926,9 +1938,9 @@ $('cpDumpBin').onclick = () => cpSaved(cpDownload(`cpc-ram-64k-${cpStamp()}.bin`
 // Shown for the CPU's own accesses. The display's reads, which share the RAM in every microsecond, are not shown yet.
 const MC = {
   m: cpc,
-  groups() { return [['ROM · 32K · ' + (cpc.hasLo && cpc.hasHi ? 'firmware and BASIC' : cpc.hasLo ? 'firmware only, BASIC half empty' : cpc.hasHi ? 'BASIC only, firmware half empty' : 'empty'), [0]], ['RAM · 64K · one 4164 per data bit', [8, 7, 6, 5, 4, 3, 2, 1]]]; },
-  tile(c, i) { return i === 0 ? [c.id, '23256 · D0–D7'] : [c.id, '4164 · D' + c.bit]; },
-  acc(i) { return i === 0 ? 0 : 1; },
+  groups() { return [['ROM · 32K · ' + (cpc.hasLo && cpc.hasHi ? 'firmware and BASIC' : cpc.hasLo ? 'firmware only, BASIC half empty' : cpc.hasHi ? 'BASIC only, firmware half empty' : 'empty'), [0]], ['RAM · 64K · one 4164 per data bit', [8, 7, 6, 5, 4, 3, 2, 1]], ['Gate array', [9]]]; },
+  tile(c, i) { return i === 0 ? [c.id, '23256 · D0–D7'] : i === 9 ? [c.id, c.part] : [c.id, '4164 · D' + c.bit]; },
+  acc(i) { return i === 0 ? 0 : i === 9 ? 2 : 1; },
   bus() {
     const T = curT, A = T.a === null || T.a === 'z' ? null : T.a, mem = T.mreq === 0 && T.rfsh !== 0 && A !== null;
     return { T, A, mem, rd: mem && T.rd === 0, wr: mem && T.wr === 0, rom: mem && T.rd === 0 && cpc.romOn(A) };
@@ -1939,6 +1951,24 @@ const MC = {
       if (m) return A === null ? 'z' : (A >> +m[1]) & 1;
       if ((d = /^O(\d)$/.exec(name))) return B.rom ? D(+d[1]) : 'z';
       return name === 'CE' ? (B.rom ? 0 : 1) : name === 'OE' ? 0 : 1;
+    }
+    if (i === 9) {                      // the gate array. Its video-side pins show the state at the end of the current instruction.
+      const T = B.T, act = (B.rd || B.wr) && T.t !== 'T1', gaw = T.iorq === 0 && T.m1 !== 0 && T.wr === 0 && A !== null && !(A & 0x8000) && !!(A & 0x4000);
+      if ((d = /^D(\d)$/.exec(name))) return gaw ? D(+d[1]) : B.rd && T.t !== 'T1' ? (cpc.ram[A] >> +d[1]) & 1 : 'z';
+      switch (name) {
+        case 'A15': return A === null ? 'z' : A >> 15 & 1; case 'A14': return A === null ? 'z' : A >> 14 & 1;
+        case 'MREQ': return T.mreq; case 'IORQ': return T.iorq; case 'M1': return T.m1; case 'RD': return T.rd;
+        case 'RESET': return pins.reset; case 'PHI': case 'CK16': return clk;
+        case 'READY': return T.ready === false ? 0 : 1;
+        case 'CPU': case 'CASAD': case 'CAS': return act ? 0 : 1;
+        case 'RAS': return B.mem ? 0 : 1; case 'MWE': return B.wr ? 0 : 1; case '244EN': return gaw ? 0 : 1;
+        case 'ROMEN': return B.rom ? 0 : 1; case 'RAMRD': return B.rd && !B.rom ? 0 : 1;
+        case 'INT': return cpc.intReq ? 0 : 1;
+        case 'HSYNC': return cpc.hs ? 1 : 0; case 'VSYNC': return cpc.vsync ? 1 : 0; case 'DISPEN': return cpc.de ? 1 : 0;
+        case 'CCLK': return tTotal >> 1 & 1; case 'SYNC': return cpc.gHs || cpc.gVs ? 0 : 1;
+        case 'R': return CPC.PALETTE[cpc.rgb][0] ? 1 : 0; case 'G': return CPC.PALETTE[cpc.rgb][1] ? 1 : 0; case 'B': return CPC.PALETTE[cpc.rgb][2] ? 1 : 0;
+      }
+      return 'z';
     }
     // RAM: the selectors give each address pin a row bit, then a column bit once CAS ADDR switches over
     const [row, col] = CPC.RAM_PINS[m ? +m[1] : 0], act = B.rd || B.wr;
@@ -2064,6 +2094,7 @@ setMode(savedMode === 'hex' ? 'hex' : 'asm');
 { const get = k => { let s = null; try { s = localStorage.getItem(k); } catch (e) {} if (!s) return null; s = atob(s); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; };
   const lo = get(CP_ROM_KEYS.lo), hi = get(CP_ROM_KEYS.hi);
   if (hi && hi.length === 0x4000) cpUseRom(hi, true); if (lo && lo.length === 0x4000) cpUseRom(lo, true);
+  let ga = null; try { ga = localStorage.getItem('cpc.ga'); } catch (e) {} cpSetGa(ga === '40007' ? '40007' : '40010', true);
   window.cpcBench = { cpc, mcSetFault };      // for testing from the browser console
   if (cpOn()) { $('cpMsg').textContent = `ROMs loaded from this browser: firmware${cpc.hasHi ? ' and BASIC' : ' only (BASIC is missing)'}.`; cpPowerOn(); }
   else { resetCPU(); cpNoRom(); render(); } }
