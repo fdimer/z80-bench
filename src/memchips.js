@@ -38,6 +38,8 @@ const MEM_PINOUTS = {
   '4416': [[1, 'OE', 'i'], [2, 'DQ1', 'i'], [3, 'DQ2', 'i'], [4, 'WE', 'i'], [5, 'RAS', 'i'], [6, 'A6', 'i'], [7, 'A5', 'i'], [8, 'A4', 'i'], [9, 'VCC', 'p'],
     [10, 'A7', 'i'], [11, 'A3', 'i'], [12, 'A2', 'i'], [13, 'A1', 'i'], [14, 'A0', 'i'], [15, 'DQ3', 'i'], [16, 'CAS', 'i'], [17, 'DQ4', 'i'], [18, 'GND', 'g']]
 };
+// the NEC uPD4016 is a 2K static RAM with the 6116's pinout
+MEM_PINOUTS['4016'] = MEM_PINOUTS['6116'];
 const MEM_ACTIVE_LOW = new Set(['CE', 'CS', 'OE', 'WE', 'RAS', 'CAS', 'PGM']);
 class MemChip {
   // arr/base/abits: where the chip's cells are (arr[base + address], address 0 .. 2^abits - 1)

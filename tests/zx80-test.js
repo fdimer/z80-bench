@@ -62,4 +62,15 @@ ok(seen && seen.d === 0x00, 'character fetches put a NOP on the CPU data bus');
 // keyboard: half-row A11 (1-5), key 3 is D2
 m.key('3', true); ok((m.input(0xF7FE) & 0x1F) === 0x1B, 'key 3 reads on D2 of half-row A11');
 ok((m.input(0xFEFE) & 0x1F) === 0x1F, 'other half-rows unaffected'); m.key('3', false);
+// the Timex Sinclair 1000's built-in RAM: one 2K chip (IC4) that repeats every 2K
+{ const t = new ctx.ZX80(rom); t.ramSize = 0x800; t.reset();
+  t.write(0x4000, 0x11); t.write(0x4400, 0x22); t.write(0x47FF, 0x33);
+  ok(t.read(0x4000) === 0x11 && t.read(0x4400) === 0x22, '2K RAM: 4000h and 4400h are different cells (they are the same cell with 1K)');
+  ok(t.read(0x4800) === 0x11 && t.read(0x4FFF) === 0x33, '2K RAM repeats every 2K');
+  ok(t.ramBank(0)[0].id === 'IC4-2K', '2K RAM is the single chip in IC4');
+  vm.runInContext('this.memBankFlag = memBankFlag;', ctx);
+  t.write(0x4123, 0xFF); t.chipById['IC4-2K'].setFault('D3', 0); t.faulty = ctx.memBankFlag(t.ram2k);
+  ok(t.read(0x4123) === 0xF7, '2K RAM: data pin D3 stuck low clears bit 3 on a read');
+  t.chipById['IC4-2K'].setFault('D3', null); t.chipById['IC4-2K'].setFault('A10', 0); t.faulty = ctx.memBankFlag(t.ram2k);
+  ok(t.read(0x4400) === 0x11, '2K RAM: address pin A10 stuck low makes the upper 1K read the lower 1K'); }
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);
