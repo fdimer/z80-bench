@@ -32,9 +32,16 @@
 // 8 or 4 dots in the pen colours of the screen mode; outside DISPEN it sends the border colour, and black during
 // the sync pulses. A new screen mode takes effect at the end of the next HSYNC. The picture is drawn the way a
 // monitor would: a new line at each HSYNC, a new picture at each VSYNC, free-running when a sync is missing.
-// The gate array is a chip object too (IC116), with pin faults: INT, ROMEN, RAMRD, MWE, RAS, CAS, R, G, B, SYNC and
-// its HSYNC, VSYNC and DISPEN inputs. So is the 6845 (IC108): faults on HSYNC, VSYNC, DE, the display address lines
-// MA0-MA13 and the row lines RA0-RA2. On this board MA10, MA11, RA3, RA4 and CURSOR go nowhere that matters.
+// The gate array is a chip object too (IC116), with a fault possible on every pin except CPU ADDR, CAS ADDR and 244EN.
+// A fault on a pin is a fault on that chip's connection only: a broken trace to the gate array's VSYNC pin leaves the
+// 8255 seeing VSYNC. So is the 6845 (IC108): faults on HSYNC, VSYNC, DE, the display address lines MA0-MA13, the row
+// lines RA0-RA2 and its clock. On this board MA10, MA11, RA3, RA4 and CURSOR go nowhere that matters.
+// Clocks: the 16 MHz oscillator feeds the gate array (CK16), which makes PHI (4 MHz, to the Z80) and CCLK (1 MHz, to
+// the 6845 and the sound chip). Without CK16 the gate array and everything it times stop. Without PHI, or with READY
+// held low, the Z80 is held (cpu.step returns one idle character of four clocks) while the video goes on. Without
+// CCLK the 6845's counters stand still. With READY held high the Z80 is never made to wait: ROM reads still work,
+// but a RAM access that is out of step with the gate array's RAM cycle reads what the RAM last put out, and a write
+// is lost. That last part is an approximation of what the board would do.
 const CPC = {
   CPU_HZ: 4000000,
   ROM_LO: 0x815752DF, ROM_HI: 0x7D9A3BAC,          // CRC32 of the 464's firmware (OS_464) and BASIC 1.0
@@ -70,18 +77,18 @@ if (typeof MEM_PINOUTS !== 'undefined' && !MEM_PINOUTS['23256'])
 // The gate array's pins. Kind 'i': a fault can be put on the pin; 'o': shown only.
 // 40010 (and 40008) from the pin list in the Amstrad hardware notes; 40007 from the CPC 464 circuit diagram.
 const CPC_GA_PINS = {
-  '40010': [[1, 'D5', 'o'], [2, 'D6', 'o'], [3, 'D7', 'o'], [4, 'CCLK', 'o'], [5, 'SYNC', 'i'], [6, 'VDD1', 'p'], [7, 'RESET', 'o'], [8, 'B', 'i'], [9, 'DISPEN', 'i'], [10, 'G', 'i'],
-    [11, 'HSYNC', 'i'], [12, 'R', 'i'], [13, 'VSYNC', 'i'], [14, 'CPU', 'o'], [15, 'VSS1', 'g'], [16, 'CAS', 'i'], [17, 'MREQ', 'o'], [18, 'IORQ', 'o'], [19, 'PHI', 'o'], [20, 'M1', 'o'],
-    [21, 'RD', 'o'], [22, 'READY', 'o'], [23, '244EN', 'o'], [24, 'CK16', 'o'], [25, 'VDD2', 'p'], [26, 'VSS2', 'g'], [27, 'ROMEN', 'i'], [28, 'A15', 'o'], [29, 'RAMRD', 'i'], [30, 'A14', 'o'],
-    [31, 'CASAD', 'o'], [32, 'INT', 'i'], [33, 'MWE', 'i'], [34, 'RAS', 'i'], [35, 'D0', 'o'], [36, 'VSS3', 'g'], [37, 'D1', 'o'], [38, 'D2', 'o'], [39, 'D3', 'o'], [40, 'D4', 'o']],
-  '40007': [[1, 'CPU', 'o'], [2, 'READY', 'o'], [3, 'CAS', 'i'], [4, '244EN', 'o'], [5, 'MWE', 'i'], [6, 'CASAD', 'o'], [7, 'RAS', 'i'], [8, 'CK16', 'o'], [9, 'VCC2', 'p'], [10, 'INT', 'i'],
-    [11, 'SYNC', 'i'], [12, 'ROMEN', 'i'], [13, 'RAMRD', 'i'], [14, 'HSYNC', 'i'], [15, 'VSYNC', 'i'], [16, 'IORQ', 'o'], [17, 'M1', 'o'], [18, 'MREQ', 'o'], [19, 'RD', 'o'], [20, 'A15', 'o'],
-    [21, 'A14', 'o'], [22, 'VCC1', 'p'], [23, 'DISPEN', 'i'], [24, 'D0', 'o'], [25, 'D1', 'o'], [26, 'D2', 'o'], [27, 'D3', 'o'], [28, 'D4', 'o'], [29, 'D5', 'o'], [30, 'D6', 'o'],
-    [31, 'D7', 'o'], [32, 'B', 'i'], [33, 'VCC2', 'p'], [34, 'G', 'i'], [35, 'GND', 'g'], [36, 'R', 'i'], [37, 'RESET', 'o'], [38, 'VCC1', 'p'], [39, 'PHI', 'o'], [40, 'CCLK', 'o']]
+  '40010': [[1, 'D5', 'i'], [2, 'D6', 'i'], [3, 'D7', 'i'], [4, 'CCLK', 'i'], [5, 'SYNC', 'i'], [6, 'VDD1', 'p'], [7, 'RESET', 'i'], [8, 'B', 'i'], [9, 'DISPEN', 'i'], [10, 'G', 'i'],
+    [11, 'HSYNC', 'i'], [12, 'R', 'i'], [13, 'VSYNC', 'i'], [14, 'CPU', 'o'], [15, 'VSS1', 'g'], [16, 'CAS', 'i'], [17, 'MREQ', 'i'], [18, 'IORQ', 'i'], [19, 'PHI', 'i'], [20, 'M1', 'i'],
+    [21, 'RD', 'i'], [22, 'READY', 'i'], [23, '244EN', 'o'], [24, 'CK16', 'i'], [25, 'VDD2', 'p'], [26, 'VSS2', 'g'], [27, 'ROMEN', 'i'], [28, 'A15', 'i'], [29, 'RAMRD', 'i'], [30, 'A14', 'i'],
+    [31, 'CASAD', 'o'], [32, 'INT', 'i'], [33, 'MWE', 'i'], [34, 'RAS', 'i'], [35, 'D0', 'i'], [36, 'VSS3', 'g'], [37, 'D1', 'i'], [38, 'D2', 'i'], [39, 'D3', 'i'], [40, 'D4', 'i']],
+  '40007': [[1, 'CPU', 'o'], [2, 'READY', 'i'], [3, 'CAS', 'i'], [4, '244EN', 'o'], [5, 'MWE', 'i'], [6, 'CASAD', 'o'], [7, 'RAS', 'i'], [8, 'CK16', 'i'], [9, 'VCC2', 'p'], [10, 'INT', 'i'],
+    [11, 'SYNC', 'i'], [12, 'ROMEN', 'i'], [13, 'RAMRD', 'i'], [14, 'HSYNC', 'i'], [15, 'VSYNC', 'i'], [16, 'IORQ', 'i'], [17, 'M1', 'i'], [18, 'MREQ', 'i'], [19, 'RD', 'i'], [20, 'A15', 'i'],
+    [21, 'A14', 'i'], [22, 'VCC1', 'p'], [23, 'DISPEN', 'i'], [24, 'D0', 'i'], [25, 'D1', 'i'], [26, 'D2', 'i'], [27, 'D3', 'i'], [28, 'D4', 'i'], [29, 'D5', 'i'], [30, 'D6', 'i'],
+    [31, 'D7', 'i'], [32, 'B', 'i'], [33, 'VCC2', 'p'], [34, 'G', 'i'], [35, 'GND', 'g'], [36, 'R', 'i'], [37, 'RESET', 'i'], [38, 'VCC1', 'p'], [39, 'PHI', 'i'], [40, 'CCLK', 'i']]
 };
 // HD6845 (the same pins as the MC6845). On the CPC: CS is A14, RS is A8, R/W is A9, E comes from IORQ, CLK is the gate array's CCLK.
 const CPC_CRTC_PINS = [[1, 'GND', 'g'], [2, 'RESET', 'o'], [3, 'LPSTB', 'o'], ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(n => [4 + n, 'MA' + n, 'i']), [18, 'DE', 'i'], [19, 'CURSOR', 'o'], [20, 'VCC', 'p'],
-  [21, 'CLK', 'o'], [22, 'R/W', 'o'], [23, 'E', 'o'], [24, 'RS', 'o'], [25, 'CS', 'o'], ...[7, 6, 5, 4, 3, 2, 1, 0].map((d, k) => [26 + k, 'D' + d, 'o']), [34, 'RA4', 'o'], [35, 'RA3', 'o'], [36, 'RA2', 'i'], [37, 'RA1', 'i'], [38, 'RA0', 'i'], [39, 'HSYNC', 'i'], [40, 'VSYNC', 'i']];
+  [21, 'CLK', 'i'], [22, 'R/W', 'o'], [23, 'E', 'o'], [24, 'RS', 'o'], [25, 'CS', 'o'], ...[7, 6, 5, 4, 3, 2, 1, 0].map((d, k) => [26 + k, 'D' + d, 'o']), [34, 'RA4', 'o'], [35, 'RA3', 'o'], [36, 'RA2', 'i'], [37, 'RA1', 'i'], [38, 'RA0', 'i'], [39, 'HSYNC', 'i'], [40, 'VSYNC', 'i']];
 if (typeof MEM_PINOUTS !== 'undefined') { Object.assign(MEM_PINOUTS, CPC_GA_PINS); MEM_PINOUTS.HD6845 = CPC_CRTC_PINS; for (const n of ['SYNC', 'RESET', 'CPU', 'MREQ', 'IORQ', 'M1', 'RD', '244EN', 'ROMEN', 'RAMRD', 'CASAD', 'INT', 'MWE']) MEM_ACTIVE_LOW.add(n); }
 // The gate array and the 6845 as chips with pin faults, in the same shape as a MemChip so that the fault list and the pin display treat it alike.
 // lv[name] is the level a faulty pin sits at (a disconnected pin floats high, except the colour outputs, which go dark); undefined = no fault.
@@ -92,7 +99,9 @@ class CPCChip {
     // 6845 address lines held at a level
     let maAnd = 0x3FFF, maOr = 0, raAnd = 31, raOr = 0, m;
     for (const k in this.lv) { if ((m = /^MA(\d+)$/.exec(k))) { if (this.lv[k]) maOr |= 1 << +m[1]; else maAnd &= ~(1 << +m[1]); } else if ((m = /^RA(\d)$/.exec(k))) { if (this.lv[k]) raOr |= 1 << +m[1]; else raAnd &= ~(1 << +m[1]); } }
-    Object.assign(this, { maAnd, maOr, raAnd, raOr });
+    let dAnd = 0xFF, dOr = 0;
+    for (const k in this.lv) if ((m = /^D(\d)$/.exec(k))) { if (this.lv[k]) dOr |= 1 << +m[1]; else dAnd &= ~(1 << +m[1]); }
+    Object.assign(this, { maAnd, maOr, raAnd, raOr, dAnd, dOr });
   }
 }
 function cpcCrc32(b) { let c = ~0; for (let i = 0; i < b.length; i++) { c ^= b[i]; for (let k = 0; k < 8; k++) c = c >>> 1 ^ (c & 1 ? 0xEDB88320 : 0); } return ~c >>> 0; }
@@ -116,6 +125,11 @@ class CPCMachine {
     this.fb = new Uint8Array(CPC.FW * CPC.FH).fill(20);   // the picture, as gate array colour numbers
     this.bus = { read: a => this.read(a), write: (a, v) => this.write(a, v), input: p => this.input(p), output: (p, v) => this.output(p, v) };
     this.cpu = new Z80(this.bus); this.cpu.log = true; this.cpu.intVector = 0xFF;
+    // a held processor (no clock, or READY low) does nothing for one character: the video still gets its time
+    const run = this.cpu.step.bind(this.cpu);
+    this.cpu.step = () => { const why = this.held(); if (!why) return run(); this.cpu.lastEvent = null; return [{ k: 'ID', n: 4, held: why }]; };
+    // the video signals of each character drawn during the last instruction, for the clock-by-clock view
+    this.vlT = new Float64Array(48); this.vlF = new Int32Array(48); this.vlM = new Int32Array(48); this.vlN = 0;
     this.reset();
   }
   // a 16K or 32K image; a 16K one goes in the upper half if it starts with a ROM type byte of 80h (a BASIC ROM)
@@ -137,10 +151,24 @@ class CPCMachine {
     this.gaMode = 0; this.gaPen = 0; this.intCnt = 0; this.ints = 0; this.intReq = false; this.cpu.intLine = false;
     this.romSel = 0;
     this.ppiA = 0; this.ppiC = 0; this.ppiCtl = 0x9B; this.psgSel = 0; this.printer = 0;
-    this.waits = 0;
+    this.waits = 0; this.ramBus = 0xFF; this.vlN = 0;
   }
   // ---- memory ----
-  romOn(a) { return a < 0x4000 ? !(this.gaMode & 4) : a >= 0xC000 && !(this.gaMode & 8); }
+  // the address as the gate array sees it on its A15 and A14 pins
+  gaView(a) { const g = this.ga.lv; if (g.A15 !== undefined) a = g.A15 ? a | 0x8000 : a & 0x7FFF; if (g.A14 !== undefined) a = g.A14 ? a | 0x4000 : a & 0xBFFF; return a; }
+  romOn(a) { if (this.ga.faulty) a = this.gaView(a); return a < 0x4000 ? !(this.gaMode & 4) : a >= 0xC000 && !(this.gaMode & 8); }
+  gaDead() { return this.ga.faulty && 'CK16' in this.ga.f; }
+  // why the Z80 cannot run, or null
+  held() {
+    if (!this.ga.faulty) return null; const g = this.ga.lv;
+    return 'CK16' in g ? 'no clock: the gate array has no 16 MHz' : 'PHI' in g ? 'no clock: PHI does not reach the Z80' : g.READY === 0 ? 'READY is low: the Z80 waits' : null;
+  }
+  // READY held high: is the bus cycle now being run out of step with the gate array's RAM cycle?
+  outOfStep() {
+    if (this.ga.lv.READY !== 1) return false;
+    let t = this.t; for (const c of this.cpu.cyc) t += c.k === 'ID' ? c.n : c.k === 'IA' ? 6 : c.k === 'M1' || c.k === 'IR' || c.k === 'IW' ? 4 : 3;
+    return ((t + 1) & 3) !== 1;
+  }
   romAddr(a) { return a & 0x7FFF; }
   mem(a, quiet) {
     const f = this.faulty, g = f && this.ga.faulty ? this.ga.lv : null, romSel = this.romOn(a);
@@ -158,10 +186,13 @@ class CPCMachine {
     }
     // with a fault on the gate array's ROMEN or RAMRD the ROM and the RAM latch can both drive the bus (the lines
     // carry the AND of the two) or neither (the bus floats high)
-    const romDrive = g.ROMEN === undefined ? romSel : g.ROMEN === 0, ramDrive = g.RAMRD === undefined ? !romSel : g.RAMRD === 0;
+    if ('CK16' in g) return 0xFF;
+    const seen = g.MREQ !== 1 && g.RD !== 1;                                    // does the gate array see a memory read at all?
+    const romDrive = g.ROMEN === undefined ? seen && romSel : g.ROMEN === 0, ramDrive = g.RAMRD === undefined ? seen && !romSel : g.RAMRD === 0;
     let v = 0xFF;
     if (romDrive || this.romChip.always) { if (!quiet) this.acc[0]++; const ra = this.romAddr(a); if (ra & 0x4000 ? this.hasHi : this.hasLo) v &= this.romChip.faulty ? memBankRead(this.banks[0], ra, quiet) : this.rom[ra]; }
-    if (ramDrive) { if (!quiet) this.acc[1]++; v &= this.ramRead(a, quiet); }
+    if (ramDrive) { if (!quiet) this.acc[1]++; if (!quiet && this.outOfStep()) v &= this.ramBus; else { const r = this.ramRead(a, quiet); if (!quiet) this.ramBus = r; v &= r; } }
+    if (!quiet && g.IORQ === 0 && (this.gaView(a) & 0xC000) === 0x4000) this.gaWrite(v);   // IORQ seen low all the time: memory cycles at 4000h-7FFFh look like writes to the gate array
     return v;
   }
   // the RAM's data outputs for an address, through any chip faults; with RAS or CAS missing the chips never answer
@@ -174,7 +205,13 @@ class CPCMachine {
   peekW(a) { return this.peek(a) | this.peek((a + 1) & 0xFFFF) << 8; }
   write(a, v) {
     this.acc[1]++;
-    if (this.faulty) { if (this.ga.faulty && (this.ga.ramDead || this.ga.lv.MWE === 1)) return; if (this.ramBank.faulty) { memBankWrite(this.ramBank, a, v); return; } }
+    if (this.faulty && this.ga.faulty) {
+      const g = this.ga.lv;
+      if (g.IORQ === 0 && (this.gaView(a) & 0xC000) === 0x4000) this.gaWrite(v);
+      // no write enable: the gate array is stopped, never sees MREQ, sees RD low all the time, or the cycle is out of step
+      if (this.ga.ramDead || g.MWE === 1 || 'CK16' in g || g.MREQ === 1 || g.RD === 0 || this.outOfStep()) return;
+    }
+    if (this.faulty) { if (this.ramBank.faulty) { memBankWrite(this.ramBank, a, v); return; } }
     this.ram[a] = v;
   }
   // ---- I/O ----
@@ -200,14 +237,11 @@ class CPCMachine {
     return v;
   }
   output(p, v) {
-    if (!(p & 0x8000) && p & 0x4000) {                 // gate array
-      this.acc[2]++;
-      switch (v >> 6) {
-        case 0: this.gaPen = v & 0x10 ? 16 : v & 15; break;
-        case 1: this.pens[this.gaPen] = v & 31; break;
-        case 2: this.gaMode = v & 0x1F; if (v & 0x10) { this.intCnt = 0; this.intReq = false; } break;
-      }                                                // 3: RAM banking, not on a 464
-    }
+    if (this.ga.faulty) {                              // the gate array through its pin faults
+      const g = this.ga.lv;
+      if (g.M1 === 0) { this.intCnt &= 31; this.intReq = false; }               // M1 seen low: every I/O cycle looks like an interrupt acknowledge
+      if ((this.gaView(p) & 0xC000) === 0x4000 && g.IORQ !== 1 && g.M1 !== 0) this.gaWrite(v);
+    } else if (!(p & 0x8000) && p & 0x4000) this.gaWrite(v);
     if (!(p & 0x4000)) {                               // 6845
       const f = p >> 8 & 3;
       if (f === 0) this.crtcSel = v & 31; else if (f === 1 && this.crtcSel < 16) this.crtc[this.crtcSel] = v;
@@ -225,6 +259,16 @@ class CPCMachine {
       }
     }
   }
+  // a byte arriving at the gate array's data pins while its port is addressed
+  gaWrite(v) {
+    if (this.ga.faulty) { const g = this.ga.lv; if ('CK16' in g || g.RESET === 0) return; v = v & this.ga.dAnd | this.ga.dOr; }
+    this.acc[2]++;
+    switch (v >> 6) {
+      case 0: this.gaPen = v & 0x10 ? 16 : v & 15; break;
+      case 1: this.pens[this.gaPen] = v & 31; break;
+      case 2: this.gaMode = v & 0x1F; if (v & 0x10) { this.intCnt = 0; this.intReq = false; } break;
+    }                                                  // 3: RAM banking, not on a 464
+  }
   // ---- the 6845, one character (four CPU clocks) at a time ----
   lineT() { return (this.crtc[0] + 1) * 4; }
   frameLines() { return (this.crtc[4] + 1) * (this.crtc[9] + 1) + this.crtc[5]; }
@@ -233,8 +277,10 @@ class CPCMachine {
   vsOut() { const f = this.vdu.lv.VSYNC; return f === undefined ? this.vsync : !!f; }
   char() {
     const R = this.crtc, g = this.ga.faulty ? this.ga.lv : null, c = this.vdu.faulty ? this.vdu.lv : null;
+    const stopped = (g && 'CCLK' in g) || (c && 'CLK' in c);                     // the 6845 has no clock: its counters stand still
+    if (g && g.RESET === 0) { this.gaMode = 0; this.intCnt = 0; this.intReq = false; }   // the gate array held in reset
     // outputs for this character
-    if (this.hcc === R[2] && (R[3] & 15)) { this.hs = true; this.hsw = 0; }
+    if (!stopped && this.hcc === R[2] && (R[3] & 15)) { this.hs = true; this.hsw = 0; }
     const de = this.vde && this.hcc < R[1]; this.de = de;
     // what the gate array sees on its three video inputs
     const hs = g && g.HSYNC !== undefined ? !!g.HSYNC : c && c.HSYNC !== undefined ? !!c.HSYNC : this.hs, vs = g && g.VSYNC !== undefined ? !!g.VSYNC : c && c.VSYNC !== undefined ? !!c.VSYNC : this.vsync,
@@ -258,7 +304,7 @@ class CPCMachine {
         let ma = this.maRow + this.hcc, ra = this.vlc; if (c) { ma = ma & this.vdu.maAnd | this.vdu.maOr; ra = ra & this.vdu.raAnd | this.vdu.raOr; }
         const a = (ma & 0x3000) << 2 | (ra & 7) << 11 | (ma & 0x3FF) << 1, slow = this.faulty && (this.ramBank.faulty || this.ga.faulty);
         for (let half = 0, p = o; half < 2; half++) {
-          const v = slow ? this.ramRead(a | half, true) : this.ram[a | half];
+          let v = slow ? this.ramRead(a | half, true) : this.ram[a | half]; this.ramBus = v; if (g) v = v & this.ga.dAnd | this.ga.dOr;
           if (this.vmode === 1) for (let i = 0; i < 4; i++) { const c = pens[v >> (7 - i) & 1 | (v >> (3 - i) & 1) << 1]; fb[p++] = c; fb[p++] = c; }
           else if (this.vmode === 2) for (let i = 7; i >= 0; i--) fb[p++] = pens[v >> i & 1];
           else {
@@ -271,7 +317,9 @@ class CPCMachine {
       }
     } else this.rgb = hs || vs ? 20 : den ? this.pens[0] : this.pens[16];
     if (++this.mx >= 72) this.monLine(g);                                        // no HSYNC: the monitor's own line rate, a little slow
+    if (this.vlN < 48) { const n = this.vlN++; this.vlT[n] = this.vt; this.vlM[n] = (this.maRow + this.hcc) & 0x3FFF; this.vlF[n] = (this.hs ? 1 : 0) | (this.vsync ? 2 : 0) | (de ? 4 : 0) | (hs ? 8 : 0) | (vs ? 16 : 0) | (this.intReq ? 32 : 0) | this.rgb << 8 | this.vlc << 16; }
     // advance the counters
+    if (stopped) return;
     if (this.hs && ++this.hsw >= (R[3] & 15)) this.hs = false;
     if (this.hcc >= R[0]) { this.hcc = 0; this.endLine(R); } else this.hcc++;
   }
@@ -293,22 +341,32 @@ class CPCMachine {
     }
   }
   newFrame(R) { this.adj = -1; this.vcc = 0; this.vlc = 0; this.line = 0; this.frames++; this.vde = true; this.maRow = (R[12] & 0x3F) << 8 | R[13]; }
+  // the video signals at a given clock of the last instruction (or now, if that clock was not recorded)
+  videoAt(at) {
+    let i = -1; if (at !== undefined) for (let k = 0; k < this.vlN; k++) if (this.vlT[k] <= at) i = k;
+    const f = i < 0 ? (this.hs ? 1 : 0) | (this.vsync ? 2 : 0) | (this.de ? 4 : 0) | (this.gHs ? 8 : 0) | (this.gVs ? 16 : 0) | (this.intReq ? 32 : 0) | this.rgb << 8 | this.vlc << 16 : this.vlF[i];
+    return { hs: f & 1, vs: f >> 1 & 1, de: f >> 2 & 1, gHs: f >> 3 & 1, gVs: f >> 4 & 1, int: f >> 5 & 1, rgb: f >> 8 & 31, ra: f >> 16 & 31, ma: i < 0 ? (this.maRow + this.hcc) & 0x3FFF : this.vlM[i] };
+  }
   // where the beam is in the picture (it can be outside it)
   beam() { return { x: (this.mx - CPC.MON_X) * 16, y: this.my - CPC.MON_Y }; }
   // WAIT: READY is high one clock in four. A cycle's WAIT sample is on T2 (memory), on the automatic wait state
   // (I/O) or on the second automatic wait state (interrupt acknowledge); the cycle waits until that falls on READY.
   // Each cycle gets its number of wait states in w.
   afterStep(cyc) {
-    let t = 0;
+    let t = 0; const free = this.ga.lv.READY === 1;                              // READY held high: no wait states
     for (const c of cyc) {
       if (c.k === 'ID') { c.t0 = this.t + t; t += c.n; continue; }
       const off = c.k === 'IA' ? 3 : c.k === 'IR' || c.k === 'IW' ? 2 : 1, len = c.k === 'IA' ? 6 : c.k === 'M1' || off === 2 ? 4 : 3;
-      const w = (1 - (this.t + t + off)) & 3;
+      const w = free ? 0 : (1 - (this.t + t + off)) & 3;
       c.w = w; c.t0 = this.t + t; this.waits += w; t += len + w;
     }
     this.t += t;
-    if (this.cpu.lastEvent === 'INT') { this.ints++; this.intCnt &= 31; this.intReq = false; }
-    while (this.vt + 4 <= this.t) { this.vt += 4; this.char(); }
+    // the gate array recognises the acknowledge by IORQ and M1 both low
+    if (this.cpu.lastEvent === 'INT') { this.ints++; if (!(this.ga.faulty && (this.ga.lv.IORQ === 1 || this.ga.lv.M1 === 1))) { this.intCnt &= 31; this.intReq = false; } }
+    // keep the last recorded character: the first clocks of this instruction still belong to it
+    if (this.vlN) { const n = this.vlN - 1; this.vlT[0] = this.vlT[n]; this.vlF[0] = this.vlF[n]; this.vlM[0] = this.vlM[n]; this.vlN = 1; }
+    if (this.gaDead()) { if (!this.dark) { this.fb.fill(20); this.dark = true; } this.rgb = 20; this.gHs = this.gVs = false; this.vt = this.t - (this.t & 3) + 4; }   // no dot clock: no picture
+    else { this.dark = false; while (this.vt < this.t) { this.char(); this.vt += 4; } }
     return t;
   }
   preStep() {}

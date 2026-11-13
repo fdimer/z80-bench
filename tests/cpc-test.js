@@ -87,7 +87,33 @@ if (dir) {
     x.run(4000000 / 5); const good = x.fb.slice(); memSetFault(x, 'IC108', 'MA0', 0); x.run(4000000 / 5);
     ok('6845 MA0 low: the picture changes, in character pairs', (() => { let diff = 0, pair = true; const W = 768; for (let y = 44; y < 52; y++) for (let ch = 4; ch < 44; ch += 2) for (let i = 0; i < 16; i++) { const a = x.fb[y * W + ch * 16 + i], b = x.fb[y * W + (ch + 1) * 16 + i]; if (a !== b) pair = false; if (a !== good[y * W + ch * 16 + i] || b !== good[y * W + (ch + 1) * 16 + i]) diff++; } return diff > 0 && pair; })());
     memSetFault(x, 'IC108', 'MA0', null); memSetFault(x, 'IC108', 'VSYNC', 'z'); x.run(4000); ok('6845 VSYNC disconnected: port B bit 0 reads high', (x.input(0xF500) & 1) === 1);
-    memSetFault(x, 'IC108', 'VSYNC', null); x.setGateArray('40007'); ok('40007 pinout selected', x.ga.part === '40007' && !x.faulty);
+    memSetFault(x, 'IC108', 'VSYNC', null);
+    // clocks and READY: the processor is held while the video goes on
+    for (const [pin, lvl, why] of [['PHI', 'z', /PHI/], ['READY', 0, /READY/]]) {
+      memSetFault(x, 'IC116', pin, lvl); const pc = x.cpu.pc, p1 = x.pictures, t1 = x.t; x.run(4000000);
+      ok(pin + ' fault: Z80 held, picture still drawn', x.cpu.pc === pc && Math.abs(x.pictures - p1 - 50) <= 1 && x.t - t1 >= 4000000 && why.test(x.held()), x.pictures - p1);
+      memSetFault(x, 'IC116', pin, null);
+    }
+    { const pc = x.cpu.pc; x.run(4000); ok('released: the Z80 runs again', x.cpu.pc !== pc && x.held() === null); }
+    memSetFault(x, 'IC116', 'CK16', 0); { const pc = x.cpu.pc; x.run(400000); ok('no 16 MHz: everything stops, no picture', x.cpu.pc === pc && x.fb.every(v => v === 20)); } memSetFault(x, 'IC116', 'CK16', null);
+    x.run(4000000 / 2);
+    for (const [id, pin] of [['IC116', 'CCLK'], ['IC108', 'CLK']]) {
+      memSetFault(x, id, pin, 0); x.run(40000); const f1 = x.frames, i1 = x.ints, t1 = x.t, pc = x.cpu.pc; x.run(4000000 / 2);
+      ok(id + ' ' + pin + ' fault: the 6845 stands still, no interrupts, Z80 runs', x.frames === f1 && x.ints - i1 <= 1 && x.t - t1 >= 2000000 && x.held() === null, (x.frames - f1) + ' ' + (x.ints - i1));
+      memSetFault(x, id, pin, null); x.run(4000000 / 2);
+    }
+    // READY high from power-on: no wait states, and the machine does not start (RAM accesses out of step)
+    x = g(); memSetFault(x, 'IC116', 'READY', 1); x.run(4000000 * 2); ok('READY high: no wait states, no Ready', x.waits === 0 && !x.screenText().includes('Ready'));
+    // the gate array's address and control inputs
+    x = g(); memSetFault(x, 'IC116', 'A15', 1); x.run(4000000 * 2); ok('A15 to the gate array high: the lower ROM is never switched in', !x.screenText().includes('Ready') && x.read(0x0000) === x.ram[0]);
+    x = g(); memSetFault(x, 'IC116', 'IORQ', 'z'); x.run(4000000 * 2); ok('IORQ to the gate array missing: its registers are never written', x.gaMode === 0 && x.pens.every(v => v === 0) && x.acc[2] === 0, x.gaMode);
+    x = g(); memSetFault(x, 'IC116', 'D0', 0); x.run(4000000 * 3); ok('D0 to the gate array low: screen mode 0 instead of 1', (x.gaMode & 3) === 0 && x.vmode === 0, x.gaMode);
+    // the recorded video signals: one entry per character, four clocks apart, and the last one is "now"
+    x = g(); x.run(4000000 * 2); x.step(); x.step();
+    ok('video record: characters four clocks apart', x.vlN >= 2 && [...Array(x.vlN - 1).keys()].every(k => x.vlT[k + 1] - x.vlT[k] === 4), x.vlN);
+    ok('video record: the last clock matches the present state', (() => { const v = x.videoAt(x.t - 1), n = x.videoAt(); return v.vs === n.vs && v.rgb === x.rgb; })());
+    ok('video record: HSYNC seen rising at the right character', (() => { for (let i = 0; i < 400; i++) { x.step(); for (let k = 1; k < x.vlN; k++) if ((x.vlF[k] & 1) && !(x.vlF[k - 1] & 1)) { const a = x.videoAt(x.vlT[k] - 1), b = x.videoAt(x.vlT[k]); return a.hs === 0 && b.hs === 1; } } return false; })());
+    x.setGateArray('40007'); ok('40007 pinout selected', x.ga.part === '40007' && !x.faulty);
   }
 } else console.log('(set CPC_ROMS to run the boot checks)');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

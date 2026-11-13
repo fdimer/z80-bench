@@ -406,7 +406,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <dt>Address bus</dt><dd id="brAddr">–</dd>
           <dt>Data bus</dt><dd id="brData">–</dd>
         </dl>
-        <p class="hint">Clicking CLK pulses one clock. /INT is level-sensitive, /NMI triggers on a falling edge. Holding /WAIT low inserts wait states; /BUSREQ low floats the buses at the end of the current machine cycle; /RESET low holds the CPU in reset. On the gate array (IC116) and the 6845 (IC108), click a ringed pin to disconnect it or hold it high or low: the gate array's INT, ROMEN, RAMRD, MWE, RAS and CAS outputs, its R, G, B and SYNC outputs to the monitor and its HSYNC, VSYNC and DISPEN inputs; the 6845's HSYNC, VSYNC and DE outputs, its display address lines MA0–MA13 and row lines RA0–RA2 (MA10 and MA11 are not used on this board). Their bus-side pins follow the CPU clock by clock; their video-side pins show the state at the end of the current instruction. Faults are listed in the Debug panel.</p>
+        <p class="hint">Clicking CLK pulses one clock. /INT is level-sensitive, /NMI triggers on a falling edge. Holding /WAIT low inserts wait states; /BUSREQ low floats the buses at the end of the current machine cycle; /RESET low holds the CPU in reset. On the gate array (IC116) and the 6845 (IC108), click a ringed pin to disconnect it or hold it high or low. A fault belongs to that pin only, like a broken trace to that chip: with the gate array's VSYNC input broken the 8255 still sees VSYNC. Every gate array pin can be given a fault except CPU ADDR, CAS ADDR and 244EN, its clocks included: without CK16 (the 16 MHz oscillator) the whole machine stops; without PHI, or with READY held low, the Z80 is held while the picture goes on; without CCLK the 6845 stands still. READY held high removes the wait states: RAM accesses then fall out of step with the gate array, which is modelled approximately (a read returns what the RAM last put out, a write is lost). On the 6845: HSYNC, VSYNC, DE, the display address lines MA0–MA13, the row lines RA0–RA2 (MA10 and MA11 are not used on this board) and its clock. All pins follow the machine clock by clock: the 6845's outputs change once a character (four clocks), and R, G and B show the colour at each clock. Faults are listed in the Debug panel.</p>
       </section>
       <section class="panel" id="pMemChips">
         <h2>Memory chips <span class="aside" id="mcInfo">live pins · click a pin to disconnect it or hold it high or low</span></h2>
@@ -753,8 +753,9 @@ function expand(cycles) {
     let j = 0;
     while (i < T.length && T[i].mc === n + 1) {
       const s = T[i++];
-      if (s.ws && c.w) for (let k = 0; k < c.w; k++, j++) out.push(Object.assign({}, s, { t: 'TW', ws: false, first: false, gw: true, ready: false }));
-      if (c.t0 !== undefined) s.ready = ((c.t0 + j) & 3) === 1;
+      if (s.ws && c.w) for (let k = 0; k < c.w; k++, j++) out.push(Object.assign({}, s, { t: 'TW', ws: false, first: false, gw: true, ready: false, at: c.t0 + j }));
+      if (c.t0 !== undefined) { s.ready = ((c.t0 + j) & 3) === 1; s.at = c.t0 + j; }
+      if (c.held && /READY/.test(c.held)) Object.assign(s, { t: 'TW', a: cpu.pc, m1: 0, mreq: 0, rd: 0, gw: true });   // waiting in an opcode fetch
       out.push(s); j++;
     }
   });
@@ -780,7 +781,7 @@ function beginInstruction() {
   cpc.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(); cpc.afterStep(cyc);
   timeline = expand(cyc); ti = 0; lastTimeline = timeline;
   lastWrites = new Set(cyc.filter(c => c.k === 'MW').map(c => c.a));
-  curInstr = { pc, text: cpu.lastEvent === 'NMI' ? 'NMI response → 0066h' : cpu.lastEvent === 'INT' ? 'Interrupt response (IM ' + pre.im + ')' : (cyc[0] && cyc[0].halt) ? 'HALT state (NOP fetch)' : text, tlen: timeline.length };
+  curInstr = { pc, text: cpu.lastEvent === 'NMI' ? 'NMI response → 0066h' : cpu.lastEvent === 'INT' ? 'Interrupt response (IM ' + pre.im + ')' : (cyc[0] && cyc[0].held) ? 'Processor held (' + cyc[0].held + ')' : (cyc[0] && cyc[0].halt) ? 'HALT state (NOP fetch)' : text, tlen: timeline.length };
 }
 // one clock: returns 'mid' | 'done' | 'wait' | 'busreq' | 'reset'
 function tick() { const r = tick0(); if (pinWatches.size || busWatches.size) pinCheck(); return r; }
@@ -934,7 +935,7 @@ function finishFast(cyc, pc) {
   lastTimeline = expand(cyc);
   curT = lastTimeline[lastTimeline.length - 1];
   lastWrites = new Set(cyc.filter(c => c.k === 'MW').map(c => c.a));
-  curInstr = { pc, text: (cyc[0] && cyc[0].halt) ? 'HALT state (NOP fetch)' : cyc[0] && cyc[0].k === 'IA' ? 'Interrupt response' : disasmSafe(pc), tlen: lastTimeline.length };
+  curInstr = { pc, text: (cyc[0] && cyc[0].held) ? 'Processor held (' + cyc[0].held + ')' : (cyc[0] && cyc[0].halt) ? 'HALT state (NOP fetch)' : cyc[0] && cyc[0].k === 'IA' ? 'Interrupt response' : disasmSafe(pc), tlen: lastTimeline.length };
 }
 function disasmSafe(pc) { try { return disasm(bus.read, pc).text; } catch (e) { return '?'; } }
 function resetCPU() {
@@ -965,7 +966,7 @@ function pinValue(name) {
     case 'HALT': return inReset ? 1 : (regsView().halted ? 0 : 1);
     case 'BUSACK': return busReleased ? 0 : 1;
     case 'INT': return pins.int === 0 || cpc.intOut() ? 0 : 1;
-    case 'WAIT': return pins.wait === 0 || curT.ready === false ? 0 : 1;      // READY from the gate array
+    case 'WAIT': return pins.wait === 0 ? 0 : cpc.ga.lv.READY !== undefined ? cpc.ga.lv.READY : curT.ready === false ? 0 : 1;      // READY from the gate array, through any fault on it
     default: return pins[name.toLowerCase()];
   }
 }
@@ -1705,7 +1706,7 @@ function renderCpState() {
   const pen = n => `${n === 16 ? 'border' : 'pen ' + n} <b>${CPC.COLOUR_NAMES[cpc.pens[n]]}</b>`;
   const html = `<div class="blk"><div class="hd">Memory now</div><div class="kv">0000h–3FFFh → <b>${lo}</b><br>4000h–BFFFh → <b>RAM</b><br>C000h–FFFFh → <b>${hi}</b><br>Writes always go to the RAM</div></div>
     <div class="blk"><div class="hd">Gate array IC116 (${cpc.ga.part}) · port 7Fxxh</div><div class="kv">Mode and ROM register <b>${h2(0x80 | g)}h</b>: screen mode <b>${g & 3}</b>${cpc.vmode !== (g & 3) ? ' (mode ' + cpc.vmode + ' until the next HSYNC)' : ''} · lower ROM <b>${g & 4 ? 'off' : 'on'}</b> · upper ROM <b>${g & 8 ? 'off' : 'on'}</b><br>Interrupt counter <b>${cpc.intCnt}</b> of 52 lines · INT <b>${cpc.intReq ? 'low (asking)' : 'high'}</b>${cpc.ga.lv.INT !== undefined ? ' (pin fault: the Z80 sees ' + (cpc.ga.lv.INT ? 'high' : 'low') + ')' : ''} · taken <b>${cpc.ints}</b><br>${pen(16)} · ${pen(0)} · ${pen(1)}<br>${pen(2)} · ${pen(3)}</div></div>
-    <div class="blk"><div class="hd">READY (the Z80's WAIT)</div><div class="kv">Clock <b>${cpc.t.toLocaleString('en-AU')}</b> · wait states added <b>${cpc.waits.toLocaleString('en-AU')}</b>${cpc.t ? ' (' + (100 * cpc.waits / cpc.t).toFixed(1) + '%)' : ''}<br>READY is high one clock in four; each cycle waits for it</div></div>
+    <div class="blk"><div class="hd">READY (the Z80's WAIT)</div><div class="kv">Clock <b>${cpc.t.toLocaleString('en-AU')}</b> · wait states added <b>${cpc.waits.toLocaleString('en-AU')}</b>${cpc.t ? ' (' + (100 * cpc.waits / cpc.t).toFixed(1) + '%)' : ''}<br>${cpc.held() ? '<b>Z80 held: ' + esc(cpc.held()) + '</b>' : cpc.ga.lv.READY === 1 ? '<b>READY held high: no wait states, RAM accesses out of step</b>' : 'READY is high one clock in four; each cycle waits for it'}</div></div>
     <div class="blk"><div class="hd">6845 IC108 · ports BCxxh–BFxxh</div><div class="kv">R0–R7 <b>${[...R.subarray(0, 8)].map(h2).join(' ')}</b><br>R8–R15 <b>${[...R.subarray(8, 16)].map(h2).join(' ')}</b><br>Character <b>${cpc.hcc}</b> of ${R[0] + 1} · row <b>${cpc.vcc}</b> line <b>${cpc.vlc}</b> · scan line <b>${cpc.line}</b> of ${cpc.frameLines()}<br>Display address <b>${h4((cpc.maRow + cpc.hcc) & 0x3FFF)}h</b> · DISPEN <b>${cpc.de ? 'high' : 'low'}</b> · HSYNC <b>${cpc.hs ? 'high' : 'low'}</b> · VSYNC <b>${cpc.vsync ? 'high' : 'low'}</b><br>Screen memory at <b>${h4((R[12] & 0x30) << 10)}h</b> · frame <b>${cpc.frames}</b></div></div>
     <div class="blk"><div class="hd">Monitor</div><div class="kv">Beam <b>${cpc.mx}</b> characters after HSYNC, <b>${cpc.my}</b> lines after VSYNC · picture <b>${cpc.pictures}</b><br>Colour out <b>${CPC.COLOUR_NAMES[cpc.rgb]}</b></div></div>
     <div class="blk"><div class="hd">8255 IC107 · ports F4xxh–F7xxh</div><div class="kv">Port A <b>${h2(cpc.ppiA)}h</b> · port C <b>${h2(c)}h</b>: keyboard row <b>${c & 15}</b> · cassette motor <b>${c & 0x10 ? 'on' : 'off'}</b> · sound chip <b>${['idle', 'read', 'write', 'address'][c >> 6]}</b> (register ${cpc.psgSel})<br>Keys down <b>${keys.join(' ') || 'none'}</b></div></div>`;
@@ -1989,6 +1990,7 @@ $('cpDumpBin').onclick = () => cpSaved(cpDownload(`cpc-ram-64k-${cpStamp()}.bin`
 
 // ---------- memory chips: what this machine has, and what each pin's board net is doing ----------
 // Shown for the CPU's own accesses. The display's reads, which share the RAM in every microsecond, are not shown yet.
+// The video-side pins of the gate array and the 6845 come from the machine's record of each character (cpc.videoAt).
 const MC = {
   m: cpc,
   groups() { return [['ROM · 32K · ' + (cpc.hasLo && cpc.hasHi ? 'firmware and BASIC' : cpc.hasLo ? 'firmware only, BASIC half empty' : cpc.hasHi ? 'BASIC only, firmware half empty' : 'empty'), [0]], ['RAM · 64K · one 4164 per data bit', [8, 7, 6, 5, 4, 3, 2, 1]]]; },
@@ -2005,33 +2007,34 @@ const MC = {
       if ((d = /^O(\d)$/.exec(name))) return B.rom ? D(+d[1]) : 'z';
       return name === 'CE' ? (B.rom ? 0 : 1) : name === 'OE' ? 0 : 1;
     }
-    if (i === 9) {                      // the gate array. Its video-side pins show the state at the end of the current instruction.
-      const T = B.T, act = (B.rd || B.wr) && T.t !== 'T1', gaw = T.iorq === 0 && T.m1 !== 0 && T.wr === 0 && A !== null && !(A & 0x8000) && !!(A & 0x4000);
+    if (i === 9) {                      // the gate array
+      const T = B.T, V = cpc.videoAt(T.at), act = (B.rd || B.wr) && T.t !== 'T1', gaw = T.iorq === 0 && T.m1 !== 0 && T.wr === 0 && A !== null && !(A & 0x8000) && !!(A & 0x4000);
+      const dead = cpc.gaDead();
       if ((d = /^D(\d)$/.exec(name))) return gaw ? D(+d[1]) : B.rd && T.t !== 'T1' ? (cpc.ram[A] >> +d[1]) & 1 : 'z';
       switch (name) {
         case 'A15': return A === null ? 'z' : A >> 15 & 1; case 'A14': return A === null ? 'z' : A >> 14 & 1;
         case 'MREQ': return T.mreq; case 'IORQ': return T.iorq; case 'M1': return T.m1; case 'RD': return T.rd;
-        case 'RESET': return pins.reset; case 'PHI': case 'CK16': return clk;
+        case 'RESET': return pins.reset; case 'CK16': return clk; case 'PHI': return dead ? 0 : clk;
         case 'READY': return T.ready === false ? 0 : 1;
         case 'CPU': case 'CASAD': case 'CAS': return act ? 0 : 1;
         case 'RAS': return B.mem ? 0 : 1; case 'MWE': return B.wr ? 0 : 1; case '244EN': return gaw ? 0 : 1;
         case 'ROMEN': return B.rom ? 0 : 1; case 'RAMRD': return B.rd && !B.rom ? 0 : 1;
-        case 'INT': return cpc.intReq ? 0 : 1;
-        case 'HSYNC': return cpc.vdu.lv.HSYNC !== undefined ? cpc.vdu.lv.HSYNC : cpc.hs ? 1 : 0; case 'VSYNC': return cpc.vsOut() ? 1 : 0; case 'DISPEN': return cpc.vdu.lv.DE !== undefined ? cpc.vdu.lv.DE : cpc.de ? 1 : 0;
-        case 'CCLK': return tTotal >> 1 & 1; case 'SYNC': return cpc.gHs || cpc.gVs ? 0 : 1;
-        case 'R': return CPC.PALETTE[cpc.rgb][0] ? 1 : 0; case 'G': return CPC.PALETTE[cpc.rgb][1] ? 1 : 0; case 'B': return CPC.PALETTE[cpc.rgb][2] ? 1 : 0;
+        case 'INT': return V.int ? 0 : 1;
+        case 'HSYNC': return cpc.vdu.lv.HSYNC !== undefined ? cpc.vdu.lv.HSYNC : V.hs; case 'VSYNC': return cpc.vdu.lv.VSYNC !== undefined ? cpc.vdu.lv.VSYNC : V.vs; case 'DISPEN': return cpc.vdu.lv.DE !== undefined ? cpc.vdu.lv.DE : V.de;
+        case 'CCLK': return dead ? 0 : (T.at === undefined ? tTotal : T.at) >> 1 & 1; case 'SYNC': return V.gHs || V.gVs ? 0 : 1;
+        case 'R': return CPC.PALETTE[V.rgb][0] ? 1 : 0; case 'G': return CPC.PALETTE[V.rgb][1] ? 1 : 0; case 'B': return CPC.PALETTE[V.rgb][2] ? 1 : 0;
       }
       return 'z';
     }
-    if (i === 10) {                     // the 6845: CS is A14, RS is A8, R/W is A9, E follows IORQ. Its outputs show the state at the end of the current instruction.
-      const T = B.T, io = T.iorq === 0 && T.m1 !== 0 && A !== null, sel = io && !(A & 0x4000);
+    if (i === 10) {                     // the 6845: CS is A14, RS is A8, R/W is A9, E follows IORQ.
+      const T = B.T, V = cpc.videoAt(T.at), io = T.iorq === 0 && T.m1 !== 0 && A !== null, sel = io && !(A & 0x4000);
       if ((d = /^D(\d)$/.exec(name))) return sel ? D(+d[1]) : 'z';
-      if ((d = /^MA(\d+)$/.exec(name))) return (cpc.maRow + cpc.hcc) >> +d[1] & 1;
-      if ((d = /^RA(\d)$/.exec(name))) return cpc.vlc >> +d[1] & 1;
+      if ((d = /^MA(\d+)$/.exec(name))) return V.ma >> +d[1] & 1;
+      if ((d = /^RA(\d)$/.exec(name))) return V.ra >> +d[1] & 1;
       switch (name) {
-        case 'RESET': return pins.reset; case 'LPSTB': case 'CURSOR': return 0; case 'CLK': return tTotal >> 1 & 1;
+        case 'RESET': return pins.reset; case 'LPSTB': case 'CURSOR': return 0; case 'CLK': return cpc.gaDead() || 'CCLK' in cpc.ga.lv ? 0 : (T.at === undefined ? tTotal : T.at) >> 1 & 1;
         case 'CS': return A === null ? 'z' : A >> 14 & 1; case 'RS': return A === null ? 'z' : A >> 8 & 1; case 'R/W': return A === null ? 'z' : A >> 9 & 1; case 'E': return io ? 1 : 0;
-        case 'DE': return cpc.de ? 1 : 0; case 'HSYNC': return cpc.hs ? 1 : 0; case 'VSYNC': return cpc.vsync ? 1 : 0;
+        case 'DE': return V.de; case 'HSYNC': return V.hs; case 'VSYNC': return V.vs;
       }
       return 'z';
     }
