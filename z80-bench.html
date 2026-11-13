@@ -284,6 +284,11 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .osbscreen { display: block; width: 100%; aspect-ratio: 4 / 3; background: #120a02; border-radius: 6px; image-rendering: pixelated; outline: none; border: 2px solid #2a1c08; cursor: text; }
 .osbscreen:focus { border-color: var(--sel); }
 .osbbar { margin-top: 10px; }
+.osbdrives { gap: 6px 22px; align-items: center; }
+.osbdrive { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.osbdrive .led { width: 10px; height: 10px; border-radius: 50%; background: var(--line, #c9ced6); display: inline-block; }
+.osbdrive.sel .led { background: #b45309; } .osbdrive.busy .led { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+.osbdrive .dinfo { font-size: 12px; color: var(--muted); }
 .osbkeys { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 .osbstate { display: grid; gap: 8px; font-size: 12.5px; }
 .osbstate .blk { background: var(--panel2); border-radius: 4px; padding: 8px 10px; }
@@ -409,8 +414,13 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <label class="inline"><input type="checkbox" id="osbAlpha" checked> Alpha Lock</label>
           <span class="osbkeys" id="osbKeys"></span>
         </div>
+        <div class="row osbbar osbdrives">
+          <span class="osbdrive" id="osbDrv0"><i class="led"></i><b>Drive A</b> <button type="button" data-ins="0">Insert disk…</button><button type="button" data-ej="0" hidden>Eject</button><button type="button" data-sv="0" hidden>Save (.imd)</button> <span class="mono dinfo">empty</span></span>
+          <span class="osbdrive" id="osbDrv1"><i class="led"></i><b>Drive B</b> <button type="button" data-ins="1">Insert disk…</button><button type="button" data-ej="1" hidden>Eject</button><button type="button" data-sv="1" hidden>Save (.imd)</button> <span class="mono dinfo">empty</span></span>
+          <input type="file" id="osbDiskFile" accept=".imd,.IMD" hidden>
+        </div>
         <div class="msg" id="osbMsg"></div>
-        <p class="hint">Click the screen and type: your keyboard drives the Executive's key matrix through the ROM's own 60 Hz scan. Caps Lock toggles Alpha Lock, and Backspace acts as the ← key. The ROM is not included: load your own 8 KB image (execv12, CRC 70798C2F). Your browser keeps it, so you only load it once. The blue marker shows the electron beam while you step.</p>
+        <p class="hint">Click the screen and type: your keyboard drives the Executive's key matrix through the ROM's own 60 Hz scan. Caps Lock toggles Alpha Lock, and Backspace acts as the ← key. The ROM is not included: load your own 8 KB image (execv12, CRC 70798C2F). Your browser keeps it, so you only load it once. The blue marker shows the electron beam while you step. Floppy disks: insert an ImageDisk (.imd) file in drive A, then press RETURN at the ROM's prompt to boot from it. The lamp beside a drive lights while it is selected (its motor is then running), and brighter while the controller is busy. Disks are held in memory only: after a program has written to one, Save downloads it as a new .imd file. Disk images are not included.</p>
       </section>
   </div>
 
@@ -568,6 +578,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 <script src="src/z80asm.js"></script>
 <script src="src/m6821.js"></script>
 <script src="src/z80sio.js"></script>
+<script src="src/wd1793.js"></script>
 <script src="src/osborne.js"></script>
 <script>
 (() => {
@@ -1787,10 +1798,11 @@ function masterReset() {
   cpu.nmiPending = false;
   for (const a of [osb.rom, osb.dram[0], osb.dram[1], osb.xram, osb.font, osb.vchar, osb.vattr, osb.keys, mem]) a.fill(0);
   romLoaded = false; try { localStorage.removeItem(ROM_KEY); } catch (e) {}
+  for (const d of osb.drives) { d.disk = null; d.cyl = 0; }
   held.clear(); showKeys(); $('osbMsg').className = 'msg'; $('osbMsg').textContent = '';
   resetCPU();
   if (typeof disDirty !== 'undefined') disDirty = true;
-  setStatus('Master reset: boot ROM forgotten (load it again to switch on), 128K DRAM, font, video and extra RAM cleared; all breakpoints and stops removed; input pins released');
+  setStatus('Master reset: boot ROM forgotten (load it again to switch on), 128K DRAM, font, video and extra RAM cleared, disks ejected; all breakpoints and stops removed; input pins released');
   render();
 }
 let masterArm = null;
@@ -1837,6 +1849,14 @@ function piaText(p, nm) {
   return `<div class="blk"><div class="hd">${nm}</div><div class="kv">A: CR <b>${h2(p.ctrl(p.cra, p.irqa1, p.irqa2))}</b> DDR <b>${h2(p.ddra)}</b> OR <b>${h2(p.ora)}</b> pins <b>${h2(p.pa())}</b> · CA1 <b>${p.ca1}</b> CA2 <b>${p.ca2()}</b> · IRQA <b>${p.irqA() ? 'low' : 'high'}</b><br>B: CR <b>${h2(p.ctrl(p.crb, p.irqb1, p.irqb2))}</b> DDR <b>${h2(p.ddrb)}</b> OR <b>${h2(p.orb)}</b> pins <b>${h2(p.pb())}</b> · CB1 <b>${p.cb1}</b> CB2 <b>${p.cb2()}</b> · IRQB <b>${p.irqB() ? 'low' : 'high'}</b></div></div>`;
 }
 let osbSig = '';
+// the floppy disk controller's registers and lines, and what is under the head
+function fdcText() {
+  const f = osb.fdc, d = osb.driveSelected(), st = f.statusByte(), drv = f.drive, t = f.trk();
+  const bits = f.type === 1 ? [[0x80, 'not ready'], [0x40, 'write protect'], [0x20, 'head loaded'], [0x10, 'seek error'], [0x08, 'CRC error'], [0x04, 'track 0'], [0x02, 'index'], [0x01, 'busy']]
+    : [[0x80, 'not ready'], [0x40, 'write protect'], [0x20, 'record type'], [0x10, 'record not found'], [0x08, 'CRC error'], [0x04, 'lost data'], [0x02, 'DRQ'], [0x01, 'busy']];
+  const on = bits.filter(([m]) => st & m).map(b => b[1]).join(', ') || 'no bits set';
+  return `<div class="blk"><div class="hd">Disk controller UB17 (FD1793) · ports 08h–0Bh</div><div class="kv">Status <b>${h2(st)}</b> ${on}<br>Command <b>${h2(f.cmd)}</b> ${f.lastCmd} · track <b>${h2(f.track)}</b> sector <b>${h2(f.sector)}</b> data <b>${h2(f.data)}</b><br>INTRQ <b>${f.intrq ? 'high' : 'low'}</b> (to UD8 CB1) · DRQ <b>${f.drq ? 'high' : 'low'}</b> (not connected: the ROM polls)<br>Drive <b>${d < 0 ? 'none selected, motors off' : 'AB'[d] + ' selected, motor on'}</b> · <b>${f.dden ? 'double' : 'single'}</b> density${drv ? `<br>Head at track <b>${drv.cyl}</b> · ${drv.disk ? (t && t.sectors.length ? `${t.sectors.length} sectors of ${t.sectors[0].data.length} bytes here, ${t.mfm ? 'double' : 'single'} density` : 'this track is not formatted') : 'no disk in the drive'}` : ''}</div></div>`;
+}
 function renderMachine() {
   const pa = osb.pa, b = osb.beam(), s = osb.sio.intRequest();
   const flag = (on, txt) => `<span class="${on ? 'on' : 'off'}">${txt} ${on ? 'on' : 'off'}</span>`;
@@ -1844,10 +1864,10 @@ function renderMachine() {
   const html = `<div class="blk"><div class="hd">Memory banks · port 00h = ${h2(pa)}h</div><div class="kv">${flag(pa & 0x80, 'PA7 ROM, font RAM, XRAM at 0000h–3FFFh')}<br>${flag(pa & 0x40, 'PA6 video RAM at C000h–DFFFh')}<br>PA0 DRAM bank <b>${pa & 1}</b> · F000h–FFFFh always bank 0</div></div>
     <div class="blk"><div class="hd">Video and interrupts</div><div class="kv">Video <b>${osb.vidEna ? 'enabled' : 'blanked (no OUT 1Ch yet)'}</b> · beam line <b>${b.line}</b>${b.line >= OSB.VBL_LINE ? ' <b>VBLANK</b>' : ''} · frame <b>${osb.frames}</b> · RTC <b>${h2(osb.rtc)}h</b><br>/INT <b>${osb.intRequest() ? 'low' : 'high'}</b> · acknowledge vector <b>${s ? h2(osb.sio.vector()) + 'h (SIO)' : 'FEh (pull-ups)'}</b> · I <b>${h2(cpu.i)}h</b> IM <b>${cpu.im}</b><br>Keys down <b>${keys.join(' ') || 'none'}</b> · Alpha Lock <b>${osb.alphaLock ? 'on' : 'off'}</b></div></div>` +
     piaText(osb.pia0, 'System PIA UD12 · ports 00h–03h') + piaText(osb.pia1, 'IEEE-488 PIA UD8 · ports 10h–13h (nothing attached)') +
-    `<div class="blk"><div class="hd">Stubs</div><div class="kv">SIO 0Ch–0Fh registers only · 8253 04h–07h · MB8877 08h–0Bh reports "not ready" (no disk drives yet)</div></div>`;
+    fdcText() + `<div class="blk"><div class="hd">Stubs</div><div class="kv">SIO 0Ch–0Fh registers only · 8253 04h–07h</div></div>`;
   if (html !== osbSig) { osbSig = html; $('osbState').innerHTML = html; }
 }
-function renderOsb() { drawScreen(); renderMachine(); renderChips(); if (mcReady) renderMemChips(); }
+function renderOsb() { drawScreen(); renderMachine(); renderChips(); renderDrives(); if (mcReady) renderMemChips(); }
 // keyboard: physical key positions to the Executive matrix
 const OSB_CODE = { Enter: 'Return', NumpadEnter: 'Return', ShiftLeft: 'Shift', ShiftRight: 'Shift', ControlLeft: 'Ctrl', ControlRight: 'Ctrl',
   Tab: 'Tab', Escape: 'Esc', Space: 'Space', ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down', Backspace: 'Left',
@@ -1888,6 +1908,41 @@ $('osbRomFile').onchange = () => {
   f.arrayBuffer().then(buf => { if (useRom(new Uint8Array(buf), false)) powerOn(); });
 };
 $('osbRestart').onclick = powerOn;
+
+// ---------- floppy drives: ImageDisk files in and out ----------
+let diskSlot = 0;
+const diskMsg = (cls, txt) => { $('osbMsg').className = 'msg' + (cls ? ' ' + cls : ''); $('osbMsg').textContent = txt; };
+function renderDrives() {
+  const sel = osb.driveSelected();
+  osb.drives.forEach((d, i) => {
+    const el = $('osbDrv' + i), dk = d.disk;
+    el.classList.toggle('sel', sel === i); el.classList.toggle('busy', sel === i && osb.fdc.busy);
+    el.querySelector('[data-ins]').hidden = !!dk; el.querySelector('[data-ej]').hidden = !dk; el.querySelector('[data-sv]').hidden = !dk;
+    const txt = dk ? `${dk.name} · ${dk.describe()}${dk.writeProtected ? ' · write protected' : ''}${dk.dirty ? ' · changed, not saved' : ''} · head at track ${d.cyl}` : 'empty';
+    const info = el.querySelector('.dinfo'); if (info.textContent !== txt) info.textContent = txt;
+  });
+}
+document.querySelector('.osbdrives').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.ins !== undefined) { diskSlot = +b.dataset.ins; $('osbDiskFile').click(); return; }
+  const i = +(b.dataset.ej !== undefined ? b.dataset.ej : b.dataset.sv), d = osb.drives[i], dk = d.disk; if (!dk) return;
+  if (b.dataset.ej !== undefined) {
+    if (dk.dirty && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Eject without saving?'; setTimeout(() => { delete b.dataset.sure; b.textContent = 'Eject'; }, 3000); return; }
+    delete b.dataset.sure; b.textContent = 'Eject'; d.disk = null; diskMsg('', `Drive ${'AB'[i]}: ${dk.name} ejected.`); render(); return;
+  }
+  const name = dk.name.replace(/\.imd$/i, '') + (dk.dirty ? '-changed' : '') + '.imd';
+  benchDownload(name, writeIMD(dk), 'application/octet-stream').then(f => { if (f) { dk.dirty = false; diskMsg('ok', `Drive ${'AB'[i]}: disk saved as ${f}.`); render(); } });
+});
+$('osbDiskFile').onchange = () => {
+  const f = $('osbDiskFile').files[0]; $('osbDiskFile').value = ''; if (!f) return;
+  f.arrayBuffer().then(buf => {
+    try {
+      const dk = parseIMD(new Uint8Array(buf), f.name); osb.drives[diskSlot].disk = dk;
+      diskMsg('ok', `Drive ${'AB'[diskSlot]}: ${f.name} inserted (${dk.describe()}).${dk.comment ? ' Label: ' + dk.comment.split('\n')[0].slice(0, 80).replace(/\.$/, '') + '.' : ''}${diskSlot === 0 && romLoaded ? ' Press RETURN at the ROM\'s prompt to boot from it.' : ''}`);
+    } catch (err) { diskMsg('err', `${f.name} could not be read: ${err.message}.`); }
+    render();
+  });
+};
 
 // ---------- peripheral chip pinouts ----------
 const PIA_PINS = [

@@ -2,7 +2,7 @@
 // The ROM is not part of this repository. Prints the screen text and machine state.
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const ctx = { console }; vm.createContext(ctx);
-for (const f of ['z80core.js', 'm6821.js', 'z80sio.js', 'osborne.js'])
+for (const f of ['z80core.js', 'm6821.js', 'z80sio.js', 'wd1793.js', 'osborne.js'])
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
 vm.runInContext('this.Osborne = Osborne; this.OSB = OSB; this.disasm = disasm;', ctx);
 const [romPath, secs = '3', ...keys] = process.argv.slice(2);

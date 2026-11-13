@@ -2,7 +2,12 @@
 // Based on the OCC2 schematic (1K00035 rev 10), the Osborne Executive Technical Manual and MAME's osbexec driver.
 // Emulated: Z80A at 23.9616 MHz / 6, 128K banked DRAM, boot ROM, font RAM, scratch RAM (XRAM), video RAM with
 // attribute latch, system PIA (banking, VBLANK interrupt), keyboard matrix, RTC counter, video enable.
-// Stubbed so the ROM can run: IEEE-488 PIA (nothing attached), Z80 SIO (registers only), 8253 timer, MB8877 FDC.
+// Floppy disks (schematic sheet 13): an FD1793 (UB17, src/wd1793.js) at ports 08h-0Bh with a 1 MHz clock, and two
+// single-sided 5.25-inch drives. The system PIA's port B picks the drive and the density: PB1 low selects drive 1,
+// PB2 low drive 2, and the motors run while either is selected; PB0 low is double density (DDEN*). The controller's
+// READY input is tied high, its DRQ output goes nowhere (the ROM polls the status register), and INTRQ goes to CB1
+// of the IEEE-488 PIA.
+// Stubbed so the ROM can run: IEEE-488 PIA (nothing attached), Z80 SIO (registers only), 8253 timer.
 
 const OSB = {
   CPU_HZ: 23961600 / 6,      // 3.9936 MHz
@@ -146,6 +151,10 @@ class Osborne {
     this.pia0.inB = 0xFF;                   // PB6 /DSR and PB7 /RI from the modem port: idle high
     for (const c of this.sio.ch) { c.cts = c.dcd = 1; c.ext.cts = c.ext.dcd = 1; }   // 1489 receivers with nothing plugged in read high (inactive)
     this.pia0.onPA = v => { this.pa = v; };
+    this.fdc = new WD1793(OSB.CPU_HZ, { clock: 1, maxCyl: 42 });
+    this.drives = [{ disk: null, cyl: 0 }, { disk: null, cyl: 0 }];      // drive 1 (A) and drive 2 (B)
+    this.fdc.onIntrq = l => { if (this.conn.fdc && this.conn.pia1) this.pia1.setCB1(l ? 1 : 0); };
+    this.pia0.onPB = () => this.fdcLines();
     this.bus = {
       read: a => this.read(a), write: (a, v) => this.write(a, v),
       input: p => this.input(p), output: (p, v) => this.output(p, v)
@@ -168,7 +177,7 @@ class Osborne {
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
     this.acc = new Uint32Array(10);          // accesses: 0-7 the byte-wide chips in the order above, 8 and 9 the two DRAM banks
     this.faulty = false;
-    this.conn = { pia0: true, pia1: true, sio: true };   // debug: a disconnected chip no longer sees the CPU bus
+    this.conn = { pia0: true, pia1: true, sio: true, fdc: true };   // debug: a disconnected chip no longer sees the CPU bus
     this.cpu = new Z80(this.bus);
     this.reset();
   }
@@ -178,7 +187,7 @@ class Osborne {
     this.attrLatch = 0; this.vidEna = false; this.rtc = 0;
     this.frameT = 0; this.frames = 0; this.vblank = false; this.pia0.setCB1(0);
     this.now = 0; this.lastR = 0; this.p1.fresh = true;      // T-states since reset, for the DRAM refresh bookkeeping
-    this.fdcStatus = 0x80;                  // "not ready": no drive emulated yet
+    this.fdc.reset(); this.fdcLines();
   }
   // ---- memory ----
   read(a) {
@@ -323,7 +332,7 @@ class Osborne {
     switch ((lo >> 2) & 7) {
       case 0: return this.conn.pia0 ? this.pia0.read(r) : 0xFF;
       case 1: return 0xFF;                                   // 8253 timer (stub)
-      case 2: return r === 0 ? this.fdcStatus : 0xFF;         // MB8877 (stub)
+      case 2: return this.conn.fdc ? this.fdc.read(r) : 0xFF;    // FD1793
       case 3: return this.conn.sio ? this.sio.read(r) : 0xFF;    // A1 = B/A, A0 = C/D
       case 4: return this.conn.pia1 ? this.pia1.read(r) : 0xFF;
       case 5: return this.kbdRead(p >> 8);
@@ -336,11 +345,19 @@ class Osborne {
     if (lo & 0x80) return;
     switch ((lo >> 2) & 7) {
       case 0: if (this.conn.pia0) this.pia0.write(r, v); break;
+      case 2: if (this.conn.fdc) this.fdc.write(r, v); break;
       case 3: if (this.conn.sio) this.sio.write(r, v); break;
       case 4: if (this.conn.pia1) this.pia1.write(r, v); break;
       case 7: this.vidEna = true; break;                      // VID ENA flip-flop, cleared by reset
     }
   }
+  // the drive select and density lines from the system PIA's port B
+  fdcLines() {
+    const pb = this.pia0.pb();
+    this.fdc.drive = !(pb & 0x02) ? this.drives[0] : !(pb & 0x04) ? this.drives[1] : null;
+    this.fdc.dden = !(pb & 0x01);
+  }
+  driveSelected() { return this.drives.indexOf(this.fdc.drive); }
   kbdRead(rows) {
     let d = 0xFF;
     for (let r = 0; r < 8; r++) if (rows & (1 << r)) {
@@ -371,7 +388,7 @@ class Osborne {
   }
   // ---- time: raster position, VBLANK into PIA CB1, RTC counter ----
   advance(t) {
-    this.frameT += t; this.now += t;
+    this.frameT += t; this.now += t; this.fdc.advance(t);
     while (this.frameT >= OSB.FRAME_T) { this.frameT -= OSB.FRAME_T; this.frames++; if (this.p1.faulty) this.decay(); }
     const vb = this.frameT >= OSB.VBL_LINE * OSB.LINE_T;
     if (vb !== this.vblank) {

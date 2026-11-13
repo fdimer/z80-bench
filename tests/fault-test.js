@@ -1,7 +1,7 @@
 // Memory-chip fault model checks (no ROM needed): node tests/fault-test.js
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const ctx = { console }; vm.createContext(ctx);
-for (const f of ['z80core.js', 'm6821.js', 'z80sio.js', 'osborne.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
+for (const f of ['z80core.js', 'm6821.js', 'z80sio.js', 'wd1793.js', 'osborne.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
 vm.runInContext('this.Osborne = Osborne;', ctx);
 let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const m = new ctx.Osborne(new Uint8Array(0x2000).fill(0xA5));

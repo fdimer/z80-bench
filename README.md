@@ -21,9 +21,10 @@ This branch turns Z80 Bench into an Osborne Executive emulator, working from the
   - the VBLANK interrupt into PIA CB1, the RTC counter, the video-enable flip-flop
   - mode 2 interrupts with the FEh pull-up vector
 - `src/m6821.js` is a reusable MC6821 PIA model. The Z80 SIO comes from the `sio` branch.
-- The 8253 timer, MB8877 disk controller and IEEE-488 port are stubbed, so the ROM's self-test passes and it shows its sign-on screen. Disk booting is not emulated yet.
+- `src/wd1793.js` is the floppy side: an FD1793 disk controller (UB17, ports 08h–0Bh, wired as on schematic sheet 13), a floppy disk and ImageDisk (`.imd`) files. Steps, rotation and data bytes take as long as on the real drive, and the ROM's own polling loops read and write the sectors. With your own CP/M Plus system disk image in drive A the Executive boots to `A>`; disks a program writes to can be saved as new `.imd` files. `node tests/fdc-test.js` checks the controller and the file format. Read Track is not implemented.
+- The 8253 timer and the IEEE-488 port are stubbed, and the SIO has registers only.
 - **Memory chips and fault simulation**: every memory chip has a live pinout (the 2764 boot ROM, the 6116 scratch, video and font RAMs from the OCC2 schematic, and the sixteen 4164s of the RAM board). Click any pin to disconnect it or hold it high or low, and the machine runs with that fault: wrong cells, stuck data bits, dead or fighting chips, lost writes. `node tests/fault-test.js` checks the fault model.
-- **The ROM is not included** (it is copyrighted). Supply your own `execv12` image (CRC 70798C2F).
+- **The ROM is not included** (it is copyrighted). Supply your own `execv12` image (CRC 70798C2F) Disk images are not included either.
 - Run it headless with `node tests/osborne-run.js path/to/rom.bin [seconds] [keys...]`.
 
 ## Features
