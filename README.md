@@ -1,3 +1,20 @@
+# Z80 Bench: CPC branch (Amstrad CPC 464)
+
+This branch turns Z80 Bench into an Amstrad CPC 464, modelled from the CPC 464 circuit diagram: the Z80 with its pinout, bus timing, disassembly and debug points, wired to the gate array, the 6845 and the memory. It is work in progress: there is no sound or cassette yet.
+
+- **Processor timing**: the gate array's READY line (the Z80's WAIT) is high one clock in four, so every memory, I/O and interrupt cycle is stretched until it lines up; instructions take whole microseconds, as on the real machine. The wait states show in the clock-by-clock view.
+- **Memory**: the 32K ROM (IC103: firmware and BASIC) over 64K of RAM, with the gate array's two ROM enable bits; writes always reach the RAM. The eight 4164s (IC117-IC124) sit behind the 74LS153 address selectors as wired on the board.
+- **Video**: the 6845 (IC108) counts characters, rows and scan lines; the gate array (IC116) turns two bytes of RAM into dots for each character in modes 0, 1 and 2, with border, blanking and a mode change at HSYNC. A monitor model follows the sync pulses, so the picture rolls or tears when one is missing.
+- **Interrupts**: the gate array's counter, driven by HSYNC: 300 a second, resynchronised by VSYNC.
+- **Chips and faults**: the Z80, the gate array (40010 or 40007 pin arrangement) and the 6845 side by side with live pins, and the ROM and RAM chips in a panel of their own. Pins can be disconnected or held high or low: ROM and RAM pins, the gate array's INT, ROMEN, RAMRD, MWE, RAS, CAS, R, G, B, SYNC, HSYNC, VSYNC and DISPEN, and the 6845's HSYNC, VSYNC, DE, MA0-MA13 and RA0-RA2.
+- **Keyboard**: the CPC matrix through the 8255 and the sound chip's port; typed characters are translated to the CPC key that produces them, and there is an on-screen keyboard.
+
+**ROMs are not included.** Load your own firmware (`OS_464.ROM`, CRC 815752DF) and BASIC 1.0 (`BASIC_1.0.ROM`, CRC 7D9A3BAC) with the Load ROM button; the browser keeps them. Open `z80-bench.html` from this folder. The model is `src/cpc.js`; `node tests/cpc-test.js` checks timing, memory, faults and interrupts, and with `CPC_ROMS=/folder` also boots the real ROMs.
+
+The rest of this file describes Z80 Bench itself.
+
+---
+
 # Z80 Bench
 
 A Z80 CPU emulator for debugging programs and designing hardware around the chip. It runs in a web browser and shows the state of all 40 pins on every T-state.

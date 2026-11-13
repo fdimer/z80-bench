@@ -2,7 +2,7 @@
 //   CPC_ROMS=/folder/with/OS_464.ROM/and/BASIC_1.0.ROM node tests/cpc-test.js
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = { console }; vm.createContext(ctx);
-for (const f of ['z80core.js', 'memchips.js', 'cpc.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', f), 'utf8') + '\nthis.Z80 = Z80; this.CPCMachine = typeof CPCMachine !== "undefined" ? CPCMachine : undefined; this.CPC = typeof CPC !== "undefined" ? CPC : undefined; this.CPCGateArray = typeof CPCGateArray !== "undefined" ? CPCGateArray : undefined; this.memSetFault = typeof memSetFault !== "undefined" ? memSetFault : undefined;', ctx);
+for (const f of ['z80core.js', 'memchips.js', 'cpc.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', f), 'utf8') + '\nthis.Z80 = Z80; this.CPCMachine = typeof CPCMachine !== "undefined" ? CPCMachine : undefined; this.CPC = typeof CPC !== "undefined" ? CPC : undefined; this.memSetFault = typeof memSetFault !== "undefined" ? memSetFault : undefined;', ctx);
 const { CPCMachine, CPC, memSetFault } = ctx;
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => { if (cond) pass++; else { fail++; console.log('FAIL', name, extra === undefined ? '' : extra); } };
@@ -82,7 +82,12 @@ if (dir) {
     x = g(); memSetFault(x, 'IC116', 'MWE', 1); x.run(4000000 * 3); ok('MWE high: nothing is written', x.ram.every(v => v === 0));
     x = g(); x.run(4000000 * 3); memSetFault(x, 'IC116', 'DISPEN', 0); x.run(4000000 / 10); ok('DISPEN low: all border', new Set(x.fb.subarray(60 * 768, 200 * 768)).size === 1);
     memSetFault(x, 'IC116', 'DISPEN', null); memSetFault(x, 'IC116', 'VSYNC', 0); const p0 = x.pictures; x.run(4000000); ok('VSYNC missing: the picture rolls (monitor free-runs)', Math.abs((x.pictures - p0) - 50) > 2, x.pictures - p0);
-    memSetFault(x, 'IC116', 'VSYNC', null); x.setGateArray('40007'); ok('40007 pinout selected', x.ga.part === '40007' && !x.faulty);
+    memSetFault(x, 'IC116', 'VSYNC', null);
+    // 6845 faults: MA0 held low shows every other character twice; VSYNC disconnected also reaches the 8255
+    x.run(4000000 / 5); const good = x.fb.slice(); memSetFault(x, 'IC108', 'MA0', 0); x.run(4000000 / 5);
+    ok('6845 MA0 low: the picture changes, in character pairs', (() => { let diff = 0, pair = true; const W = 768; for (let y = 44; y < 52; y++) for (let ch = 4; ch < 44; ch += 2) for (let i = 0; i < 16; i++) { const a = x.fb[y * W + ch * 16 + i], b = x.fb[y * W + (ch + 1) * 16 + i]; if (a !== b) pair = false; if (a !== good[y * W + ch * 16 + i] || b !== good[y * W + (ch + 1) * 16 + i]) diff++; } return diff > 0 && pair; })());
+    memSetFault(x, 'IC108', 'MA0', null); memSetFault(x, 'IC108', 'VSYNC', 'z'); x.run(4000); ok('6845 VSYNC disconnected: port B bit 0 reads high', (x.input(0xF500) & 1) === 1);
+    memSetFault(x, 'IC108', 'VSYNC', null); x.setGateArray('40007'); ok('40007 pinout selected', x.ga.part === '40007' && !x.faulty);
   }
 } else console.log('(set CPC_ROMS to run the boot checks)');
 console.log(`${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

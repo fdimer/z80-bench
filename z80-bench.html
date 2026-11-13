@@ -337,6 +337,12 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .mcpop .sub { color: var(--muted); margin-bottom: 6px; font-family: var(--font-mono); font-size: 11.5px; }
 .mcpop .btns { display: flex; flex-wrap: wrap; gap: 6px; }
 .mcpop button { padding: 4px 10px; font-size: 12.5px; }
+.cpchips { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 8px 14px; align-items: start; margin-bottom: 10px; }
+.cpfig svg.chip { max-width: 380px; }
+.cpfig .pin.forced .ring { stroke: var(--warn); stroke-width: 2.6; stroke-dasharray: 4 2; }
+.cpfig .pin.forced .nm { fill: var(--warn); }
+.cpfig .pin.forced.fz .ring { stroke-dasharray: 2 3; }
+.cpfig .mcfaults { display: block; margin-top: 2px; }
 </style>
 
 <div class="wrap">
@@ -385,8 +391,25 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <p class="hint" id="cpHint">Click the picture and type: letters, digits and symbols come out as typed (the page presses the CPC key, with or without SHIFT, that gives that character). Backspace is DEL, Delete is CLR, Alt is COPY, the numeric keypad gives the function keys f0–f9 and its Enter is the small ENTER key. On the keyboard above, SHIFT and CTRL stay down for the next key. Load ROM takes the 464's two 16 KB images, the firmware (OS_464, CRC 815752DF) and BASIC 1.0 (CRC 7D9A3BAC), together or one at a time, or one 32 KB image of both. They are not included; your browser keeps them, so you only load them once.</p>
         <p class="hint">The picture is built the way the machine builds it: the 6845 counts characters and lines, the gate array turns two bytes of RAM into dots for each character, in the screen mode and colours it holds at that moment, with the border outside the display and black during the sync pulses. The monitor starts a new line at every HSYNC and a new picture at every VSYNC. When the machine is paused, the white mark shows where the beam is. Sound and the cassette are not emulated yet.</p>
       </section>
+      <section class="panel" id="pPinout">
+        <h2>Processor, gate array and 6845 <span class="aside">top view · live pins · ringed pins can be given a fault</span></h2>
+        <div class="cpchips">
+          <figure class="mcfig cpfig"><svg class="chip" id="chip" viewBox="0 0 380 540" role="group" aria-label="Z80 pinout"></svg><figcaption><b>IC111 · Z80A</b><br>processor, 4 MHz</figcaption></figure>
+          <figure class="mcfig cpfig" id="cpFigGa"><svg class="chip" id="cpChipGa" role="group" aria-label="Gate array pinout"></svg><figcaption id="cpCapGa"></figcaption></figure>
+          <figure class="mcfig cpfig" id="cpFigVdu"><svg class="chip" id="cpChipVdu" role="group" aria-label="6845 pinout"></svg><figcaption id="cpCapVdu"></figcaption></figure>
+        </div>
+        <div class="legend">
+          <span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z)</span><span><i class="li"></i>Input: click to toggle</span>
+        </div>
+        <dl class="busread">
+          <dt>Machine cycle</dt><dd id="brCycle">–</dd>
+          <dt>Address bus</dt><dd id="brAddr">–</dd>
+          <dt>Data bus</dt><dd id="brData">–</dd>
+        </dl>
+        <p class="hint">Clicking CLK pulses one clock. /INT is level-sensitive, /NMI triggers on a falling edge. Holding /WAIT low inserts wait states; /BUSREQ low floats the buses at the end of the current machine cycle; /RESET low holds the CPU in reset. On the gate array (IC116) and the 6845 (IC108), click a ringed pin to disconnect it or hold it high or low: the gate array's INT, ROMEN, RAMRD, MWE, RAS and CAS outputs, its R, G, B and SYNC outputs to the monitor and its HSYNC, VSYNC and DISPEN inputs; the 6845's HSYNC, VSYNC and DE outputs, its display address lines MA0–MA13 and row lines RA0–RA2 (MA10 and MA11 are not used on this board). Their bus-side pins follow the CPU clock by clock; their video-side pins show the state at the end of the current instruction. Faults are listed in the Debug panel.</p>
+      </section>
       <section class="panel" id="pMemChips">
-        <h2>Memory chips and gate array <span class="aside" id="mcInfo">live pins · click a pin to disconnect it or hold it high or low</span></h2>
+        <h2>Memory chips <span class="aside" id="mcInfo">live pins · click a pin to disconnect it or hold it high or low</span></h2>
         <div class="mcwrap">
           <div class="mctiles" id="mcTiles"></div>
           <figure class="mcfig" id="mcFig">
@@ -396,26 +419,13 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
             <div class="row mcbtns"><button id="mcClear" type="button">Clear this chip's faults</button><button id="mcClearAll" type="button">Clear all memory faults</button></div>
           </figure>
         </div>
-        <p class="hint">The machine's memory chips, from the CPC 464 circuit diagram: IC103, the 32K ROM holding the firmware and BASIC, and IC117–IC124, eight 4164 dynamic RAMs, one per data bit (IC124 is D7, IC120 is D0). Each RAM address pin is fed by a 74LS153 selector with a row bit and then a column bit of the CPU address: A0 carries A2 then A9, A1 carries A1 then A0, A2 A4/A11, A3 A3/A10, A4 A6/A13, A5 A5/A12, A6 A8/A15 and A7 A7/A14. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the CPU's bus cycles on every clock, wait states included; the display's own reads of the RAM, which share every microsecond with the CPU, are not shown on the pins. IC116 is the gate array (choose 40010 or 40007 beside the screen: same behaviour, different pin arrangement). Faults can be put on its INT, ROMEN, RAMRD, MWE, RAS and CAS outputs, on R, G, B and SYNC to the monitor, and on its HSYNC, VSYNC and DISPEN inputs from the 6845; its other pins are shown only. Its video-side pins show the state at the end of the current instruction.</p>
+        <p class="hint">The machine's memory chips, from the CPC 464 circuit diagram: IC103, the 32K ROM holding the firmware and BASIC, and IC117–IC124, eight 4164 dynamic RAMs, one per data bit (IC124 is D7, IC120 is D0). Each RAM address pin is fed by a 74LS153 selector with a row bit and then a column bit of the CPU address: A0 carries A2 then A9, A1 carries A1 then A0, A2 A4/A11, A3 A3/A10, A4 A6/A13, A5 A5/A12, A6 A8/A15 and A7 A7/A14. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the CPU's bus cycles on every clock, wait states included; the display's own reads of the RAM, which share every microsecond with the CPU, are not shown on the pins. The gate array and the 6845 are shown beside the processor.</p>
         <p class="hint">To simulate a fault, click a pin: Disconnected lifts the pin from the board (an input then floats high, an output no longer reaches the bus), Stuck high and Stuck low hold it at that level. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. Faults are listed in the Debug panel and cleared there, here, or by Master reset. The memory view and the disassembly show what the CPU reads through the faults.</p>
       </section>
   </div>
 
   <div class="grid">
     <div class="col">
-      <section class="panel">
-        <h2>Pinout <span class="aside">40-pin DIP · top view</span></h2>
-        <div class="chipwrap"><svg class="chip" id="chip" viewBox="0 0 380 540" role="group" aria-label="Z80 pinout"></svg></div>
-        <div class="legend">
-          <span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z)</span><span><i class="li"></i>Input: click to toggle</span>
-        </div>
-        <dl class="busread">
-          <dt>Machine cycle</dt><dd id="brCycle">–</dd>
-          <dt>Address bus</dt><dd id="brAddr">–</dd>
-          <dt>Data bus</dt><dd id="brData">–</dd>
-        </dl>
-        <p class="hint">Clicking CLK pulses one clock. /INT is level-sensitive, /NMI triggers on a falling edge. Holding /WAIT low inserts wait states; /BUSREQ low floats the buses at the end of the current machine cycle; /RESET low holds the CPU in reset.</p>
-      </section>
 
       <section class="panel">
         <h2>Program
@@ -1701,7 +1711,50 @@ function renderCpState() {
     <div class="blk"><div class="hd">8255 IC107 · ports F4xxh–F7xxh</div><div class="kv">Port A <b>${h2(cpc.ppiA)}h</b> · port C <b>${h2(c)}h</b>: keyboard row <b>${c & 15}</b> · cassette motor <b>${c & 0x10 ? 'on' : 'off'}</b> · sound chip <b>${['idle', 'read', 'write', 'address'][c >> 6]}</b> (register ${cpc.psgSel})<br>Keys down <b>${keys.join(' ') || 'none'}</b></div></div>`;
   if (html !== cpSig) { cpSig = html; $('cpState').innerHTML = html; }
 }
-function renderCp() { drawCp(); renderCpState(); }
+// ---------- the gate array and the 6845 beside the CPU: live pins, and faults on the pins that have a ring ----------
+const cpSide = [[9, 'cpChipGa', 'cpFigGa', 'cpCapGa'], [10, 'cpChipVdu', 'cpFigVdu', 'cpCapVdu']].map(([ci, sv, fig, cap]) => ({ ci, s: $(sv), fig: $(fig), cap: $(cap), els: {}, drawn: '' }));
+function cpSideDraw(S) {
+  const c = cpc.chips[S.ci], list = MEM_PINOUTS[c.part], half = list.length / 2, s = S.s;
+  const top = 26, pitch = 24, bx = 128, bw = 124, bh = half * pitch + 12;
+  s.innerHTML = ''; s.setAttribute('viewBox', `0 0 380 ${bh + 34}`); S.els = {}; S.drawn = c.part;
+  svg('rect', { class: 'body-rect', x: bx, y: top - 6, width: bw, height: bh, rx: 5 }, s);
+  svg('path', { d: `M ${bx + bw / 2 - 12} ${top - 6} a 12 12 0 0 0 24 0`, fill: 'var(--bg)' }, s);
+  const t1 = svg('text', { class: 'chiptitle', x: bx + bw / 2, y: top + bh / 2 - 8, 'text-anchor': 'middle', 'font-size': 24 }, s); t1.textContent = c.part.replace('HD', '');
+  const t2 = svg('text', { class: 'chipsub', x: bx + bw / 2, y: top + bh / 2 + 12, 'text-anchor': 'middle' }, s); t2.textContent = c.id;
+  for (const [n, name, kind] of list) {
+    const left = n <= half, idx = left ? n - 1 : list.length - n, y = top + idx * pitch + 6, sx = left ? bx - 30 : bx + bw + 4;
+    const g = svg('g', { class: 'pin' + (kind === 'i' ? ' input' : ''), 'data-pin': name }, s);
+    if (kind === 'i') { svg('rect', { x: left ? sx - 70 : sx - 4, y: y - 11, width: 104, height: 22, fill: 'transparent' }, g); svg('rect', { class: 'ring', x: sx - 3, y: y - 9, width: 32, height: 18, rx: 3 }, g); }
+    svg('rect', { class: 'stub', x: sx, y: y - 6, width: 26, height: 12, rx: 2 }, g);
+    const sv = svg('text', { class: 'sv', x: sx + 13, y: y + 0.5 }, g);
+    const num = svg('text', { class: 'num', x: left ? bx + 7 : bx + bw - 7, y, 'text-anchor': left ? 'start' : 'end' }, g); num.textContent = n;
+    const nm = svg('text', { class: 'nm', x: left ? sx - 8 : sx + 34, y, 'text-anchor': left ? 'end' : 'start' }, g);
+    if (MEM_ACTIVE_LOW.has(name) && c.part !== 'HD6845' || c.part === 'HD6845' && (name === 'CS' || name === 'RESET')) { const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = name; } else nm.textContent = name;
+    const title = svg('title', {}, g); title.textContent = kind === 'i' ? `${c.id} pin ${n}, ${name}: click to disconnect it or hold it high or low` : `${c.id} pin ${n}, ${name}`;
+    if (kind === 'i') {
+      g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
+      g.addEventListener('click', ev => mcMenu(name, ev, S.ci, S.fig));
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const r = g.getBoundingClientRect(); mcMenu(name, { clientX: r.left, clientY: r.top }, S.ci, S.fig); } });
+    }
+    S.els[name] = { g, sv, prev: null };
+  }
+}
+function cpSideRender() {
+  const B = MC.bus();
+  for (const S of cpSide) {
+    const c = cpc.chips[S.ci]; if (S.drawn !== c.part) cpSideDraw(S);
+    for (const [, name, kind] of MEM_PINOUTS[c.part]) {
+      const el = S.els[name], f = name in c.f, v = kind === 'p' ? 'p' : kind === 'g' ? 'g' : f ? c.f[name] : MC.net(c, S.ci, name, B);
+      const cls = v === 'z' ? 'vz' : v === 'p' ? 'vp' : v === 'g' ? 'vg' : v ? 'v1' : 'v0', changed = el.prev !== null && el.prev !== v && v !== 'p' && v !== 'g';
+      el.g.classList.remove('v1', 'v0', 'vz', 'vp', 'vg', 'changed'); el.g.classList.add(cls); if (changed && !running) el.g.classList.add('changed');
+      el.g.classList.toggle('forced', f); el.g.classList.toggle('fz', f && c.f[name] === 'z');
+      el.sv.textContent = v === 'z' ? 'Z' : v === 'p' ? '+' : v === 'g' ? '⏚' : v; el.prev = v;
+    }
+    const fl = Object.entries(c.f), sig = c.part + fl.join();
+    if (S.capSig !== sig) { S.capSig = sig; S.cap.innerHTML = `<b>${esc(c.id)} · ${esc(c.part)}</b><br>${esc(c.what)}` + (fl.length ? `<br><span class="mcfaults mono">${fl.map(([k, v]) => `${esc(k)} ${mcFaultText(v)}`).join(' · ')}</span>` : ''); }
+  }
+}
+function renderCp() { drawCp(); renderCpState(); if (mcReady) cpSideRender(); }
 // keyboard: the PC keyboard by key position, and the on-screen CPC 464 keyboard
 // each key: [matrix name, legend, shifted legend, width]
 const CP_LAYOUT = [
@@ -1809,7 +1862,7 @@ $('cpRomFile').onchange = () => { const fs = [...$('cpRomFile').files]; $('cpRom
   Promise.all(fs.map(f => f.arrayBuffer())).then(bufs => { let ok = false; cpRomSaid = []; for (const b of bufs) ok = cpUseRom(new Uint8Array(b), false) || ok; if (ok && cpOn()) cpPowerOn(); else render(); }); };
 $('cpRestart').onclick = cpPowerOn;
 // which gate array is fitted: the 40010 and the 40007 behave alike but have different pin arrangements
-function cpSetGa(part, quiet) { cpc.setGateArray(part); $('cpGa').value = cpc.ga.part; try { localStorage.setItem('cpc.ga', cpc.ga.part); } catch (e) {} if (!quiet) { mcTileSig = ''; mcDrawn = ''; render(); } }
+function cpSetGa(part, quiet) { cpc.setGateArray(part); $('cpGa').value = cpc.ga.part; try { localStorage.setItem('cpc.ga', cpc.ga.part); } catch (e) {} if (!quiet) render(); }
 $('cpGa').onchange = () => cpSetGa($('cpGa').value);
 // ---------- memory bitmap: every bit as a pixel, tinted by region ----------
 // Each byte is a row of 8 pixels (bit 7 on the left); each strip is one 256-byte page, top to bottom; a band holds
@@ -1938,9 +1991,9 @@ $('cpDumpBin').onclick = () => cpSaved(cpDownload(`cpc-ram-64k-${cpStamp()}.bin`
 // Shown for the CPU's own accesses. The display's reads, which share the RAM in every microsecond, are not shown yet.
 const MC = {
   m: cpc,
-  groups() { return [['ROM · 32K · ' + (cpc.hasLo && cpc.hasHi ? 'firmware and BASIC' : cpc.hasLo ? 'firmware only, BASIC half empty' : cpc.hasHi ? 'BASIC only, firmware half empty' : 'empty'), [0]], ['RAM · 64K · one 4164 per data bit', [8, 7, 6, 5, 4, 3, 2, 1]], ['Gate array', [9]]]; },
-  tile(c, i) { return i === 0 ? [c.id, '23256 · D0–D7'] : i === 9 ? [c.id, c.part] : [c.id, '4164 · D' + c.bit]; },
-  acc(i) { return i === 0 ? 0 : i === 9 ? 2 : 1; },
+  groups() { return [['ROM · 32K · ' + (cpc.hasLo && cpc.hasHi ? 'firmware and BASIC' : cpc.hasLo ? 'firmware only, BASIC half empty' : cpc.hasHi ? 'BASIC only, firmware half empty' : 'empty'), [0]], ['RAM · 64K · one 4164 per data bit', [8, 7, 6, 5, 4, 3, 2, 1]]]; },
+  tile(c, i) { return i === 0 ? [c.id, '23256 · D0–D7'] : i >= 9 ? [c.id, c.part] : [c.id, '4164 · D' + c.bit]; },
+  acc(i) { return i === 0 ? 0 : i >= 9 ? 2 : 1; },
   bus() {
     const T = curT, A = T.a === null || T.a === 'z' ? null : T.a, mem = T.mreq === 0 && T.rfsh !== 0 && A !== null;
     return { T, A, mem, rd: mem && T.rd === 0, wr: mem && T.wr === 0, rom: mem && T.rd === 0 && cpc.romOn(A) };
@@ -1964,9 +2017,21 @@ const MC = {
         case 'RAS': return B.mem ? 0 : 1; case 'MWE': return B.wr ? 0 : 1; case '244EN': return gaw ? 0 : 1;
         case 'ROMEN': return B.rom ? 0 : 1; case 'RAMRD': return B.rd && !B.rom ? 0 : 1;
         case 'INT': return cpc.intReq ? 0 : 1;
-        case 'HSYNC': return cpc.hs ? 1 : 0; case 'VSYNC': return cpc.vsync ? 1 : 0; case 'DISPEN': return cpc.de ? 1 : 0;
+        case 'HSYNC': return cpc.vdu.lv.HSYNC !== undefined ? cpc.vdu.lv.HSYNC : cpc.hs ? 1 : 0; case 'VSYNC': return cpc.vsOut() ? 1 : 0; case 'DISPEN': return cpc.vdu.lv.DE !== undefined ? cpc.vdu.lv.DE : cpc.de ? 1 : 0;
         case 'CCLK': return tTotal >> 1 & 1; case 'SYNC': return cpc.gHs || cpc.gVs ? 0 : 1;
         case 'R': return CPC.PALETTE[cpc.rgb][0] ? 1 : 0; case 'G': return CPC.PALETTE[cpc.rgb][1] ? 1 : 0; case 'B': return CPC.PALETTE[cpc.rgb][2] ? 1 : 0;
+      }
+      return 'z';
+    }
+    if (i === 10) {                     // the 6845: CS is A14, RS is A8, R/W is A9, E follows IORQ. Its outputs show the state at the end of the current instruction.
+      const T = B.T, io = T.iorq === 0 && T.m1 !== 0 && A !== null, sel = io && !(A & 0x4000);
+      if ((d = /^D(\d)$/.exec(name))) return sel ? D(+d[1]) : 'z';
+      if ((d = /^MA(\d+)$/.exec(name))) return (cpc.maRow + cpc.hcc) >> +d[1] & 1;
+      if ((d = /^RA(\d)$/.exec(name))) return cpc.vlc >> +d[1] & 1;
+      switch (name) {
+        case 'RESET': return pins.reset; case 'LPSTB': case 'CURSOR': return 0; case 'CLK': return tTotal >> 1 & 1;
+        case 'CS': return A === null ? 'z' : A >> 14 & 1; case 'RS': return A === null ? 'z' : A >> 8 & 1; case 'R/W': return A === null ? 'z' : A >> 9 & 1; case 'E': return io ? 1 : 0;
+        case 'DE': return cpc.de ? 1 : 0; case 'HSYNC': return cpc.hs ? 1 : 0; case 'VSYNC': return cpc.vsync ? 1 : 0;
       }
       return 'z';
     }
@@ -1989,7 +2054,7 @@ let mcSel = 0, mcEls = {}, mcDrawn = '', mcPrevAcc = null, mcSeen = null, mcTile
 const mcFaultText = v => v === 'z' ? 'disconnected' : v ? 'stuck high' : 'stuck low';
 function mcSetFault(id, pin, v) { memSetFault(MC.m, id, pin, v); disDirty = true; }
 function mcClosePop() { if (mcPop) { mcPop.remove(); mcPop = null; } }
-document.addEventListener('click', e => { if (mcPop && !mcPop.contains(e.target) && !e.target.closest('#mcChip .pin.input')) mcClosePop(); });
+document.addEventListener('click', e => { if (mcPop && !mcPop.contains(e.target) && !e.target.closest('.pin.input')) mcClosePop(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') mcClosePop(); });
 // debug-pane entries for the faults
 function mcDebugItems() { return memFaultList(MC.m).map(([id, pin, v]) => ['mfault:' + id + ':' + pin, 'chip fault', `${id} (${MC.m.chipById[id].part}) pin ${pin} ${mcFaultText(v)}`]); }
@@ -2023,9 +2088,9 @@ function mcDraw() {
   }
   $('mcCap').innerHTML = `<b>${esc(c.id)} · ${esc(c.part)}</b><br>${esc(c.what)}<br>${esc(c.range)}`;
 }
-function mcMenu(name, ev) {
+function mcMenu(name, ev, ci, host) {
   mcClosePop();
-  const c = MC.m.chips[mcSel], f = name in c.f ? c.f[name] : null, fig = $('mcFig'), r = fig.getBoundingClientRect();
+  const c = MC.m.chips[ci === undefined ? mcSel : ci], f = name in c.f ? c.f[name] : null, fig = host || $('mcFig'), r = fig.getBoundingClientRect();
   const el = document.createElement('div'); el.className = 'mcpop';
   el.innerHTML = `<div class="ttl">${esc(c.id)} · ${esc(name)}</div><div class="sub">${f === null ? 'normal: connected to the board' : mcFaultText(f)}</div><div class="btns">` +
     `<button type="button" data-a="z"${f === 'z' ? ' disabled' : ''}>Disconnected</button><button type="button" data-a="1"${f === 1 ? ' disabled' : ''}>Stuck high</button><button type="button" data-a="0"${f === 0 ? ' disabled' : ''}>Stuck low</button>` +
