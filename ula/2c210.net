@@ -1,0 +1,246 @@
+# ZX81 ULA 2C210, gate-level netlist transcribed from Ferranti drawing LD6679/ULA2C210/1 issue 1 (12/01/82).
+# Started from the 2C184 transcription (ula/2c184.net): the two drawings share the grid and most of the logic.
+# Every line still has to be checked against the 2C210 drawing; lines checked carry 'ok210'.
+# Format: see README.md. Grid squares are row then column, as printed on the drawing's edges.
+
+# ---- power ----
+VCC     pin_in   VCC            PN40   @1A
+GND     pin_in   GND            PN34   @37A
+
+# ---- data pins D0-D7: 16K pull-up, then an emitter-follower input buffer ----
+# The pin node itself (nDn) is also driven by the keyboard and port outputs (open collector, rows 12-19).
+pD0     pin_io   nD0            PN32   @3B   pullup=16k
+pD1     pin_io   nD1            PN30   @4B   pullup=16k
+pD2     pin_io   nD2            PN28   @5B   pullup=16k
+pD3     pin_io   nD3            PN26   @6B   pullup=16k
+pD4     pin_io   nD4            PN24   @7B   pullup=16k
+pD5     pin_io   nD5            PN23   @8B   pullup=16k
+pD6     pin_io   nD6            PN21   @9B   pullup=16k
+pD7     pin_io   nD7            PN19   @10B  pullup=16k
+bD0     buf_ef   D0             nD0    @3N
+bD1     buf_ef   D1             nD1    @4N
+bD2     buf_ef   D2             nD2    @5N
+bD3     buf_ef   D3             nD3    @6N
+bD4     buf_ef   D4             nD4    @7N
+bD5     buf_ef   D5             nD5    @8N
+bD6     buf_ef   D6             nD6    @9N
+bD7     buf_ef   D7             nD7    @10N
+
+# ---- other input pins (16K pull-up, emitter-follower buffer) ----
+pKB0    pin_in   nKB0           PN33   @12B  pullup=16k
+pKB1    pin_in   nKB1           PN31   @13B  pullup=16k
+pKB2    pin_in   nKB2           PN29   @14B  pullup=16k
+pKB3    pin_in   nKB3           PN27   @15B  pullup=16k
+pKB4    pin_in   nKB4           PN25   @16B  pullup=16k
+pUSA    pin_in   nUSA           PN22   @17B  pullup=16k
+pTAPE   pin_in   nTAPE          PN20   @18B  series=400R clamp=diode-to-GND divider=5k-to-VS
+pOSC    osc      OSC            PN35   @21B  ceramic resonator
+pMREQ   pin_in   nMREQ          PN9    @23B  pullup=16k
+pM1     pin_in   nM1            PN10   @24B  pullup=16k
+pA15    pin_in   nA15           PN18   @26B  pullup=16k
+pHALT   pin_in   nHALT          PN17   @27B  pullup=16k
+pA14    pin_in   nA14           PN11   @29B  pullup=16k
+pWR     pin_in   nWR            PN8    @32B  pullup=16k
+pIORQ   pin_in   nIORQ          PN7    @34B  pullup=16k
+pRD     pin_in   nRD            PN6    @36B  pullup=16k
+bKB0    buf_ef   KB0            nKB0   @12F  note=(3VBE)
+bKB1    buf_ef   KB1            nKB1   @13F  note=(3VBE)
+bKB2    buf_ef   KB2            nKB2   @14F  note=(3VBE)
+bKB3    buf_ef   KB3            nKB3   @15F  note=(3VBE)
+bKB4    buf_ef   KB4            nKB4   @16F  note=(3VBE)
+bUSA    buf_ef   USA            nUSA   @17G
+iTAPE   inv      TAPE           nTAPE  @18G  ?buffer drawn with output circle
+bMREQ   buf_ef   N.MREQ         nMREQ  @23F
+bM1     buf_ef   N.M1           nM1    @24F
+bA15    buf_ef   A15            nA15   @26F
+bHALT   buf_ef   N.HALT         nHALT  @27F
+bA14    buf_ef   A14            nA14   @29F
+bWR     buf_ef   N.WR           nWR    @32F
+bIORQ   buf_ef   N.IORQ         nIORQ  @34F
+bRD     buf_ef   N.RD           nRD    @36F
+
+# ---- output pins ----
+# PN14 N.Ø (clock to the Z80, row 2), PN15 N.NMI (row 5, open collector with 5K to VCC), PN16 TV/TAPE (row 10,
+# 3-level output from N.SYNC and N.VIDEO), PN36-39 and PN1-2 A3'-A8' (rows 12-17), PN5/4/3 A0'-A2' (rows 21-23),
+# PN12 RAM N.CS and PN13 ROM N.CS (rows 30-32, RTL stages "see cct diagram").
+
+# ---- port read and the NOP: open-collector drivers onto the data pins (rows 12-19, columns K-Y) ----
+# EN = "not reading the port" (high: the drivers let go), from the R/2 inverter at 20K. FORCE = pull the data low
+# (the NOP fed to the Z80 for a character), vertical at column W. Checked: row 12 drives D0 ... row 19 drives D7.
+kb0a    nor2     n_12R          KB0 EN        @12R
+kb0b    nor2     n_12V          n_12R FORCE   @12V
+kb0c    pin_oc   nD0            n_12V         @12Y   drives D0 low when n_12V is low
+kb1a    nor2     n_13R          KB1 EN        @13R
+kb1b    nor2     n_13V          n_13R FORCE   @13V
+kb1c    pin_oc   nD1            n_13V         @13Y
+kb2a    nor2     n_14R          KB2 EN        @14R
+kb2b    nor2     n_14V          n_14R FORCE   @14V
+kb2c    pin_oc   nD2            n_14V         @14Y
+kb3a    nor2     n_15R          KB3 EN        @15R
+kb3b    nor2     n_15V          n_15R FORCE   @15V
+kb3c    pin_oc   nD3            n_15V         @15Y
+kb4a    nor2     n_16R          KB4 EN        @16R
+kb4b    nor2     n_16V          n_16R FORCE   @16V
+kb4c    pin_oc   nD4            n_16V         @16Y
+d5a     inv      n_17V          FORCE         @17V   D5 has no input: it reads high (pull-up), and is pulled low for the NOP
+d5c     pin_oc   nD5            n_17V         @17Y
+usaa    nor2     n_17R          USA EN        @17R
+usab    inv      n_18V          n_17R         @18V   D6 is not forced for the NOP (a character byte has D6 low already)
+usac    pin_oc   nD6            n_18V         @18Y
+tapa    nor2     n_18R          TAPE EN       @18R
+tapb    nor2     n_19V          n_18R FORCE   @19V
+tapc    pin_oc   nD7            n_19V         @19Y
+en      inv      EN             n_20AA        @20U   R/2; input from the port decode (to be traced)
+
+# ---- dot shift register Q1-Q8 (rows 3-10, columns T-AL) ----
+# Inverters A-H take D0-D7. Each stage's reset is NOR(~Dn, S/L, D6L): with S/L and D6L low, a 1 in the ROM byte
+# clears that stage. Stages shift on the falling edge of SCLK (the clock pins carry a bubble), Q1 shifting in a 1.
+iA      inv      nA             D0            @6T
+iB      inv      nB             D1            @6V
+iC      inv      nC             D2            @6X
+iD      inv      nD             D3            @6Z
+iE      inv      nE             D4            @6AB
+iF      inv      nF             D5            @6AD
+iG      inv      nG             D6            @6AF
+iH      inv      nH             D7            @6AH
+rA      nor3     R1             nA S/L D6L    @8T
+rB      nor3     R2             nB S/L D6L    @8V
+rC      nor3     R3             nC S/L D6L    @8X
+rD      nor3     R4             nD S/L D6L    @8Z
+rE      nor3     R5             nE S/L D6L    @8AB
+rF      nor3     R6             nF S/L D6L    @8AD
+rG      nor3     R7             nG S/L D6L    @8AF
+rH      nor3     R8             nH S/L D6L    @8AH
+Q1      dff      Q1             VCC ~SCLK R1  @10T  D tied to '1'
+Q2      dff      Q2             Q1  ~SCLK R2  @10V
+Q3      dff      Q3             Q2  ~SCLK R3  @10X
+Q4      dff      Q4             Q3  ~SCLK R4  @10Z
+Q5      dff      Q5             Q4  ~SCLK R5  @10AB
+Q6      dff      Q6             Q5  ~SCLK R6  @10AD
+Q7      dff      Q7             Q6  ~SCLK R7  @10AF
+Q8      dff      Q8             Q7  ~SCLK R8  @10AH
+
+# ---- character latch NQ11-NQ18 (rows 13-16, columns U-AK): D-type latches, inverted outputs ----
+# Inputs checked: NQ11 D0, NQ12 D1, NQ13 D2, NQ14 D3, NQ15 D4, NQ16 D5. Latch clock LCLK is driven by two R/3
+# inverters in parallel (rows 18-19, columns AE and AG) from LCLKn.
+lck1    inv      LCLK           LCLKn         @18AE  R/3
+lck2    inv      LCLK           LCLKn         @18AG  R/3 (in parallel with lck1)
+NQ11    dlatch   NQ11           D0 ~LCLK      @14U   output inverted
+NQ12    dlatch   NQ12           D1 ~LCLK      @14X
+NQ13    dlatch   NQ13           D2 ~LCLK      @14AA
+NQ14    dlatch   NQ14           D3 ~LCLK      @14AD
+NQ15    dlatch   NQ15           D4 ~LCLK      @14AG?
+NQ16    dlatch   NQ16           D5 ~LCLK      @14AJ?
+Q17     dlatch   Q17            n_Q17D ~LCLK  @14AL  true output; D from a horizontal at row 13 (to be traced: D6 or D6L)
+NQ18    dlatch   NQ18           D7 ~LCLK      @14AN  D7 = the inverse-video bit (to be confirmed)
+i17     inv      n_12AO         Q17           @12AO  R/3
+vnor    nor2     n_13AS         n_12AO NQ18   @13AS
+Q32     dff      Q32            n_13AS ~SCLK? @13AU  clock from the column AH vertical (to be confirmed)
+vor     or2      N.VIDEO?       Q8 Q32        @13AX  (to be confirmed)
+
+# ---- line counter Q21-Q28 (rows 4-6, columns AN-BB): ripple toggle stages, each clocked on the falling edge of
+# the previous stage's true output; all reset together by CRES (row 6.5). Inverted outputs marked n.
+Q21     tff      Q21 Q21n       ~CCLK CRES    @5AN   clock source to be traced (rows 6-8, columns AL-AN: two inverter pairs)
+Q22     tff      Q22 Q22n       ~Q21 CRES     @5AQ
+Q23     tff      Q23 Q23n       ~Q22 CRES     @5AS
+Q24     tff      Q24 Q24n       ~Q23 CRES     @5AV
+Q25     tff      Q25 Q25n       ~Q24 CRES     @5AX
+Q26     tff      Q26 Q26n       ~Q25 CRES     @5AZ
+Q27     tff      Q27 Q27n       ~Q26 CRES     @5BB
+Q28     tff      Q28 Q28n       ~Q27 CRES     @5BD
+# count 207 = Q28 Q27 Q24 Q23 Q22 Q21 high, Q26 Q25 low: the 8-input NOR goes high and resets the counter,
+# so a line is 207 counts (checked against the known 207 T-state line).
+c207    nor8     T207           Q28n Q27n Q26 Q25 Q21n Q22n Q23n Q24n   @8BB
+# CRES from T207: path rows 8-10, column BE, to be traced
+LS      nor4     LINE-SYNC      Q25n Q26 Q27 Q28   @3BE   high for counts 16-31: 16 counts of horizontal sync
+
+# ---- NMI, sync and clock outputs (rows 2-10, columns BE-BJ) ----
+nm1     inv      n_5BG          LINE-SYNC     @5BG
+nm2     nor2     n_5BI          n_5BG NMIOFF  @5BI   NMIOFF from the NMI flip-flop (row 7, to be traced)
+nm3     inv      n_5BL          n_5BI         @5BL
+nm4     pin_oc   N.NMI          n_5BL         @5BN   PN15, 5K pull-up to VCC on chip
+fs1     nor2     SYNCn          LINE-SYNC FRAME-SYNC   @8BG
+fs2     inv      N.SYNC         SYNCn         @8BJ   R/2
+tv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BL   PN16, "3 level output" (circuit not on this drawing)
+ck1     inv      n_2BH          CLKSRC        @2BH   R/2; CLKSRC: the long line at row 2 (to be traced to Q19)
+ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output
+
+# ---- clock: oscillator, Q19, the counter clock (rows 17-25, columns N-AL) ----
+oscb    inv      OSCn           OSC           @21E   inverter after the oscillator cell and a cross-under
+Q19     tff      Q19 Q19n       ~OSCn VCC     @21R   R/2 cell; no reset drawn (to be confirmed); Q19 = 3.25 MHz
+# CLKSRC (the line that goes up column AK to row 2 and right to the N.PHI output) is Q19's true output (row 21).
+alias   CLKSRC   Q19
+cc1     inv      n_cc1          Q19           @9AL   four inverters in series delay Q19 into the counter clock
+cc2     inv      n_cc2          n_cc1         @9AN
+cc3     inv      n_cc3          n_cc2         @8AN
+cc4     inv      CCLK           n_cc3         @8AL
+cr      inv      CRES           CRESn         @11AT  R/3; CRESn from the right (to be traced: includes T207)
+
+# ---- delay chains (rows 17-24) ----
+# Chain A (row 17): R/? inverter output up at 17N, then three NOR2 gates with both inputs tied (inverters).
+# Chain B (row 21-22): from Q19n, NOR2 gates with both inputs tied, five or more in series.
+# Chain C (row 24): NOR2 gates with both inputs tied, from the row 24 vertical at column R.
+# LCLKn = NOR4(chain A out, col W vertical from row 13, the row 18 line from column O, Q19)   @18X   R/3
+dA0     inv      DA0            DA0in         @18N   R/?, output upward; DA0in from below (column N vertical)
+dA1     nor2     DA1            DA0 DA0       @17P
+dA2     nor2     DA2            DA1 DA1       @17S
+dA3     nor2     DA3            DA2 DA2       @17U
+lckn    nor4     LCLKn          T17W DA3 R18O Q19   @18X   R/3; T17W: vertical at column W from above; R18O: row 18 line from column O
+dB1     nor2     DB1            Q19n Q19n     @21U
+dB2     nor2     DB2            DB1 DB1       @21X
+dB3     nor2     DB3            DB2 DB2       @21AA
+dB4     nor2     DB4            DB3 DB3       @21AC
+dB5     nor2     DB5            DB4 DB4       @21AE
+dC1     nor2     DC1            N.MREQ N.MREQ @24Z
+dC2     nor2     DC2            DC1 DC1       @24AC
+dC3     nor2     DC3            DC2 DC2       @24AE
+d21     nor3     n_22AJ         X21 DB5 DC3   @22AJ  R/2; X21 from above (column AA, to be traced); chain B has five stages
+d21b    inv      n_22AM         n_22AJ        @22AM  R/3; output goes up column AT
+
+# ---- address outputs (rows 12-24, columns BD-BJ) ----
+# A3'-A8': the latch's inverted outputs are inverted again and driven through tri-state buffers. The buffers' enables
+# (active low) share AEN, made by an RTL inverter with a 1.8K pull-up (row 18) from AENin (the long row 18 line).
+aen     inv_rtl  AEN            AENin         @18BC  RTL, 1.8K pull-up
+oa3     inv      n_oa3          NQ11          @12BC
+oa4     inv      n_oa4          NQ12          @13BC
+oa5     inv      n_oa5          NQ13          @14BC
+oa6     inv      n_oa6          NQ14          @15BC
+oa7     inv      n_oa7          NQ15          @16BC
+oa8     inv      n_oa8          NQ16          @17BC
+pa3     pin_ts   A3'            n_oa3 ~AEN    @12BH  PN36
+pa4     pin_ts   A4'            n_oa4 ~AEN    @13BH  PN37
+pa5     pin_ts   A5'            n_oa5 ~AEN    @14BH  PN38
+pa6     pin_ts   A6'            n_oa6 ~AEN    @15BH  PN39
+pa7     pin_ts   A7'            n_oa7 ~AEN    @16BH  PN1
+pa8     pin_ts   A8'            n_oa8 ~AEN    @17BH  PN2
+# row counter Q29, Q30, NQ31 (rows 19-23, columns BB-BD): ripple toggles, reset together by RRES (column BA)
+Q29     tff      Q29 Q29n       ~RCLK RRES    @19BB  RCLK: the long line from the left at row 18-19 (to be traced)
+Q30     tff      Q30 Q30n       ~Q29 RRES     @21BB
+NQ31    tff      - NQ31         ~Q30 RRES     @23BB  only the inverted output is drawn
+oa0     inv      n_oa0          Q29n          @20BE
+oa1     inv      n_oa1          Q30n          @21BE
+oa2     inv      n_oa2          NQ31          @22BE
+pa0     pin_ts   A0'            n_oa0 ~AEN    @20BH  PN5, also read back (below)
+pa1     pin_ts   A1'            n_oa1 ~AEN    @21BH  PN4, also read back
+pa2     pin_ts   A2'            n_oa2 ~AEN    @22BH  PN3
+# A0' and A1' are read back into the chip for the port decode
+ba0     buf_ef   A0in           A0'           @25BF
+ba1     buf_ef   A1in           A1'           @26BF
+
+# ---- memory request logic (rows 22-30, columns N-AF) ----
+# N.MREQ runs from the PN9 buffer (row 23) right to the column T vertical, which feeds chain C, two NORs and Q20's clock.
+# N.M1 (row 24) turns down at column S to an inverter whose output resets Q20.
+m1i     inv      M1             N.M1          @26W
+a14i    inv      A14n           A14           @29V
+romsel  nor2     ROMSEL         N.MREQ A14n   @29Z   high for a memory cycle with A14 low (to the ROM select, row 29 line)
+ramsel  nor2     RAMSELa        N.MREQ A14    @27Z   high for a memory cycle with A14 high
+Q20     dff      Q20            Q20D ~N.MREQ M1   @28AC  D from the long loop to the right (column BA, to be traced)
+ramblk  nor2     RAMSELn        Q20 RAMSELa   @30AD  low when the RAM is selected and Q20 is clear (to RAM N.CS, row 30)
+# chain C input is N.MREQ: dC1..dC3 are three NOR-inverters (rows 24), output up column AG to the row 22 NOR
+
+# ---- I/O decode and vertical sync (rows 30-37, columns E-Z) ----
+# N.WR turns up at column H to row 30.6, N.IORQ at column I to row 31.0, N.RD at column J to row 31.4.
+iowr    nor2     IOWR           N.WR N.IORQ   @33K   high for any I/O write: clears vertical sync
+iosel   nor2     IOSEL          N.IORQ X35    @35K   X35: from above (column L, row 29 and up; probably A0in), to be traced
+fsl     nor3     FRAME-SYNC     FSA IOWR FSL  @33N   R/2; FSA: the long row 31.6 line (to be traced)
+fsr     nor2     FSL            FRAME-SYNC FSS   @36N   cross-coupled with fsl: FSS sets vertical sync (row 31.8 line from column M)

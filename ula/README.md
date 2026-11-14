@@ -1,15 +1,18 @@
 # ZX81 ULA, gate level (branch zx81-ULA)
 
-Source: Ferranti drawing LD6532/ULA2C184/1, "ULA-2C184 Logic", issue 1, 7 April 1981 (one sheet, grid rows 1-38,
-columns A-BJ). The user's machines carry the later 2C210E, whose logic diagram is not available.
+Sources: Ferranti drawings LD6679/ULA2C210/1, "ULA-2C210 Logic", issue 1, 12 January 1982 (the chip in the user's
+machines; the main target) and LD6532/ULA2C184/1, "ULA-2C184 Logic", issue 1, 7 April 1981 (the earlier chip). Both are
+one sheet on the same grid (rows 1-38, columns A-BJ) with the same layout, so a reading on one can be checked on the other.
 
-Goal: a gate-for-gate description of the 2C184 that is accurate enough to build a replacement chip from.
+Goal: a gate-for-gate description of the 2C210 accurate enough to build a replacement chip from; the 2C184 kept for
+comparison.
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `ula/2c184.net` | The netlist, transcribed from the drawing. One line per gate, flip-flop or pin buffer, each with its grid square, so it can be checked against the drawing |
+| `ula/2c210.net` | The 2C210 netlist (main target). |
+| `ula/2c184.net` | The 2C184 netlist, transcribed from its drawing (partial). One line per gate, flip-flop or pin buffer, each with its grid square, so it can be checked against the drawing |
 | (to come) `ula/sim.js` | Event-driven simulation of the netlist with a delay per gate, for the emulator and for checking |
 | (to come) `ula/2c184.v` | Verilog generated from the netlist: a timed model, and a synchronous version for an FPGA or CPLD |
 
