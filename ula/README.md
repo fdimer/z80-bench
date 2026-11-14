@@ -30,3 +30,11 @@ other nets are named after the grid square of the gate that drives them, so `n_2
 ## Status
 
 Transcription in progress. Readings that are not certain are marked `?` and listed at the end of the netlist.
+
+## Comparison with other replacements
+
+`reference/cpld/zx81ula.vhd` (top level only so far) agrees with the Ferranti drawings on: NMI = line sync AND an
+NMI-on latch set by OUT with A0 low and cleared by OUT with A1 low; vertical sync set by IN with A0 low while the NMI
+is off and cleared by any OUT; the line counter re-phased by the interrupt acknowledge; the character fetch decode
+(A15, HALT, MREQ). It differs on: ROM select from A15-A13 all low (the 2C210 uses A14 and Q20); D5 driven low on a
+keyboard read (the 2C210 does not drive D5, so it reads high through the board's pull-up); the WAIT generator inside.
