@@ -135,3 +135,30 @@ i17     inv      n_12AO         Q17           @12AO  R/3
 vnor    nor2     n_13AS         n_12AO NQ18   @13AS
 Q32     dff      Q32            n_13AS ~SCLK? @13AU  clock from the column AH vertical (to be confirmed)
 vor     or2      N.VIDEO?       Q8 Q32        @13AX  (to be confirmed)
+
+# ---- line counter Q21-Q28 (rows 4-6, columns AN-BB): ripple toggle stages, each clocked on the falling edge of
+# the previous stage's true output; all reset together by CRES (row 6.5). Inverted outputs marked n.
+Q21     tff      Q21 Q21n       ~CCLK CRES    @5AN   clock source to be traced (rows 6-8, columns AL-AN: two inverter pairs)
+Q22     tff      Q22 Q22n       ~Q21 CRES     @5AQ
+Q23     tff      Q23 Q23n       ~Q22 CRES     @5AS
+Q24     tff      Q24 Q24n       ~Q23 CRES     @5AV
+Q25     tff      Q25 Q25n       ~Q24 CRES     @5AX
+Q26     tff      Q26 Q26n       ~Q25 CRES     @5AZ
+Q27     tff      Q27 Q27n       ~Q26 CRES     @5BB
+Q28     tff      Q28 Q28n       ~Q27 CRES     @5BD
+# count 207 = Q28 Q27 Q24 Q23 Q22 Q21 high, Q26 Q25 low: the 8-input NOR goes high and resets the counter,
+# so a line is 207 counts (checked against the known 207 T-state line).
+c207    nor8     T207           Q28n Q27n Q26 Q25 Q21n Q22n Q23n Q24n   @8BB
+# CRES from T207: path rows 8-10, column BE, to be traced
+LS      nor4     LINE-SYNC      Q25n Q26 Q27 Q28   @3BE   high for counts 16-31: 16 counts of horizontal sync
+
+# ---- NMI, sync and clock outputs (rows 2-10, columns BE-BJ) ----
+nm1     inv      n_5BG          LINE-SYNC     @5BG
+nm2     nor2     n_5BI          n_5BG NMIOFF  @5BI   NMIOFF from the NMI flip-flop (row 7, to be traced)
+nm3     inv      n_5BL          n_5BI         @5BL
+nm4     pin_oc   N.NMI          n_5BL         @5BN   PN15, 5K pull-up to VCC on chip
+fs1     nor2     SYNCn          LINE-SYNC FRAME-SYNC   @8BG
+fs2     inv      N.SYNC         SYNCn         @8BJ   R/2
+tv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BL   PN16, "3 level output" (circuit not on this drawing)
+ck1     inv      n_2BH          CLKSRC        @2BH   R/2; CLKSRC: the long line at row 2 (to be traced to Q19)
+ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output
