@@ -39,7 +39,10 @@
 // Bus faults: the Z80 (IC111) is a chip object as well. A fault on one of its address, data or control pins (MREQ,
 // IORQ, RD, WR, M1) is a fault on that line of the bus: every chip sees the line at that level. A fault on a chip's
 // own pin for the same line overrides it for that chip (a ROM or RAM address or data pin, the gate array's inputs,
-// the 6845's data and select pins). A fault on the Z80's CLK pin stops the Z80 alone.
+// the 6845's data and select pins). A fault on the Z80's CLK pin stops the Z80 alone, and faults on its input pins
+// (INT, NMI, WAIT, BUSREQ, RESET) change what the Z80 sees without touching the chip that drives the line.
+// RESET is one line for the whole board: chipReset() resets the Z80, the gate array, the 6845 and the 8255, each
+// unless its own RESET pin is held high or disconnected; a chip whose RESET pin is held low stays in reset.
 // Clocks: the 16 MHz oscillator feeds the gate array (CK16), which makes PHI (4 MHz, to the Z80) and CCLK (1 MHz, to
 // the 6845 and the sound chip). Without CK16 the gate array and everything it times stop. Without PHI, or with READY
 // held low, the Z80 is held (cpu.step returns one idle character of four clocks) while the video goes on. Without
@@ -91,11 +94,11 @@ const CPC_GA_PINS = {
     [31, 'D7', 'i'], [32, 'B', 'i'], [33, 'VCC2', 'p'], [34, 'G', 'i'], [35, 'GND', 'g'], [36, 'R', 'i'], [37, 'RESET', 'i'], [38, 'VCC1', 'p'], [39, 'PHI', 'i'], [40, 'CCLK', 'i']]
 };
 // HD6845 (the same pins as the MC6845). On the CPC: CS is A14, RS is A8, R/W is A9, E comes from IORQ, CLK is the gate array's CCLK.
-const CPC_CRTC_PINS = [[1, 'GND', 'g'], [2, 'RESET', 'o'], [3, 'LPSTB', 'o'], ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(n => [4 + n, 'MA' + n, 'i']), [18, 'DE', 'i'], [19, 'CURSOR', 'o'], [20, 'VCC', 'p'],
+const CPC_CRTC_PINS = [[1, 'GND', 'g'], [2, 'RESET', 'i'], [3, 'LPSTB', 'o'], ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map(n => [4 + n, 'MA' + n, 'i']), [18, 'DE', 'i'], [19, 'CURSOR', 'o'], [20, 'VCC', 'p'],
   [21, 'CLK', 'i'], [22, 'R/W', 'i'], [23, 'E', 'i'], [24, 'RS', 'i'], [25, 'CS', 'i'], ...[7, 6, 5, 4, 3, 2, 1, 0].map((d, k) => [26 + k, 'D' + d, 'i']), [34, 'RA4', 'o'], [35, 'RA3', 'o'], [36, 'RA2', 'i'], [37, 'RA1', 'i'], [38, 'RA0', 'i'], [39, 'HSYNC', 'i'], [40, 'VSYNC', 'i']];
 // Z80: the pins that can carry a fault (kind 'i') are the bus lines and the clock
 const CPC_Z80_PINS = [[1, 'A11'], [2, 'A12'], [3, 'A13'], [4, 'A14'], [5, 'A15'], [6, 'CLK'], [7, 'D4'], [8, 'D3'], [9, 'D5'], [10, 'D6'], [11, '+5V', 'p'], [12, 'D2'], [13, 'D7'], [14, 'D0'], [15, 'D1'],
-  [16, 'INT', 'o'], [17, 'NMI', 'o'], [18, 'HALT', 'o'], [19, 'MREQ'], [20, 'IORQ'], [21, 'RD'], [22, 'WR'], [23, 'BUSACK', 'o'], [24, 'WAIT', 'o'], [25, 'BUSREQ', 'o'], [26, 'RESET', 'o'], [27, 'M1'], [28, 'RFSH', 'o'], [29, 'GND', 'g'],
+  [16, 'INT'], [17, 'NMI'], [18, 'HALT', 'o'], [19, 'MREQ'], [20, 'IORQ'], [21, 'RD'], [22, 'WR'], [23, 'BUSACK', 'o'], [24, 'WAIT'], [25, 'BUSREQ'], [26, 'RESET'], [27, 'M1'], [28, 'RFSH', 'o'], [29, 'GND', 'g'],
   ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => [30 + n, 'A' + n])].map(([n, name, k]) => [n, name, k || 'i']);
 if (typeof MEM_PINOUTS !== 'undefined') { Object.assign(MEM_PINOUTS, CPC_GA_PINS); MEM_PINOUTS.HD6845 = CPC_CRTC_PINS; MEM_PINOUTS.Z80 = CPC_Z80_PINS; for (const n of ['SYNC', 'RESET', 'CPU', 'MREQ', 'IORQ', 'M1', 'RD', '244EN', 'ROMEN', 'RAMRD', 'CASAD', 'INT', 'MWE']) MEM_ACTIVE_LOW.add(n); }
 // The gate array and the 6845 as chips with pin faults, in the same shape as a MemChip so that the fault list and the pin display treat it alike.
@@ -138,7 +141,11 @@ class CPCMachine {
     this.cpu = new Z80(this.bus); this.cpu.log = true; this.cpu.intVector = 0xFF;
     // a held processor (no clock, or READY low) does nothing for one character: the video still gets its time
     const run = this.cpu.step.bind(this.cpu);
-    this.cpu.step = () => { const why = this.held(); if (!why) return run(); this.cpu.lastEvent = null; return [{ k: 'ID', n: 4, held: why }]; };
+    this.cpu.step = () => {
+      const why = this.heldWhy; if (!why) { this.zr = false; return run(); }
+      if (!this.zr && this.z80.lv.RESET === 0) { this.cpu.reset(); this.zr = true; }     // held in reset by its own pin
+      this.cpu.lastEvent = null; return [{ k: 'ID', n: 4, held: why }];
+    };
     // the video signals of each character drawn during the last instruction, for the clock-by-clock view
     this.vlT = new Float64Array(48); this.vlF = new Int32Array(48); this.vlM = new Int32Array(48); this.vlN = 0;
     this.reset();
@@ -152,17 +159,20 @@ class CPCMachine {
     return hi ? 'hi' : 'lo';
   }
   romCrc(hi) { return cpcCrc32(this.rom.subarray(hi ? 0x4000 : 0, hi ? 0x8000 : 0x4000)); }
+  // the RESET line goes low: every chip resets, unless its own RESET pin is held high or disconnected
+  chipReset() {
+    if (this.z80.lv.RESET !== 1) this.cpu.reset();
+    if (this.ga.lv.RESET !== 1) { this.gaMode = 0; this.gaPen = 0; this.intCnt = 0; this.intReq = false; this.vsDelay = 0; }
+    if (this.vdu.lv.RESET !== 1) { this.hcc = 0; this.vcc = 0; this.vlc = 0; this.adj = -1; this.maRow = 0; this.vde = true; this.hs = false; this.hsw = 0; this.vsw = 0; this.de = false; this.vsync = false; this.line = 0; }
+    this.ppiA = 0; this.ppiC = 0; this.ppiCtl = 0x9B; this.psgSel = 0; this.printer = 0; this.romSel = 0;
+    this.cpu.intLine = false;
+  }
+  // a reset from the bench: the RESET line, and the bench's own clocks and counters back to zero
   reset() {
-    this.cpu.reset();
-    this.t = 0; this.vt = 0; this.line = 0; this.frames = 0; this.vsync = false; this.vsDelay = 0;
-    // 6845 counters: character in the line, character row, scan line in the row, the row's first display address
-    this.hcc = 0; this.vcc = 0; this.vlc = 0; this.adj = -1; this.maRow = 0; this.vde = true; this.hs = false; this.hsw = 0; this.vsw = 0; this.de = false;
-    // gate array video and the monitor's beam
+    this.t = 0; this.vt = 0; this.frames = 0; this.ints = 0;
     this.vmode = 0; this.gHs = false; this.gVs = false; this.mx = 0; this.my = 0; this.pictures = 0; this.rgb = 20;
-    this.gaMode = 0; this.gaPen = 0; this.intCnt = 0; this.ints = 0; this.intReq = false; this.cpu.intLine = false;
-    this.romSel = 0;
-    this.ppiA = 0; this.ppiC = 0; this.ppiCtl = 0x9B; this.psgSel = 0; this.printer = 0;
     this.waits = 0; this.ramBus = 0xFF; this.vlN = 0;
+    this.chipReset();
   }
   // ---- memory ----
   // Faults changed. Work out the bus lines held at a level (faults on the Z80's pins) and each chip's view of them:
@@ -175,6 +185,12 @@ class CPCMachine {
     Object.assign(gv, g); this.gv = gv; this.gf = Object.keys(gv).length > 0;
     this.gDAnd = this.ga.dAnd; this.gDOr = this.ga.dOr;
     this.ga.ramDead = 'RAS' in g || 'CAS' in g;
+    // what the Z80 sees on WAIT: its own pin, else the gate array's READY output
+    this.rdy = z.WAIT !== undefined ? z.WAIT : g.READY;
+    this.heldWhy = 'CLK' in z ? 'no clock at the Z80\'s CLK pin' : z.RESET === 0 ? 'RESET is low at the Z80: it is held in reset' : z.BUSREQ === 0 ? 'BUSREQ is low at the Z80: it has released the bus'
+      : 'CK16' in gv ? 'no clock: the gate array has no 16 MHz' : 'PHI' in gv ? 'no clock: PHI does not reach the Z80' : this.rdy === 0 ? (z.WAIT === 0 ? 'WAIT is low at the Z80: it waits' : 'READY is low: the Z80 waits') : null;
+    if (z.NMI === 0 && !this.nmiLow) this.cpu.nmiPending = true;                 // the pin going low is one falling edge
+    this.nmiLow = z.NMI === 0;
   }
   // an address or data byte as it stands on the bus lines
   busA(a) { return this.busF ? a & this.bAAnd | this.bAOr : a; }
@@ -183,15 +199,11 @@ class CPCMachine {
   gaView(a) { const g = this.gv; if (g.A15 !== undefined) a = g.A15 ? a | 0x8000 : a & 0x7FFF; if (g.A14 !== undefined) a = g.A14 ? a | 0x4000 : a & 0xBFFF; return a; }
   romOn(a) { if (this.gf) a = this.gaView(a); return a < 0x4000 ? !(this.gaMode & 4) : a >= 0xC000 && !(this.gaMode & 8); }
   gaDead() { return this.gf && 'CK16' in this.ga.f; }
-  // why the Z80 cannot run, or null
-  held() {
-    if ('CLK' in this.z80.lv) return 'no clock at the Z80\'s CLK pin';
-    if (!this.gf) return null; const g = this.gv;
-    return 'CK16' in g ? 'no clock: the gate array has no 16 MHz' : 'PHI' in g ? 'no clock: PHI does not reach the Z80' : g.READY === 0 ? 'READY is low: the Z80 waits' : null;
-  }
+  // why the Z80 cannot run, or null (worked out in refault)
+  held() { return this.heldWhy; }
   // READY held high: is the bus cycle now being run out of step with the gate array's RAM cycle?
   outOfStep() {
-    if (this.gv.READY !== 1) return false;
+    if (this.rdy !== 1) return false;
     let t = this.t; for (const c of this.cpu.cyc) t += c.k === 'ID' ? c.n : c.k === 'IA' ? 6 : c.k === 'M1' || c.k === 'IR' || c.k === 'IW' ? 4 : 3;
     return ((t + 1) & 3) !== 1;
   }
@@ -313,7 +325,8 @@ class CPCMachine {
   vsOut() { const f = this.vdu.lv.VSYNC; return f === undefined ? this.vsync : !!f; }
   char() {
     const R = this.crtc, g = this.gf ? this.gv : null, c = this.vdu.faulty ? this.vdu.lv : null;
-    const stopped = (g && 'CCLK' in g) || (c && 'CLK' in c);                     // the 6845 has no clock: its counters stand still
+    if (c && c.RESET === 0) { this.hcc = 0; this.vcc = 0; this.vlc = 0; this.hs = false; this.vsync = false; this.vde = false; }   // the 6845 held in reset: no sync, no display
+    const stopped = (g && 'CCLK' in g) || (c && ('CLK' in c || c.RESET === 0));   // the 6845 has no clock: its counters stand still
     if (g && g.RESET === 0) { this.gaMode = 0; this.intCnt = 0; this.intReq = false; }   // the gate array held in reset
     // outputs for this character
     if (!stopped && this.hcc === R[2] && (R[3] & 15)) { this.hs = true; this.hsw = 0; }
@@ -389,7 +402,7 @@ class CPCMachine {
   // (I/O) or on the second automatic wait state (interrupt acknowledge); the cycle waits until that falls on READY.
   // Each cycle gets its number of wait states in w.
   afterStep(cyc) {
-    let t = 0; const free = this.gv.READY === 1;                              // READY held high: no wait states
+    let t = 0; const free = this.rdy === 1;                              // READY held high: no wait states
     for (const c of cyc) {
       if (c.k === 'ID') { c.t0 = this.t + t; t += c.n; continue; }
       const off = c.k === 'IA' ? 3 : c.k === 'IR' || c.k === 'IW' ? 2 : 1, len = c.k === 'IA' ? 6 : c.k === 'M1' || off === 2 ? 4 : 3;
@@ -406,7 +419,7 @@ class CPCMachine {
     return t;
   }
   preStep() {}
-  intOut() { const f = this.gv.INT; return f === undefined ? this.intReq : f === 0; }   // what the Z80 sees on its INT pin
+  intOut() { const zi = this.z80.lv.INT; if (zi !== undefined) return zi === 0; const f = this.gv.INT; return f === undefined ? this.intReq : f === 0; }   // what the Z80 sees on its INT pin
   syncInt() { this.cpu.intLine = this.intOut(); }
   step() { this.syncInt(); return this.afterStep(this.cpu.step()); }
   run(tStates) { let t = 0; while (t < tStates) t += this.step(); return t; }

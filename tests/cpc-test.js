@@ -62,6 +62,17 @@ for (const [name, bytes, want, setup] of [
   memSetFault(m, 'IC108', 'CS', 0); reg(2, 35); ok('the 6845\'s own CS pin overrides it', m.crtc[2] === 35); memSetFault(m, 'IC108', 'CS', null); memSetFault(m, 'IC111', 'A14', null);
   memSetFault(m, 'IC111', 'WR', 1); m.output(0xF600, 0x05); m.write(0x5002, 0x77); ok('bus WR high: the 8255 is not written, the RAM still is (the gate array makes MWE from MREQ and RD)', m.ppiC === 0 && m.ram[0x5002] === 0x77); memSetFault(m, 'IC111', 'WR', null);
   memSetFault(m, 'IC111', 'CLK', 0); const pc = m.cpu.pc; m.run(400); ok('Z80 CLK pin fault: the Z80 alone stops', m.cpu.pc === pc && /CLK/.test(m.held())); memSetFault(m, 'IC111', 'CLK', null);
+  // the Z80's input pins, and RESET as one line for the board
+  m.gaMode = 0x0C; m.cpu.pc = 0x4000; memSetFault(m, 'IC111', 'WAIT', 0); m.run(400); ok('Z80 WAIT pin low: held', m.cpu.pc === 0x4000 && /WAIT/.test(m.held()));
+  memSetFault(m, 'IC111', 'WAIT', 1); const w0 = m.waits; m.run(4000); ok('Z80 WAIT pin high: no wait states, whatever READY does', m.waits === w0 && m.cpu.pc !== 0x4000); memSetFault(m, 'IC111', 'WAIT', null);
+  m.cpu.pc = 0x4000; m.cpu.iff1 = m.cpu.iff2 = 0; memSetFault(m, 'IC111', 'NMI', 0); m.step(); ok('Z80 NMI pin low: one NMI', m.cpu.pc === 0x66 || m.cpu.lastEvent === 'NMI'); m.step(); ok('only one', m.cpu.lastEvent !== 'NMI'); memSetFault(m, 'IC111', 'NMI', null);
+  m.intReq = true; memSetFault(m, 'IC111', 'INT', 'z'); ok('Z80 INT pin disconnected: it never sees the request', m.intOut() === false); memSetFault(m, 'IC111', 'INT', 0); m.intReq = false; ok('Z80 INT pin low: a request all the time', m.intOut() === true); memSetFault(m, 'IC111', 'INT', null);
+  m.cpu.pc = 0x4321; memSetFault(m, 'IC111', 'RESET', 0); m.run(40); ok('Z80 RESET pin low: held in reset at 0000h', m.cpu.pc === 0 && /RESET/.test(m.held())); memSetFault(m, 'IC111', 'RESET', null);
+  m.gaMode = 0x0D; m.cpu.pc = 0x4321; m.hcc = 7; m.chipReset(); ok('RESET line: Z80, gate array and 6845 reset', m.cpu.pc === 0 && m.gaMode === 0 && m.hcc === 0);
+  m.gaMode = 0x0D; m.cpu.pc = 0x4321; memSetFault(m, 'IC116', 'RESET', 'z'); memSetFault(m, 'IC111', 'RESET', 1); m.chipReset();
+  ok('a chip whose RESET pin is high or disconnected is not reset', m.gaMode === 0x0D && m.cpu.pc === 0x4321); memSetFault(m, 'IC116', 'RESET', null); memSetFault(m, 'IC111', 'RESET', null);
+  [63, 40, 46, 0x8E, 38, 0, 25, 30, 0, 7].forEach((v, r) => { m.output(0xBC00, r); m.output(0xBD00, v); }); m.gaMode = 0x0C; m.cpu.pc = 0x4000; m.run(400000);
+  memSetFault(m, 'IC108', 'RESET', 0); m.run(4000); const f0 = m.frames; m.run(400000); ok('6845 RESET pin low: no sync, no frames', m.frames === f0 && !m.hs && !m.vsync && !m.de); memSetFault(m, 'IC108', 'RESET', null);
   ok('all cleared', !m.faulty && !m.gf && !m.busF && m.held() === null);
 }
 { // interrupt counter: 52 HSYNCs, and VSYNC resynchronisation
