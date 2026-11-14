@@ -113,7 +113,7 @@ same frames, NMIs, interrupts, wait states and program counter.
 
 Speed: in the general-purpose harness the synchronous design runs about 9 times slower than a real ZX81 and the
 netlist about 90 times. In its own loop (`zx81fast.js`) the synchronous design runs about 1.7 times faster than a
-real ZX81 in Node, and at full speed in a browser. With it, .p programs load and run, and their screens are the same
+real ZX81 in Node, and at about full speed in a browser (90% measured in headless Chromium). With it, .p programs load and run, and their screens are the same
 as in the hybrid emulator. Not modelled: the tape signal (LOAD puts the program straight into RAM), and a RAM pack's
 own decoding (the RAM is one block on RAM CS).
 
