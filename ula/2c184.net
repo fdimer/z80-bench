@@ -162,3 +162,37 @@ fs2     inv      N.SYNC         SYNCn         @8BJ   R/2
 tv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BL   PN16, "3 level output" (circuit not on this drawing)
 ck1     inv      n_2BH          CLKSRC        @2BH   R/2; CLKSRC: the long line at row 2 (to be traced to Q19)
 ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output
+
+# ---- clock: oscillator, Q19, the counter clock (rows 17-25, columns N-AL) ----
+oscb    inv      OSCn           OSC           @21E   inverter after the oscillator cell and a cross-under
+Q19     tff      Q19 Q19n       ~OSCn VCC     @21R   R/2 cell; no reset drawn (to be confirmed); Q19 = 3.25 MHz
+# CLKSRC (the line that goes up column AK to row 2 and right to the N.PHI output) is Q19's true output (row 21).
+alias   CLKSRC   Q19
+cc1     inv      n_cc1          Q19           @9AL   four inverters in series delay Q19 into the counter clock
+cc2     inv      n_cc2          n_cc1         @9AN
+cc3     inv      n_cc3          n_cc2         @8AN
+cc4     inv      CCLK           n_cc3         @8AL
+cr      inv      CRES           CRESn         @11AT  R/3; CRESn from the right (to be traced: includes T207)
+
+# ---- delay chains (rows 17-24) ----
+# Chain A (row 17): R/? inverter output up at 17N, then three NOR2 gates with both inputs tied (inverters).
+# Chain B (row 21-22): from Q19n, NOR2 gates with both inputs tied, five or more in series.
+# Chain C (row 24): NOR2 gates with both inputs tied, from the row 24 vertical at column R.
+# LCLKn = NOR4(chain A out, col W vertical from row 13, the row 18 line from column O, Q19)   @18X   R/3
+dA0     inv      DA0            DA0in         @18N   R/?, output upward; DA0in from below (column N vertical)
+dA1     nor2     DA1            DA0 DA0       @17P
+dA2     nor2     DA2            DA1 DA1       @17S
+dA3     nor2     DA3            DA2 DA2       @17U
+lckn    nor4     LCLKn          T17W DA3 R18O Q19   @18X   R/3; T17W: vertical at column W from above; R18O: row 18 line from column O
+dB1     nor2     DB1            Q19n Q19n     @21U
+dB2     nor2     DB2            DB1 DB1       @21X
+dB3     nor2     DB3            DB2 DB2       @21AA
+dB4     nor2     DB4            DB3 DB3       @21AC
+dB5     nor2     DB5            DB4 DB4       @21AE
+dB6     nor2     DB6            DB5 DB5       @22AG?
+dC1     nor2     DC1            C24R C24R     @24Z
+dC2     nor2     DC2            DC1 DC1       @24AC
+dC3     nor2     DC3            DC2 DC2       @24AE
+dC4     nor2     DC4            DC3 DC3       @24AG?
+d21     nor3     n_22AJ         DB4? DB6 DC4  @22AJ  R/2 (inputs to be confirmed)
+d21b    inv      n_22AM         n_22AJ        @22AM  R/3; output goes up column AT
