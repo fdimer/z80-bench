@@ -161,7 +161,7 @@ class Osborne {
     };
     const C = (id, part, what, range, arr, base, abits, extra) => new OsbChip(id, part, what, range, arr, base, abits, extra);
     this.chips = [
-      C('UD18', '2764', 'ROM 0: boot ROM', '0000h-1FFFh while the ROM bank is on', this.rom, 0, 13, { rom: true }),
+      C('UD18', '2764', 'ROM 0: boot ROM (a 2764 or a pin-compatible part: an M28C64C EEPROM on the board this was checked against)', '0000h-1FFFh while the ROM bank is on', this.rom, 0, 13, { rom: true }),
       C('UD15', '6116', 'ROM 1 socket: scratch RAM', '2000h-3FFFh while the ROM bank is on (2K, repeated)', this.xram, 0, 11),
       C('UC3', '6116', 'video RAM: characters', 'C000h-C7FFh while the video bank is on', this.vchar, 0, 11),
       C('UC6', '6116', 'video RAM: characters', 'C800h-CFFFh while the video bank is on', this.vchar, 0x800, 11),
@@ -173,7 +173,7 @@ class Osborne {
     for (let bank = 0; bank < 2; bank++) for (let bit = 0; bit < 8; bit++)
       this.chips.push(C('U' + ((bank ? 17 : 8) + bit), 'M3764', `RAM board: data bit ${bit}, ${bank ? 'bank 1 row (PRI1 high)' : 'bank 0 row (PRI1 low)'}`, bank ? '0000h-EFFFh while bank 1 is selected' : '0000h-EFFFh while bank 0 is selected, and F000h-FFFFh always', this.dram[bank], 0, 16, { dram: true, bank, bit }));
     this.p1 = new OsbP1(); this.chips.push(this.p1);      // the RAM board's connector, last so the chip indexes stay put
-    this.z80c = new BoardChip('UC9', 'Z80', 'processor', 'address, data and control lines', { label: 'UC9' }); this.chips.push(this.z80c);
+    this.z80c = new BoardChip('UD22', 'Z80', 'processor', 'address, data and control lines', { label: 'UD22' }); this.chips.push(this.z80c);
     this.pinF = {}; this.netF = {}; this.heldWhy = null; this.fx = false;
     this.rasT = new Float64Array(256);                    // when each group of rows last had RAS: bank * 128 + (row & 7Fh); kept only while P1 has a fault
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
@@ -241,15 +241,19 @@ class Osborne {
   // ---- memory with chip faults (used only while at least one pin fault is set) ----
   // ---- lines and faults (the shared scheme in memchips.js) ----
   setFault(id, pin, v) { this.setPinFault(id, pin, v); }
-  // The RAM board's lines, from the measured RD1140 board: the sixteen M3764s share the address lines from the
-  // buffers U25 and U16 and the write enable; each row has its own RAS (RAS0 for U8-U15, RAS1 for U17-U24) and CAS is
-  // common. The two chips of a data bit share the board's data line from P1 (their DIN and DOUT taken as joined to it,
-  // the usual way with a 4164). The main board's chips are drawn on lines of their own until the main board is traced.
+  // The lines. Main logic board, from the OCC2 schematic (sheets 3 and 5; checked against an RD1137 rev 06 board): the
+  // Z80 (UD22) drives ADR0-ADR15 and DATA0-DATA7 with no buffer, straight to ROM 0 (UD18), the ROM 1 socket (UD15) and
+  // the RAM board connector P11. The video RAMs and the font RAMs hang off their own multiplexed lines and are not on
+  // the processor's buses. RAM board, measured on an RD1140: the sixteen M3764s share the address lines from the
+  // buffers U25 and U16, the write enable and CAS; each row has its own RAS (RAS0 for U8-U15, RAS1 for U17-U24). Each
+  // chip's DIN and DOUT are joined, and the two chips of a data bit are wired straight to that bit's connector pin, so
+  // a data line runs unbroken from the Z80 through P1 to the RAMs (a fault on the P1 pin is a bad contact in it).
   nets() {
     if (this.NETS) return this.NETS;
-    const N = {}, U = n => 'U' + n, b0 = [0, 1, 2, 3, 4, 5, 6, 7].map(b => U(8 + b)), b1 = [0, 1, 2, 3, 4, 5, 6, 7].map(b => U(17 + b)), all = b0.concat(b1);
+    const N = {}, Z = 'UD22', U = n => 'U' + n, b0 = [0, 1, 2, 3, 4, 5, 6, 7].map(b => U(8 + b)), b1 = [0, 1, 2, 3, 4, 5, 6, 7].map(b => U(17 + b)), all = b0.concat(b1);
+    for (let n = 0; n < 16; n++) N['A' + n] = { label: `address line ADR${n}`, d: 0, pins: [[Z, 'A' + n], ...(n < 13 ? [['UD18', 'A' + n]] : []), ...(n < 11 ? [['UD15', 'A' + n]] : []), ['P1', 'A' + n]] };
+    for (let n = 0; n < 8; n++) N['D' + n] = { label: `data line DATA${n} (to the RAM board's chips through P1)`, d: -1, pins: [[Z, 'D' + n], ['UD18', 'O' + n], ['UD15', 'D' + n], ['P1', 'D' + n], [b0[n], 'DIN'], [b0[n], 'DOUT'], [b1[n], 'DIN'], [b1[n], 'DOUT']] };
     for (let n = 0; n < 8; n++) N['RA' + n] = { label: `RAM board address line ${n} (from the buffers U25 and U16)`, d: -1, pins: all.map(c => [c, 'A' + n]) };
-    for (let n = 0; n < 8; n++) N['BD' + n] = { label: `RAM board data line D${n}`, d: -1, pins: [['P1', 'D' + n], [b0[n], 'DIN'], [b0[n], 'DOUT'], [b1[n], 'DIN'], [b1[n], 'DOUT']] };
     N.RAS0 = { label: 'RAM board RAS line of row 0 (U8-U15)', d: -1, pins: b0.map(c => [c, 'RAS']) };
     N.RAS1 = { label: 'RAM board RAS line of row 1 (U17-U24)', d: -1, pins: b1.map(c => [c, 'RAS']) };
     N.CAS = { label: 'RAM board CAS line', d: -1, pins: all.map(c => [c, 'CAS']) };

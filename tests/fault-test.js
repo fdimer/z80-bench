@@ -62,13 +62,13 @@ m.clearFaults(); ok(!m.faulty && m.faultList().length === 0, 'all P1 faults clea
 // lines and the two kinds of fault (a line held, a pin disconnected), and the Z80's pins
 { const z = new ctx.Osborne(new Uint8Array(0x2000).fill(0xA5)); z.pa = 0x00; z.clearFaults();
   const N = z.nets();
-  ok(N.RA3.pins.length === 16 && N.BD3.pins.join() === 'P1,D3,U11,DIN,U11,DOUT,U20,DIN,U20,DOUT' && N.RAS0.pins.length === 8 && N.CAS.pins.length === 16, 'RAM board lines: sixteen chips on each address line; a data line joins P1 and the two chips of its bit');
+  ok(N.RA3.pins.length === 16 && N.D3.pins.join() === 'UD22,D3,UD18,O3,UD15,D3,P1,D3,U11,DIN,U11,DOUT,U20,DIN,U20,DOUT' && N.A12.pins.join() === 'UD22,A12,UD18,A12,P1,A12' && N.A3.pins.length === 4 && N.RAS0.pins.length === 8 && N.CAS.pins.length === 16, 'lines: the Z80, the two ROM sockets and P1 on each address and data line; a data line goes on to the two RAM chips of its bit; sixteen RAM chips on each RAM address line');
   z.write(0x1234, 0x5A); z.pa = 1; z.write(0x1234, 0xA5); z.pa = 0;
-  z.setNetFault('BD3', 1); ok(z.read(0x1234) === 0x5A && z.read(0x1235) === (z.dram[0][0x1235] | 8), 'data line D3 of the RAM board held high: RAM reads have bit 3 set'); ok(z.p1.f.D3 === 1 && z.chipById.U20.f.DOUT === 1, 'and every pin on it shows it'); z.clearFaults();
+  z.setNetFault('D3', 1); ok(z.read(0x1234) === 0x5A && z.read(0x1235) === (z.dram[0][0x1235] | 8), 'data line DATA3 held high: RAM reads have bit 3 set'); z.pa = 0x80; ok((z.read(0x0100) & 8) === 8 && z.chipById.UD18.f.O3 === 1, 'and so do ROM reads'); z.pa = 0; ok(z.p1.f.D3 === 1 && z.chipById.U20.f.DOUT === 1, 'and every pin on it shows it'); z.clearFaults();
   z.setNetFault('RAS1', 1); ok(z.read(0x1234) === 0x5A, 'RAS of row 1 held high: row 0 still works'); z.pa = 1; ok(z.read(0x1234) === 0xFF, 'and row 1 reads FFh'); z.pa = 0; z.clearFaults();
-  z.setPinFault('UC9', 'A12', 0); ok(z.read(0x1234) === z.read(0x0234) && z.busA(0x1234) === 0x0234, 'Z80 A12 stuck low: 1234h reads 0234h'); z.clearFaults();
-  z.setPinFault('UC9', 'D7', 1); ok(z.read(0x1234) === 0xDA, 'Z80 D7 stuck high: bit 7 of every read is set'); z.clearFaults();
-  z.setPinFault('UC9', 'WR', 'z'); z.write(0x1234, 0x00); z.clearFaults(); ok(z.read(0x1234) === 0x5A, 'Z80 WR disconnected: writes are lost');
-  z.setPinFault('UC9', 'RESET', 0); ok(/reset/.test(z.held()) && z.cpu.step()[0].held, 'Z80 RESET stuck low: the processor is held in reset'); z.clearFaults(); ok(z.held() === null, 'and runs again once cleared');
+  z.setPinFault('UD22', 'A12', 0); ok(z.read(0x1234) === z.read(0x0234) && z.busA(0x1234) === 0x0234, 'Z80 A12 stuck low: 1234h reads 0234h'); z.clearFaults();
+  z.setPinFault('UD22', 'D7', 1); ok(z.read(0x1234) === 0xDA, 'Z80 D7 stuck high: bit 7 of every read is set'); z.clearFaults();
+  z.setPinFault('UD22', 'WR', 'z'); z.write(0x1234, 0x00); z.clearFaults(); ok(z.read(0x1234) === 0x5A, 'Z80 WR disconnected: writes are lost');
+  z.setPinFault('UD22', 'RESET', 0); ok(/reset/.test(z.held()) && z.cpu.step()[0].held, 'Z80 RESET stuck low: the processor is held in reset'); z.clearFaults(); ok(z.held() === null, 'and runs again once cleared');
   z.setNetFault('CAS', 0); z.setPinFault('UD18', 'CE', 1); ok(z.faultList().length === 2 && z.chipFaults('U8').join() === 'CAS: line held low', 'faults are listed as lines and as pins'); z.clearFaults(); }
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);

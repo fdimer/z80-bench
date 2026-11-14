@@ -384,7 +384,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
       <section class="panel" id="pChips">
         <h2>Chips <span class="aside">40-pin DIPs, top view · live pinouts, updated every clock</span></h2>
         <div class="chiprow">
-          <figure id="cpuFig"><svg class="chip" id="chip" viewBox="0 0 380 540" role="group" aria-label="Z80 pinout"></svg><figcaption><b>UC9 · Z80A CPU</b><br>3.99 MHz (23.9616 MHz ÷ 6)<span class="mcfaults mono" id="cpuFaults"></span></figcaption></figure>
+          <figure id="cpuFig"><svg class="chip" id="chip" viewBox="0 0 380 540" role="group" aria-label="Z80 pinout"></svg><figcaption><b>UD22 · Z80A CPU</b><br>3.99 MHz (23.9616 MHz ÷ 6)<span class="mcfaults mono" id="cpuFaults"></span></figcaption></figure>
           <figure><svg class="chip" id="chipPia0" viewBox="0 0 380 540" role="group" aria-label="System PIA UD12 pinout"></svg><figcaption><b>UD12 · MC6821 system PIA</b><br>ports 00h–03h · bank select, VBLANK, speaker, disk select</figcaption><label class="inline conn"><input type="checkbox" data-conn="pia0" checked> Connected to bus</label></figure>
           <figure><svg class="chip" id="chipPia1" viewBox="0 0 380 540" role="group" aria-label="IEEE-488 PIA UD8 pinout"></svg><figcaption><b>UD8 · MC6821 IEEE-488 PIA</b><br>ports 10h–13h · nothing attached</figcaption><label class="inline conn"><input type="checkbox" data-conn="pia1" checked> Connected to bus</label></figure>
           <figure><svg class="chip" id="chipSio" viewBox="0 0 380 540" role="group" aria-label="Z80A SIO/2 UD4 pinout"></svg><figcaption><b>UD4 · Z80A SIO/2</b><br>ports 0Ch–0Fh · modem (A) and printer (B) ports</figcaption><label class="inline conn"><input type="checkbox" data-conn="sio" checked> Connected to bus</label></figure>
@@ -395,7 +395,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <dt>Address bus</dt><dd id="brAddr">–</dd>
           <dt>Data bus</dt><dd id="brData">–</dd>
         </dl>
-        <p class="hint">Clicking CLK pulses one clock; right-click it for its fault menu. Every other ringed pin opens the fault menu: on a line shared with other chips, hold the whole line high or low, or tick "Disconnected from the line" for a fault on this pin alone; a pin with a line of its own can be disconnected (it then floats high) or held high or low. The Osborne's main logic board is not traced yet, so the Z80's pins are on lines of their own: a fault on one acts on everything the processor reads, writes and is told. Faults are listed in the Debug pane and stay until cleared there, in the Memory chips panel, or by Master reset.</p>
+        <p class="hint">Clicking CLK pulses one clock; right-click it for its fault menu. Every other ringed pin opens the fault menu: on a line shared with other chips, hold the whole line high or low, or tick "Disconnected from the line" for a fault on this pin alone; a pin with a line of its own can be disconnected (it then floats high) or held high or low. The Z80 (UD22) has no buffers: its address and data pins share their lines with ROM 0 (UD18), the ROM 1 socket (UD15) and the RAM board through P1, and each data line runs on to the two RAM chips of its bit (see the Memory chips panel). A fault on one of these lines acts on all of them. Faults are listed in the Debug pane and stay until cleared there, in the Memory chips panel, or by Master reset.</p>
         <p class="hint">Wiring from the OCC2 schematic. The PIAs' E is the board's "68 ENABLE", high during an I/O cycle to that chip; R/W follows /WR; RS0 and RS1 are A0 and A1; CS0 and CS1 are tied high and /CS2 comes from the 74LS138 decoder. On UD12, port A drives the bank lines, CB1 is VBLANK and CB2 the 50/60 Hz select. The SIO's /TxC and /RxC come from the 8253 baud-rate timer, which is not emulated, so they stay idle. Click a highlighted input pin to toggle it, force it high or low (it then ignores whatever drives it, shown with a dashed red ring), or release it. Untick <b>Connected to bus</b> to pull a chip off the CPU bus: its reads return FFh, writes are ignored and its interrupt no longer reaches /INT. Forced pins and disconnected chips are listed in the Debug pane.</p>
       </section>
       <section class="panel" id="pMemChips">
@@ -410,7 +410,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           </figure>
         </div>
         <p class="hint">Every memory chip in the machine. The eight on the main logic board are drawn from the OCC2 schematic (sheets 5, 9 and 10): the boot ROM, the scratch RAM in the ROM 1 socket, four video RAMs and two font RAMs. The 128K of dynamic RAM is on the separate RAM board (RD1140), whose schematic was reverse engineered from a real board by continuity measurement: sixteen OKI M3764 (4164 type), U8–U15 holding D0–D7 of bank 0 and U17–U24 holding D0–D7 of bank 1, laid out here as on the board. The board keeps F000h–FFFFh in U8–U15 for both banks. The RAM address pins follow the board's wiring: the low address byte is the row and the high byte the column, but RAM pins A1, A2, A3 and A5 carry address lines A2, A1, A5 and A3 (and A10, A9, A13 and A11). A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the bus on every clock; the video and font RAMs show the display circuit's own reads between CPU accesses.</p>
-        <p class="hint">To simulate a fault, click a pin for its menu. A pin on a line shared with other chips gets a tick box: without it, the buttons hold the whole line high or low, and every pin on that line, on every chip, sees the level; with it ("Disconnected from the line"), the fault is on this chip's pin alone. A pin with a line of its own has the plain choices: Disconnected (an input then floats high), High or Low. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. A chip with a fault is marked in red, and every fault is listed in the Debug panel, where it can be removed. The memory view and the disassembly show what the CPU reads through the faults. The RAM board's lines are from the measured RD1140 board: its sixteen chips share the address lines, the write enable and CAS; each row has its own RAS; the two chips of a data bit share that bit's line with connector P1. The main logic board's chips have lines of their own here until the main board is traced.</p>
+        <p class="hint">To simulate a fault, click a pin for its menu. A pin on a line shared with other chips gets a tick box: without it, the buttons hold the whole line high or low, and every pin on that line, on every chip, sees the level; with it ("Disconnected from the line"), the fault is on this chip's pin alone. A pin with a line of its own has the plain choices: Disconnected (an input then floats high), High or Low. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. A chip with a fault is marked in red, and every fault is listed in the Debug panel, where it can be removed. The memory view and the disassembly show what the CPU reads through the faults. The lines follow the OCC2 schematic and the measured RAM board: the Z80, ROM 0 (UD18), the ROM 1 socket (UD15) and P1 share the address lines ADR0–ADR15 and the data lines DATA0–DATA7, and each data line goes on to the two RAM chips of its bit, whose DIN and DOUT are joined. The RAM board's sixteen chips share their own address lines, the write enable and CAS; each row has its own RAS. The video RAMs and font RAMs have their own lines, apart from the processor's buses.</p>
         <p class="hint"><b>P1</b> is the RAM board's 72-way connector to the main logic board, drawn with its odd pins down the left and its even pins down the right. A fault on one of its pins is a bad contact seen from the RAM board: the board gets a floating input (which reads as high) or a level held high or low, while the rest of the machine still sees the true signal. An address pin moves every access to the wrong cell in all sixteen RAMs at once, and A12–A15 also feed the board's F000h decoder; a data pin changes that bit in both banks; PRI1 fixes the bank; ROMDEC* or VRAMDEC* held high makes the board answer at the same time as the ROM or the video RAM, held low it never answers; any fault on RAS or CAS* stops the RAMs being read or written, and without RAS they are no longer refreshed and forget within a couple of seconds; RD* makes every access a write (high) or loses every write (low); RAE* and CAE* upset the row or column address; RFSH* high leaves the bank that is not in use without refresh, low takes row address bit 7 away. MREQ* only clocks an unused refresh bit, so it has no effect. Pins the board does not use cannot be faulted.</p>
       </section>
 
@@ -966,7 +966,7 @@ let disStart = 0, memFrom = 0;
 function regsView() { return midInstruction() && pre ? pre : cpu; }
 function pinValue(name) {
   const T = curT;
-  { const zf = osb.chipById['UC9'].f; if (name in zf) return zf[name]; }
+  { const zf = osb.chipById['UD22'].f; if (name in zf) return zf[name]; }
   if (name === '+5V') return 'p';
   if (name === 'GND') return 'g';
   if (name === 'CLK') return clk;
@@ -2126,7 +2126,7 @@ function renderChips() {
 }
 
 // ---------- the processor's pins take faults too ----------
-const CPU_FAULT_PINS = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13', 'A14', 'A15', 'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'MREQ', 'IORQ', 'RD', 'WR', 'M1', 'HALT', 'INT', 'NMI', 'WAIT', 'BUSREQ', 'RESET'], MCCPU = osb.chips.indexOf(osb.chipById['UC9']);
+const CPU_FAULT_PINS = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13', 'A14', 'A15', 'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'MREQ', 'IORQ', 'RD', 'WR', 'M1', 'HALT', 'INT', 'NMI', 'WAIT', 'BUSREQ', 'RESET'], MCCPU = osb.chips.indexOf(osb.chipById['UD22']);
 let cpuFaultsDone = false;
 function cpuFaultPins() {
   cpuFaultsDone = true; const fig = $('cpuFig');
@@ -2138,7 +2138,7 @@ function cpuFaultPins() {
       g.insertBefore(ring, g.firstChild); g.insertBefore(hit, g.firstChild);
       g.classList.add('input'); g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
     }
-    g.querySelector('title').textContent = `${osb.chipName('UC9')} pin ${name}: click for its fault menu`;
+    g.querySelector('title').textContent = `${osb.chipName('UD22')} pin ${name}: click for its fault menu`;
     g.addEventListener('click', ev => { ev.stopPropagation(); mcMenu(name, ev, MCCPU, fig); });
     g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const r = g.getBoundingClientRect(); mcMenu(name, { clientX: r.left, clientY: r.top }, MCCPU, fig); } });
   }
@@ -2147,8 +2147,8 @@ function cpuFaultPins() {
 }
 function cpuFaultRender() {
   if (!cpuFaultsDone && pinEls['CLK']) cpuFaultPins();
-  const zf = osb.chipById['UC9'].f; for (const name of CPU_FAULT_PINS.concat(['CLK'])) { const g = pinEls[name].g, f = name in zf; g.classList.toggle('forced', f); g.classList.toggle('fz', f && zf[name] === 'z'); }
-  $('cpuFaults').textContent = osb.chipFaults('UC9').join(' · ');
+  const zf = osb.chipById['UD22'].f; for (const name of CPU_FAULT_PINS.concat(['CLK'])) { const g = pinEls[name].g, f = name in zf; g.classList.toggle('forced', f); g.classList.toggle('fz', f && zf[name] === 'z'); }
+  $('cpuFaults').textContent = osb.chipFaults('UD22').join(' · ');
 }
 // ---------- memory chips: tiles, a live pinout of the selected chip, and pin faults ----------
 const MC_AL = new Set(['CE', 'OE', 'WE', 'RAS', 'CAS', 'PGM']);
