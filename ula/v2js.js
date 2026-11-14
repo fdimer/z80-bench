@@ -79,10 +79,41 @@ function translate(text, modName) {
   };
 }
 
+// The same core after a real compiler has read it: Yosys synthesizes ula2c210_core to plain gates and flip-flops,
+//   yosys -p "read_verilog 2c210_sync.v; synth -top ula2c210_core -flatten -noabc; opt_clean;
+//             dfflegalize -cell $_DFF_P_ 01; opt_clean; write_json core.json"
+// and fromYosys() runs that netlist. Same shape as translate()'s result, so SyncUla can use either.
+function fromYosys(json, modName) {
+  const m = json.modules[modName], cells = Object.values(m.cells), bit = [], width = {}, kind = {}, init = {};
+  const val = b => b === '0' ? 0 : b === '1' ? 1 : b === 'x' || b === 'z' ? 0 : bit[b] | 0;
+  for (const [n, pt] of Object.entries(m.ports)) { width[n] = pt.bits.length; kind[n] = pt.direction; }
+  const named = Object.entries(m.netnames).filter(([n, v]) => !v.hide_name && !(n in m.ports) && /^\w+$/.test(n));
+  for (const [n, v] of named) { width[n] = v.bits.length; kind[n] = 'wire'; }
+  const ffs = cells.filter(c => c.type === '$_DFF_P_'), gates = cells.filter(c => c.type !== '$_DFF_P_');
+  for (const c of gates) if (!['$_AND_', '$_OR_', '$_XOR_', '$_NOT_', '$_MUX_'].includes(c.type)) throw new Error('cell ' + c.type);
+  for (const v of Object.values(m.netnames)) if (v.attributes && v.attributes.init) [...v.attributes.init].reverse().forEach((ch, i) => { bit[v.bits[i]] = ch === '1' ? 1 : 0; });
+  const comb = s => {
+    for (const [n, pt] of Object.entries(m.ports)) if (pt.direction === 'input') pt.bits.forEach((b, i) => { bit[b] = s[n] >> i & 1; });
+    for (let pass = 0; ; pass++) {
+      if (pass > 60) throw new Error('combinational loop'); let ch = false;
+      for (const c of gates) {
+        const k = c.connections, A = val(k.A[0]), B = k.B ? val(k.B[0]) : 0;
+        const y = c.type === '$_AND_' ? A & B : c.type === '$_OR_' ? A | B : c.type === '$_XOR_' ? A ^ B : c.type === '$_NOT_' ? 1 - A : val(k.S[0]) ? B : A;
+        if ((bit[k.Y[0]] | 0) !== y || bit[k.Y[0]] === undefined) { bit[k.Y[0]] = y; ch = true; }
+      }
+      if (!ch) break;
+    }
+    for (const [n, pt] of Object.entries(m.ports)) if (pt.direction === 'output') s[n] = pt.bits.reduce((a, b, i) => a | val(b) << i, 0);
+    for (const [n, v] of named) s[n] = v.bits.reduce((a, b, i) => a | val(b) << i, 0);
+  };
+  const edge = s => { comb(s); const d = ffs.map(c => val(c.connections.D[0])); ffs.forEach((c, i) => { bit[c.connections.Q[0]] = d[i]; }); };
+  return { width, kind, regs: [], init, comb, edge, cells: gates.length, ffs: ffs.length };
+}
+
 // the testbench's names for the pins and for the few inside nets it looks at
 class SyncUla {
-  constructor(text) {
-    const M = this.M = translate(text, 'ula2c210_core'), s = this.s = {};
+  constructor(text) {      // Verilog text, or a module already made by fromYosys()
+    const M = this.M = typeof text === 'string' ? translate(text, 'ula2c210_core') : text, s = this.s = {};
     for (const n in M.width) s[n] = 0;
     for (const n of M.regs) s[n] = M.init[n] || 0;
     this.ext = { d: 0xFF, a: 0x1FF }; this.t = 0; this.events = 0; this.watch = {}; this.last = {};
@@ -121,4 +152,4 @@ class SyncUla {
   }
   runTo(t) { this.t = t; }
 }
-if (typeof module !== 'undefined') module.exports = { translate, SyncUla };
+if (typeof module !== 'undefined') module.exports = { translate, fromYosys, SyncUla };

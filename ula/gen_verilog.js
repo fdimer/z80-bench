@@ -83,7 +83,7 @@ ${ports.join(',\n').replace(/(   \/\/ pin \d+),\n/g, ',$1\n')}
 );
 ${al.join('\n')}
   wire ${[...wires].join(', ').replace(/(.{90,}?), /g, '$1,\n       ')};
-${[...pull].map(n => `  pullup (${san(n)});`).join('\n')}
+${[...pull].map(n => `  pullup pu_${san(n)} (${san(n)});`).join('\n')}
 
 ${body.join('\n')}
 endmodule

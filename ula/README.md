@@ -115,11 +115,17 @@ Through the testbench (`ULA=sync`) it matches the emulator on everything the gat
 selects, port reads, row counter, vertical sync and every dot. Its NMI and sync come about 95 ns (0.3 of a T-state)
 earlier than the gate-level model's, because the ripple counter's delay is gone.
 
-**How far this is checked.** No Verilog simulator or synthesis tool was available where this was written. The gates
-file is checked by reading it back; the synchronous core by `v2js.js`, which executes the Verilog text itself but
-knows only a subset of the language. **Neither file has been through a Verilog compiler yet**, and the pin wrapper
-`ula2c210_sync` (tri-state pins, not in the subset) has not been run at all. Before building anything: compile both
-with a real tool (Icarus Verilog, Verilator, Yosys or a vendor's), and simulate them against each other.
+**How far this is checked.** Both files compile in Yosys 0.71 (the gates file once its `pullup` primitives, which
+Yosys does not know, are taken out; they are standard Verilog). Three runs of the testbench stand behind them:
+- `ULA=gates.v`: the gates file read back into a netlist and run in `sim.js`. It checks what the file says, gate by
+  gate, but not a simulator's own reading of the primitives.
+- `ULA=sync`: `v2js.js` executing the text of `ula2c210_core`.
+- `ULA=yosys`: the same core after Yosys has synthesized it to 192 gates and 35 flip-flops (the command is in
+  `v2js.js`), so it rests on a real compiler's reading of the Verilog. Same result: no differences.
+
+Not done: the pin wrapper `ula2c210_sync` (tri-state and open-drain pins) compiles but has not been simulated; the
+gates file has not been run in an event-driven Verilog simulator (Icarus Verilog would do it); and nothing has been
+placed and routed for a real FPGA, so there are no timing figures.
 
 ## Electrical requirements for a replacement
 

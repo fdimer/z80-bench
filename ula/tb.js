@@ -25,7 +25,7 @@ m.run(3.25e6 * 0.1);
 
 // ---- the gate-level ULA ----
 // which ULA: the netlist (default), the generated gate-level Verilog read back (ULA=gates.v), or the synchronous
-// Verilog run through ula/v2js.js (ULA=sync)
+// Verilog run through ula/v2js.js (ULA=sync), or that Verilog as synthesized by Yosys (ULA=yosys)
 const WHICH = process.env.ULA || 'net';
 const INIT = { NMION: 0, NMIOFF: 1, 'FRAME-SYNC': 0, FSL: 1 };
 const facade = (real, map) => ({ set: (n, v) => real.set(map(n), v), get: n => real.get(map(n)), runTo: t => real.runTo(t), get t() { return real.t; }, get events() { return real.events; },
@@ -35,6 +35,8 @@ if (WHICH === 'net') sim = new UlaSim(fs.readFileSync(path.join(__dirname, '2c21
 else if (WHICH === 'gates.v') {
   const { fromVerilog, san } = require('./gen_verilog.js'), init = {}; for (const k in INIT) init[san(k)] = INIT[k];
   sim = facade(new UlaSim(fromVerilog(fs.readFileSync(path.join(__dirname, '2c210_gates.v'), 'utf8')), { init }), san);
+} else if (WHICH === 'yosys') {     // the synchronous core as Yosys synthesized it: YOSYS_JSON=core.json (see ula/v2js.js)
+  const V = require('./v2js.js'); sim = new V.SyncUla(V.fromYosys(JSON.parse(fs.readFileSync(process.env.YOSYS_JSON, 'utf8')), 'ula2c210_core'));
 } else sim = new (require('./v2js.js').SyncUla)(fs.readFileSync(path.join(__dirname, '2c210_sync.v'), 'utf8'));
 const OSC = 1000 / 6.5;                   // ns per oscillator period
 let oscT = 0, osc = 0;
