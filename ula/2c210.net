@@ -136,7 +136,7 @@ d6l     inv      D6L            Q17           @12AN  ok210; R/3; low after a cha
 NQ18    dlatch   NQ18           D7 ~LCLK      @14AN  ok210; D from the row 11.4 line (D7)
 # video (rows 12-15, columns AL-AT), 2C210 as drawn: Q32 holds the inverse-video bit; four NORs make VID = XNOR(Q8, Q32)
 q32d    nor2     n_q32d         D6L NQ18      @13AM  ok210
-Q32     dff      Q32            n_q32d ~S/L VCC   @13AP  ok210; clocked by S/L (column AJ): it takes the inverse bit when the byte is loaded; no reset drawn
+Q32     dff      Q32            n_q32d ~S/L -     @13AP  ok210; clocked by S/L (column AJ): it takes the inverse bit when the byte is loaded; no reset drawn
 vx      nor2     VX             Q8 Q32        @13AR  ok210; SV = Q8 (Q8's output runs right to column AM and down)
 vy      nor2     VY             Q8 VX         @12AU  ok210
 vz      nor2     VZ             VX Q32        @14AU  ok210
@@ -167,11 +167,11 @@ fs1     nor2     SYNCn          LINE-SYNC FRAME-SYNC   @8BG  ok210
 fs2     inv      N.SYNC         SYNCn         @8BJ   R/2  ok210
 tv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BL   PN16, "3 level output" (circuit not on this drawing)  ok210
 ck1     inv      n_2BH          CLKSRC        @2BH   R/2; CLKSRC = Q19, up column AK  ok210
-ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output  ok210
+ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output  ok210; non-inverting, so N.PHI = NOT Q19 and the Z80's CLK (through TR2, an inverter) = Q19: the latch windows then fall after CLK falls in T1 and T2, and FORCE covers the T3 rise when the Z80 takes the NOP
 
 # ---- clock: oscillator, Q19, the counter clock (rows 17-25, columns N-AL) ----
 oscb    inv      OSCn           OSC           @21E   inverter after the oscillator cell and a cross-under  ok210
-Q19     tff      Q19 Q19n       ~OSCn VCC     @21R   ok210; R/2 cell; clocked from the oscillator line; no reset drawn; Q19 = 3.25 MHz
+Q19     tff      Q19 Q19n       ~OSCn -       @21R   ok210; R/2 cell; clocked from the oscillator line; no reset drawn; Q19 = 3.25 MHz
 # CLKSRC (the line that goes up column AK to row 2 and right to the N.PHI output) is Q19's true output (row 21). ok210
 alias   CLKSRC   Q19
 cc1     inv      n_cc1          Q19           @9AL   four inverters in series delay Q19 into the counter clock  ok210
@@ -203,8 +203,8 @@ dC1     nor2     DC1            N.MREQ N.MREQ @24V  ok210
 dC2     nor2     DC2            DC1 DC1       @24AC  ok210
 dC3     nor2     DC3            DC2 DC2       @24AE  ok210
 d21     nor3     n_22AJ         Q19n DB5 DC3  @22AD  ok210; R/2; Q19n along row 21.7 from Q19 and down column AB
-d21b    inv      S/L            n_22AJ        @22AE  ok210; R/3; this is S/L: right along row 22.3, up column AJ to the shift register (and Q32's clock); also down into aen1
-aen1    nor2     AENa           S/L M1     @24AI  ok210; M1 via row 28.6 and column AD; AENa also runs left along row 25.9 to Q20's D input
+d21b    inv      S/L            n_22AJ        @22AE  ok210; R/3; this is S/L: right along row 22.3, up column AJ to the shift register (and Q32's clock)
+aen1    nor2     AENa           D6L M1        @24AI  ok210; D6L from d6l's output via row 13.6, column AJ, row 16.2 and down column AG (it crosses the S/L line at row 22.3 without a dot); M1 via row 28.6 and column AD; AENa also runs left along row 25.9 to Q20's D input. So the ULA drives A0'-A8' from the end of a character's M1 to the next M1
 aen2    inv      n_aen2         AENa          @24AM  ok210
 aen3    inv      AENin          n_aen2        @24AO  ok210; R/2; up column AU to the address enable (row 18)
 
@@ -285,6 +285,6 @@ nl2     nor2     NMIOFF         NMION OUTFE   @37AW  ok210; runs right to column
 
 # ---- memory select outputs (rows 30-32, columns BE-BJ): "see cct diagram" (RTL stages and totem-pole outputs) ----
 rmi     inv_rtl  RAMCSi         RAMSELn       @30BF  ok210; RTL
-rmo     pin_tp   RAM.N.CS       RAMCSi        @30BI  ok210; PN12
+rmo     pin_tpn  RAM.N.CS       RAMCSi        @30BI  ok210; PN12; output stage taken as inverting (pin_tpn): its circuit is on the separate 'cct diagram', and the selects only work this way round
 rom     nor2_rtl ROMCSi         ROMLINE RAMCSi   @31BF  ok210; RTL. ROM N.CS = ROMLINE or RAMACC: the ROM is selected for A14 low, or while Q20 is set, unless the RAM is
-romo    pin_tp   ROM.N.CS       ROMCSi        @31BI  ok210; PN13
+romo    pin_tpn  ROM.N.CS       ROMCSi        @31BI  ok210; PN13; output stage taken as inverting (pin_tpn): its circuit is on the separate 'cct diagram', and the selects only work this way round
