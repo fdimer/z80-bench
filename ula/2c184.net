@@ -196,3 +196,33 @@ dC3     nor2     DC3            DC2 DC2       @24AE
 dC4     nor2     DC4            DC3 DC3       @24AG?
 d21     nor3     n_22AJ         DB4? DB6 DC4  @22AJ  R/2 (inputs to be confirmed)
 d21b    inv      n_22AM         n_22AJ        @22AM  R/3; output goes up column AT
+
+# ---- address outputs (rows 12-24, columns BD-BJ) ----
+# A3'-A8': the latch's inverted outputs are inverted again and driven through tri-state buffers. The buffers' enables
+# (active low) share AEN, made by an RTL inverter with a 1.8K pull-up (row 18) from AENin (the long row 18 line).
+aen     inv_rtl  AEN            AENin         @18BC  RTL, 1.8K pull-up
+oa3     inv      n_oa3          NQ11          @12BC
+oa4     inv      n_oa4          NQ12          @13BC
+oa5     inv      n_oa5          NQ13          @14BC
+oa6     inv      n_oa6          NQ14          @15BC
+oa7     inv      n_oa7          NQ15          @16BC
+oa8     inv      n_oa8          NQ16          @17BC
+pa3     pin_ts   A3'            n_oa3 ~AEN    @12BH  PN36
+pa4     pin_ts   A4'            n_oa4 ~AEN    @13BH  PN37
+pa5     pin_ts   A5'            n_oa5 ~AEN    @14BH  PN38
+pa6     pin_ts   A6'            n_oa6 ~AEN    @15BH  PN39
+pa7     pin_ts   A7'            n_oa7 ~AEN    @16BH  PN1
+pa8     pin_ts   A8'            n_oa8 ~AEN    @17BH  PN2
+# row counter Q29, Q30, NQ31 (rows 19-23, columns BB-BD): ripple toggles, reset together by RRES (column BA)
+Q29     tff      Q29 Q29n       ~RCLK RRES    @19BB  RCLK: the long line from the left at row 18-19 (to be traced)
+Q30     tff      Q30 Q30n       ~Q29 RRES     @21BB
+NQ31    tff      - NQ31         ~Q30 RRES     @23BB  only the inverted output is drawn
+oa0     inv      n_oa0          Q29n          @20BE
+oa1     inv      n_oa1          Q30n          @21BE
+oa2     inv      n_oa2          NQ31          @22BE
+pa0     pin_ts   A0'            n_oa0 ~AEN    @20BH  PN5, also read back (below)
+pa1     pin_ts   A1'            n_oa1 ~AEN    @21BH  PN4, also read back
+pa2     pin_ts   A2'            n_oa2 ~AEN    @22BH  PN3
+# A0' and A1' are read back into the chip for the port decode
+ba0     buf_ef   A0in           A0'           @25BF
+ba1     buf_ef   A1in           A1'           @26BF
