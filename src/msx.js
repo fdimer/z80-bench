@@ -143,6 +143,8 @@ class MSXMachine {
     const vmap = [0, 1, 2, 3, 4, 5, 6].map(n => (1 << (6 - n)) | (1 << (13 - n)));
     this.vBank = [3, 4, 5, 6, 9, 10, 11, 12].map((ic, k) => C('IC' + ic, '4116', `video RAM, data bit ${7 - k} (RD${k})`, 'video RAM 0000h-3FFFh, reached through the video processor', this.vram, 0, 14, { dram: true, bit: 7 - k, mux: 7, amap: vmap }));
     this.acc = new Uint32Array(5);                  // accesses: 0 BIOS, 1 BASIC, 2 firmware, 3 main RAM, 4 video RAM
+    this.z80c = new BoardChip('IC41', 'Z80', 'processor (Sharp LH0080A, a Z80A)', 'address, data and control lines', { label: 'IC41' });
+    this.pinF = {}; this.netF = {}; this.heldWhy = null; this.fx = false;
     this.faulty = false; this.vview = null;
     this.setMachine('hb55p');
     this.carts = [null, null, null, null];          // by primary slot; 1 and 3 are the cartridge slots
@@ -156,6 +158,13 @@ class MSXMachine {
     this.bus = { read: a => this.read(a), write: (a, v) => this.write(a, v), input: p => this.input(p), output: (p, v) => this.output(p, v) };
     this.cpu = new Z80(this.bus);
     this.cpu.intVector = 0xFF;
+    // a held processor (no clock, or RESET, BUSREQ or WAIT low at its pin) does nothing for four clocks at a time
+    const run = this.cpu.step.bind(this.cpu);
+    this.cpu.step = () => {
+      const why = this.heldWhy; if (!why) { this.zr = false; return run(); }
+      if (!this.zr && this.z80c.lv.RESET === 0) { this.cpu.reset(); this.zr = true; }
+      this.cpu.lastEvent = null; return [{ k: 'ID', n: 4, held: why }];
+    };
     this.audioRate = 0; this.abuf = new Float32Array(32768); this.aw = 0; this.audioT = 0;
     this.tape = null; this.tapePos = 0; this.rec = []; this.onTape = () => {};
     this.reset();
@@ -163,13 +172,46 @@ class MSXMachine {
   // HB-55P: 16K of RAM at C000h in slot 0. HB-75P: 64K of RAM in slot 2.
   setMachine(m) {
     this.machine = m; this.ramSlot = m === 'hb75p' ? 2 : 0; this.ramBase = m === 'hb75p' ? 0 : 0xC000; this.ramSize = 0x10000 - this.ramBase;
-    if (this.chips) memClearFaults(this);           // the RAM chips change with the machine
     this.ramBank = m === 'hb75p' ? this.ram64 : this.ram16;
-    this.chips = [...this.romChips, ...this.ramBank, ...this.vBank];
+    this.chips = [...this.romChips, ...this.ramBank, ...this.vBank, this.z80c];      // the processor last, so the other indexes stay put
     this.banks = [[this.romChips[0]], [this.romChips[1]], [this.romChips[2]], this.ramBank, this.vBank];
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
     this.vview = null;
+    if (this.cpu) this.clearFaults();                // the RAM chips change with the machine
   }
+  // ---- lines and faults (the shared scheme in memchips.js) ----
+  // The lines, from the service manual's schematic (MAIN 1/2). The Z80 (IC41) drives the address bus through the
+  // buffers IC47, IC54 and IC56 (AB0-AB15, which reach the ROMs, the RAM's address multiplexers and the slots) and the
+  // slots' data bus through IC40 (DB0-DB7); its own data bus D0-D7 goes straight to the ROMs, to each main RAM chip's
+  // DIN and DOUT, and to the video processor, the PPI and the sound chip. The main RAM's address pins share the lines
+  // from the multiplexers IC57 and IC49, and RAS, CAS and WE are common to all eight chips. The video RAM hangs off the
+  // video processor's own lines. The buffers, multiplexers and support chips are not drawn, so a line they drive has
+  // no drawn driver.
+  nets() {
+    if (this.netSig === this.machine) return this.NETS;
+    const N = {}, Z = 'IC41', roms = this.romChips.map(c => c.id), ram = this.ramBank.map(c => c.id), vram = this.vBank.map(c => c.id);
+    for (let n = 0; n < 8; n++) N['D' + n] = { label: `data line D${n} (the Z80's own data bus)`, d: -1, pins: [[Z, 'D' + n], ...roms.map(r => [r, 'O' + n]), [ram[n], 'DIN'], [ram[n], 'DOUT']] };
+    for (let n = 0; n < 14; n++) N['AB' + n] = { label: `buffered address line AB${n}`, d: -1, pins: roms.map(r => [r, 'A' + n]) };
+    const ra = this.machine === 'hb75p' ? 8 : 7;
+    for (let n = 0; n < ra; n++) N['MA' + n] = { label: `main RAM address line ${n} (from the multiplexers IC57 and IC49)`, d: -1, pins: ram.map(r => [r, 'A' + n]) };
+    for (const k of ['RAS', 'CAS', 'WE']) N[k] = { label: `main RAM ${k} line`, d: -1, pins: ram.map(r => [r, k]) };
+    for (let n = 0; n < 7; n++) N['VA' + n] = { label: `video RAM address line ${n} (the video processor's AD${n + 1})`, d: -1, pins: vram.map(r => [r, 'A' + n]) };
+    for (let k = 0; k < 8; k++) N['RD' + k] = { label: `video RAM data line RD${k}`, d: -1, pins: [[vram[k], 'DIN'], [vram[k], 'DOUT']] };
+    for (const k of ['RAS', 'CAS', 'WE']) N['V' + k] = { label: `video RAM ${k === 'WE' ? 'R/W' : k} line`, d: -1, pins: vram.map(r => [r, k]) };
+    this.NETS = N; this.netSig = this.machine; return N;
+  }
+  // Faults changed: what the Z80's pins do. An address pin at a level changes the buffered address for everything; a
+  // data pin changes every byte that passes it; MREQ, IORQ, RD or WR held high stop those cycles; CLK, RESET, BUSREQ and
+  // WAIT hold the processor; INT and NMI at a level act on it.
+  refault() {
+    const z = this.z80c.lv;
+    this.fx = this.z80c.faulty;
+    this.heldWhy = 'CLK' in z ? 'no clock at the Z80\'s CLK pin' : z.RESET === 0 ? 'RESET is low at the Z80: it is held in reset' : z.BUSREQ === 0 ? 'BUSREQ is low at the Z80: it has released the bus' : z.WAIT === 0 ? 'WAIT is low at the Z80: it waits' : null;
+    if (z.NMI === 0 && !this.nmiLow && this.cpu) this.cpu.nmiPending = true;     // the pin going low is one falling edge
+    this.nmiLow = z.NMI === 0;
+  }
+  held() { return this.heldWhy; }
+  busA(a) { return this.fx ? this.z80c.busA(a) : a; }
   reset() {
     this.cpu.reset();
     this.t = 0; this.nextLine = MSX.LINE_T; this.line = 0; this.frames = 0;
@@ -201,15 +243,23 @@ class MSXMachine {
     if (f) for (let i = 0; i < 3; i++) { const c = this.romChips[i]; if (c.always && i !== sel && (i < 2 ? this.hasBios : this.hasFw)) v &= memBankRead(this.banks[i], a & 0x3FFF, true); }
     return v;
   }
-  read(a) { return this.readSlot((this.ppiA >> ((a >> 14) * 2)) & 3, a); }
+  read(a) {
+    if (this.fx) { const z = this.z80c.lv; if (z.MREQ === 1 || z.RD === 1) return this.z80c.busD(0xFF); a = this.z80c.busA(a); return this.z80c.busD(this.readSlot((this.ppiA >> ((a >> 14) * 2)) & 3, a)); }
+    return this.readSlot((this.ppiA >> ((a >> 14) * 2)) & 3, a);
+  }
   peek(a) { return this.readSlot((this.ppiA >> ((a >> 14) * 2)) & 3, a, true); }
   peekW(a) { return this.read(a) | this.read((a + 1) & 0xFFFF) << 8; }
   write(a, v) {
+    if (this.fx) { const z = this.z80c.lv; if (z.MREQ === 1 || z.WR === 1) return; a = this.z80c.busA(a); v = this.z80c.busD(v); }
     const slot = (this.ppiA >> ((a >> 14) * 2)) & 3, d = this.device(slot, a);
     if (d === 'ram') { this.acc[3]++; if (this.faulty && this.ramBank.faulty) memBankWrite(this.ramBank, a - this.ramBase, v); else this.ram[a] = v; } else if (d === 'cart') this.carts[slot].write(a, v);
   }
   // ---- I/O ports ----
   input(p) {
+    if (this.fx) { const z = this.z80c.lv; if (z.IORQ === 1 || z.RD === 1) return this.z80c.busD(0xFF); return this.z80c.busD(this.inputPort(this.z80c.busA(p))); }
+    return this.inputPort(p);
+  }
+  inputPort(p) {
     switch (p & 0xFF) {
       case 0x98: { const v = this.vbuf; this.vbuf = this.vget(this.vaddr); this.vaddr = (this.vaddr + 1) & 0x3FFF; this.vlatch = -1; return v; }
       case 0x99: { const v = this.vstat; this.vstat &= 0x1F; this.vlatch = -1; return v; }
@@ -222,6 +272,7 @@ class MSXMachine {
     return 0xFF;
   }
   output(p, v) {
+    if (this.fx) { const z = this.z80c.lv; if (z.IORQ === 1 || z.WR === 1) return; p = this.z80c.busA(p); v = this.z80c.busD(v); }
     switch (p & 0xFF) {
       case 0x98: this.vput(this.vaddr, v); this.vbuf = v; this.vaddr = (this.vaddr + 1) & 0x3FFF; this.vlatch = -1; this.vdpWrites++; break;
       case 0x99:
@@ -385,7 +436,7 @@ class MSXMachine {
   }
   preStep() { this.tapeTrap(); }
   intOut() { return !!(this.vstat & 0x80) && !!(this.vreg[1] & 0x20); }      // the VDP's /INT pin: frame flag and interrupt enable
-  syncInt() { this.cpu.intLine = this.intOut(); }
+  syncInt() { const i = this.z80c.lv.INT; this.cpu.intLine = i !== undefined ? i === 0 : this.intOut(); }
   afterStep(cyc) {
     let t = 0; for (const c of cyc) t += MSX_CYC_T[c.k] || c.n || 0;
     this.t += t;
@@ -477,4 +528,5 @@ class MSXMachine {
     return out.join('\n') + '\n';
   }
 }
+Object.assign(MSXMachine.prototype, BOARD_FAULTS);
 if (typeof module !== 'undefined') module.exports = { MSXMachine, MSXCart, MSX, MSX_KEYS, MSX_TOKENS };

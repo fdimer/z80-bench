@@ -79,4 +79,25 @@ ok(m.cpu.pc === 0x1234 && !(m.cpu.f & 1) && m.tapePos === 8, 'TAPION finds the b
 m.cpu.sp = 0xF000; m.cpu.pc = 0xE4; m.preStep(); ok(m.cpu.a === 0x55, 'TAPIN reads a byte from the tape');
 m.cpu.sp = 0xF000; m.cpu.pc = 0xEA; m.preStep(); m.cpu.a = 0x77; m.cpu.sp = 0xF000; m.cpu.pc = 0xED; m.preStep();
 ok(m.rec.length === 9 && m.rec[8] === 0x77, 'TAPOON and TAPOUT record a block');
+// lines and the two kinds of fault (a line held, a pin disconnected), on the HB-55P (16K of RAM at C000h in slot 0)
+{ const z = new ctx.MSXMachine(); for (const c of r.chunks) z.bios.set(c.bytes, c.addr); z.hasBios = true; z.reset();
+  const N = z.nets();
+  ok(N.D3.pins.join() === 'IC41,D3,IC42,O3,IC43,O3,IC44,O3,IC61,DIN,IC61,DOUT' && N.AB5.pins.length === 3 && N.MA0.pins.length === 8 && !N.MA7, 'HB-55P lines: D3 joins the Z80, the three ROMs and one RAM chip; AB5 the three ROMs; seven RAM address lines');
+  z.setMachine('hb75p'); ok(z.nets().MA7.pins.length === 8 && z.chipById.IC58.part === '4164', 'HB-75P: 64K chips with an eighth address line'); z.setMachine('hb55p'); z.reset();
+  z.write(0xC010, 0x5A); const r0 = z.read(0x0100);
+  z.setNetFault('D3', 1); ok(z.read(0xC010) === 0x5A && z.read(0x0100) === (r0 | 8) && z.read(0xC011) === (z.ram[0xC011] | 8), 'D3 held high: bit 3 reads high from the ROM and the RAM');
+  ok(z.chipById.IC61.f.DOUT === 1 && z.chipById.IC42.f.O3 === 1 && z.z80c.f.D3 === 1, 'the held line shows on every pin on it');
+  z.write(0xC020, 0x00); z.clearFaults(); ok(z.read(0xC020) === 0x08, 'D3 held high while writing: the RAM stores the bit high');
+  z.setPinFault('IC61', 'DOUT', 0); ok(z.read(0xC010) === 0x52 && z.read(0x0100) === r0, 'one RAM chip\'s DOUT disconnected at low: only RAM reads lose bit 3');
+  z.clearFaults(); ok(z.read(0xC010) === 0x5A && !z.fx && !z.faulty, 'clearing the faults restores the machine');
+  z.setPinFault('IC41', 'A14', 0); ok(z.read(0xC010) === z.read(0x8010) || z.peek(0x8010) === 0xFF, 'Z80 A14 stuck low: C000h reads from 8000h'); ok(z.busA(0xC010) === 0x8010, 'and the address on the bus is 8010h');
+  z.clearFaults(); z.setPinFault('IC41', 'D0', 1); ok(z.read(0x0100) === (r0 | 1) && (z.input(0xA8) & 1) === 1, 'Z80 D0 stuck high: every memory and port read has bit 0 set');
+  z.clearFaults(); z.setPinFault('IC41', 'WR', 'z'); z.write(0xC030, 0x77); z.clearFaults(); ok(z.read(0xC030) !== 0x77, 'Z80 WR disconnected: writes are lost');
+  z.setPinFault('IC41', 'RD', 'z'); ok(z.read(0x0100) === 0xFF, 'Z80 RD disconnected: reads float to FFh'); z.clearFaults();
+  z.setNetFault('CAS', 1); z.write(0xC040, 0x12); ok(z.read(0xC040) === 0xFF, 'main RAM CAS line held high: the RAM is out of circuit'); z.clearFaults();
+  z.setPinFault('IC41', 'CLK', 0); ok(/clock/.test(z.held()) && z.cpu.step()[0].held && z.cpu.pc === 0, 'Z80 CLK stuck: the processor is held'); z.clearFaults(); ok(z.held() === null, 'and runs again once cleared');
+  z.setPinFault('IC41', 'INT', 0); z.syncInt(); ok(z.cpu.intLine, 'Z80 INT stuck low: the interrupt line is on'); z.clearFaults(); z.syncInt(); ok(!z.cpu.intLine, 'and off again once cleared');
+  z.setNetFault('D7', 0); z.setPinFault('IC61', 'A3', 'z'); ok(z.faultList().length === 2 && z.chipFaults('IC41').join() === 'D7: line held low', 'faults are listed as lines and as pins');
+  z.clearChip('IC42'); ok(z.faultList().length === 1, "clearing a chip's faults releases the lines its pins are on");
+  z.setMachine('hb75p'); ok(z.faultList().length === 0, 'changing the machine clears the faults'); }
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);
