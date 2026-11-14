@@ -202,12 +202,15 @@ dC1     nor2     DC1            N.MREQ N.MREQ @24Z  ok210
 dC2     nor2     DC2            DC1 DC1       @24AC  ok210
 dC3     nor2     DC3            DC2 DC2       @24AE  ok210
 d21     nor3     n_22AJ         X21 DB5 DC3   @22AD  ok210; R/2; X21: the row 21.6 line from the left, via column AB
-d21b    inv      n_22AM         n_22AJ        @22AK  ok210; R/3; output goes right (to be traced)
+d21b    inv      n_22AM         n_22AJ        @22AE  ok210; R/3; output up column AG (to be traced) and down into aen1
+aen1    nor2     AENa           n_22AM Y24    @24AI  ok210; Y24: the row 24.4 line from column AD, which comes up from below (to be traced); AENa also runs left along row 25.9 (to be traced)
+aen2    inv      n_aen2         AENa          @24AM  ok210
+aen3    inv      AENin          n_aen2        @24AO  ok210; R/2; up column AU to the address enable (row 18)
 
 # ---- address outputs (rows 12-24, columns BD-BJ) ----
 # A3'-A8': the latch's inverted outputs are inverted again and driven through tri-state buffers. The buffers' enables
 # (active low) share AEN, made by an RTL inverter with a 1.8K pull-up (row 18) from AENin (the long row 18 line).
-aen     inv_rtl  AEN            AENin         @18BC  RTL, 1.8K pull-up
+aen     inv_rtl  AEN            AENin         @18BC  ok210; RTL, 1.8K pull-up
 oa3     inv      n_oa3          NQ11          @12BC
 oa4     inv      n_oa4          NQ12          @13BC
 oa5     inv      n_oa5          NQ13          @14BC
