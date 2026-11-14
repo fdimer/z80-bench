@@ -111,14 +111,17 @@ class ZX80 {
     this.ramSize = 0x400;                      // 1K as supplied (2K on the Timex Sinclair 1000); 16K with the RAM pack; 32K or 48K with bigger packs
     this.lowRam = new Uint8Array(0x2000);      // 8K of RAM at 2000h-3FFFh in place of the ROM's echo (a hi-res board)
     this.hires = false;                        // hi-res board fitted: RAM at 2000h, and RAM answers refresh cycles (WRX)
-    // memory chips (src/memchips.js), for the pin display and fault simulation: the ROM (IC2: a 4K 2332 on the ZX80,
+    // memory chips (src/memchips.js), for the pin display and fault simulation: the ROM (IC2: a 4K 2732 on the ZX80,
     // an 8K 2364 with the 8K ROM), the two 2114s of the built-in 1K (IC3 and IC4 on the ZX80, IC4a and IC4b on the ZX81;
-    // which holds which half of the byte is assumed: bits 0-3 in the first) and the 4116s of the RAM packs, one per data bit per 16K.
+    // on the ZX80, from its circuit diagram, IC3's I/O1-I/O4 carry D7, D1, D0, D2 and IC4's carry D4, D3, D5, D6; on the
+    // ZX81 which holds which half of the byte is assumed: bits 0-3 in the first) and the 4116s of the RAM packs, one per data bit per 16K.
     // The ZX81 board also takes one 24-pin static RAM in position IC4 in place of the two 2114s. A Timex Sinclair 1000
     // (a Sinclair ZX81 issue 3 board, seen on a real machine) has a 2K NEC uPD4016 there. Measured on that board, and as on Sinclair's diagram SRC 049:
     // CE (pin 18) and OE (20) are joined and reach the ULA's RAMCS (pin 12) through 680 ohms, WE (21) is the Z80's /WR, pin 19 is A10 (link L2).
+    // The ZX80's ROM is drawn as a 2732: its output enable (pin 20) is on A12, so it is silent where A12 is high
+    // (1000h-1FFFh and 3000h-3FFFh) and repeats at 2000h-2FFFh.
     const C = (id, part, what, range, arr, base, abits, extra) => new MemChip(id, part, what, range, arr, base, abits, extra);
-    this.romChips = [C('IC2', '2332', 'ROM: 4K BASIC', '0000h-0FFFh, repeated up to 3FFFh', this.rom, 0, 12, { rom: true, en: 'CS' }), C('IC2-8K', '2364', 'ROM: 8K BASIC', '0000h-1FFFh, repeated up to 3FFFh', this.rom, 0, 13, { rom: true, en: 'CS', label: 'IC2' })];
+    this.romChips = [C('IC2', '2732', 'ROM: 4K BASIC', '0000h-0FFFh and again at 2000h-2FFFh; silent where A12 is high', this.rom, 0, 12, { rom: true, en: 'CE' }), C('IC2-8K', '2364', 'ROM: 8K BASIC', '0000h-1FFFh, repeated up to 3FFFh', this.rom, 0, 13, { rom: true, en: 'CS', label: 'IC2' })];
     this.ram1k = [C('IC3', '2114', 'built-in RAM, data bits 0-3', '4000h-43FFh, repeated', this.ram, 0, 10, { nib: 0, en: 'CS' }), C('IC4', '2114', 'built-in RAM, data bits 4-7', '4000h-43FFh, repeated', this.ram, 0, 10, { nib: 4, en: 'CS' })];
     this.ram2k = [C('IC4-2K', '4016', 'built-in RAM: one 2K static RAM (Timex Sinclair 1000)', '4000h-47FFh, repeated', this.ram, 0, 11, { en: 'CE', label: 'IC4' })];
     this.packs = [0, 1, 2].map(k => [0, 1, 2, 3, 4, 5, 6, 7].map(bit => C(`PACK${k + 1}.D${bit}`, '4116', `RAM pack: ${k ? ['', 'second', 'third'][k] + ' 16K' : '16K'}, data bit ${bit}`, `${(0x4000 + k * 0x4000).toString(16).toUpperCase()}h-${(0x7FFF + k * 0x4000).toString(16).toUpperCase()}h`, this.ram, k * 0x4000, 14, { dram: true, bit, mux: 7, pack: k })));
@@ -131,6 +134,7 @@ class ZX80 {
     this.chips.push(this.ulaC, this.z80c);
     this.pinF = {}; this.netF = {}; this.uv = {}; this.fx = false; this.heldWhy = null;
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
+    this.wire2114s();
     this.acc = new Uint32Array(5);             // accesses: 0 the ROM, 1 the built-in RAM (1K or 2K), 2-4 the RAM pack's 16K banks
     this.faulty = false;
     this.keys = new Uint8Array(8);             // bit set = key down
@@ -158,7 +162,14 @@ class ZX80 {
     this.rom8k = m !== 'zx80';          // ZX81 BASIC in an 8K ROM
     this.ula = m === 'zx81';            // NMI generator, free-running sync
     this.romMask = this.rom8k ? 0x1FFF : 0x0FFF;
+    if (this.ram1k) this.wire2114s();
     if (this.pinF) this.applyFaults();
+  }
+  // which data bits each 2114 holds: out of order on the ZX80 (its diagram), in two halves on the ZX81 (assumed)
+  wire2114s() {
+    const z80 = this.machine !== 'zx81';
+    this.ram1k[0].setDbits(z80 ? [7, 1, 0, 2] : null); this.ram1k[1].setDbits(z80 ? [4, 3, 5, 6] : null);
+    this.ram1k[0].what = 'built-in RAM, data bits ' + (z80 ? '7, 1, 0 and 2' : '0-3'); this.ram1k[1].what = 'built-in RAM, data bits ' + (z80 ? '4, 3, 5 and 6' : '4-7');
   }
   // ---- lines and faults ----
   // Which pins share a line on the ZX81 board, for the memory fitted now. d: the pin that drives the line (index into
@@ -272,7 +283,7 @@ class ZX80 {
     this.cpu.reset();
     this.nmiGen = false; this.nextH = Infinity; this.nmis = 0; this.hiresBytes = 0;
     this.t = 0;                 // T-states since power-on
-    this.lcntr = 0;             // 74LS393 line counter (character row 0-7)
+    this.lcntr = 0;             // line counter (character row 0-7): a 74LS93 on the ZX80 (IC21), inside the ULA on the ZX81
     this.vsync = false; this.vsyncStart = 0;
     this.intLevel = false;      // /INT from A6 of the last refresh address
     this.latch = 0; this.lastChar = -1;
@@ -301,6 +312,12 @@ class ZX80 {
     const r = this.romChips[this.rom8k ? 1 : 0]; if (r.always) v &= memBankRead([r], i & this.romMask, true);      // ROM chip select stuck low: it drives the bus too
     return v;
   }
+  // the ROM at address a. The ZX80's 2732 has its output enable on A12: with A12 high it does not drive the bus,
+  // which then reads FFh (unless that pin is held low by a fault: then the ROM answers everywhere)
+  romAt(a, quiet) {
+    if (!this.rom8k && (a & 0x1000) && this.romChips[0].f.OE !== 0) { if (!quiet) this.acc[0]++; return 0xFF; }
+    return this.romGet(a & this.romMask, quiet);
+  }
   romGet(o, quiet) {
     if (!quiet) this.acc[0]++;
     const r = this.romChips[this.rom8k ? 1 : 0];
@@ -318,16 +335,16 @@ class ZX80 {
     const i = this.ramAt(A, m1), low = i < 0 && this.hires && (A & 0x7FFF) >= 0x2000 && (A & 0x7FFF) < 0x4000;
     if (low) return this.lowRam[(A & 0x7FFF) - 0x2000];
     if (this.ramSize >= 0x4000) {
-      if (i >= 0) { const v = this.ramGet(i, quiet); return !dead && !u.A14 ? v & this.romGet(A & this.romMask, true) : v; }
-      return dead || u.A14 ? 0xFF : this.romGet(A & this.romMask, quiet);
+      if (i >= 0) { const v = this.ramGet(i, quiet); return !dead && !u.A14 ? v & this.romAt(A, true) : v; }
+      return dead || u.A14 ? 0xFF : this.romAt(A, quiet);
     }
     if (dead) return 0xFF;
-    return u.A14 ? this.ramGet(A & (this.ramSize - 1), quiet) : this.romGet(A & this.romMask, quiet);
+    return u.A14 ? this.ramGet(A & (this.ramSize - 1), quiet) : this.romAt(A, quiet);
   }
   mread(a, m1, quiet) {
     const i = this.ramAt(a, m1); if (i >= 0) return this.ramGet(i, quiet);
     a &= 0x7FFF;
-    return this.hires && a >= 0x2000 ? this.lowRam[a - 0x2000] : this.romGet(a & this.romMask, quiet);
+    return this.hires && a >= 0x2000 ? this.lowRam[a - 0x2000] : this.romAt(a, quiet);
   }
   peek(a) { return this.read(a, false, true); }
   write(a, v) {
@@ -558,7 +575,7 @@ class ZX80 {
           let rf = c.rf, fa = (rf & 0xFE00) | ((v & 0x3F) << 3) | this.lcntr;
           if (this.fx) { rf = this.busA(rf); fa = (rf & 0xFE00) | (fa & ~this.uCutA | rf & this.uCutA) & 0x1FF; }   // an address pin the ULA has lost keeps the refresh address
           const hr = this.refreshRam(rf);
-          let bits = hr >= 0 ? hr : fa & 0x4000 ? 0 : this.romGet(fa & this.romMask, true);
+          let bits = hr >= 0 ? hr : fa & 0x4000 ? 0 : this.romAt(fa, true);
           if (this.fx) bits = bits & this.uDAnd | this.uDOr;
           if (hr >= 0) this.hiresBytes++;
           if (v & 0x80) bits ^= 0xFF;

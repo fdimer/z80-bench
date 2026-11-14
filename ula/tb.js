@@ -146,6 +146,7 @@ step(sim.t + 40 * OSC);
 // follows that is compared
 const warm = (rep.vsSim.find(x => x[1] === 0) || [Infinity])[0];
 for (const k of ['inBad', 'nopBad', 'faBad', 'rowBad', 'selBad', 'pix']) rep[k] = rep[k].filter(x => x.t > warm);
+rep.pix = rep.pix.filter(x => x.t < m.t - 8);       // the run stops on an instruction boundary: the last character's dots have no next cycle to follow
 rep.chars = rep.pix.length;
 
 // ---- pixels: sample the video output at each dot of each character the emulator drew; the offset that matches

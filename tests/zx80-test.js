@@ -114,4 +114,14 @@ ok((m.input(0xFEFE) & 0x1F) === 0x1F, 'other half-rows unaffected'); m.key('3', 
   z.setPinFault('CPU', 'NMI', 'z'); z.output(0xFE); z.cpu.nmiPending = false; z.t += 1000; z.hsyncs(); ok(!z.cpu.nmiPending, "the Z80's NMI pin disconnected: no NMI arrives"); z.clearFaults();
   z.setNetFault('NMI', 1); z.setPinFault('ULA', 'NMI', 'z'); ok(z.faultList().length === 2 && z.chipFaults('CPU').join() === 'NMI: line held high', 'faults are listed as lines and as pins');
   z.clearChip('ULA'); ok(z.faultList().length === 0, "clearing a chip's faults releases its pins and the lines they are on"); }
+// the ZX80's chips as on its circuit diagram: 2114 data pins out of order, and a 2732 ROM with its output enable on A12
+{ const z = new ctx.ZX80(rom); z.reset();
+  ok(z.read(0x2005) === z.read(0x0005) && z.read(0x1005) === 0xFF && z.read(0x3005) === 0xFF, 'ZX80 ROM (2732, OE on A12): repeats at 2000h, silent at 1000h and 3000h');
+  z.setPinFault('IC2', 'OE', 0); ok(z.read(0x1005) === z.read(0x0005), 'ROM OE held low: the ROM answers at 1000h too'); z.clearFaults();
+  z.write(0x4010, 0xFF); z.setPinFault('IC3', 'I/O1', 0); ok(z.read(0x4010) === 0x7F, 'ZX80 IC3 I/O1 is D7'); z.clearFaults();
+  z.setPinFault('IC3', 'I/O3', 0); ok(z.read(0x4010) === 0xFE, 'ZX80 IC3 I/O3 is D0'); z.clearFaults();
+  z.setPinFault('IC4', 'I/O1', 0); ok(z.read(0x4010) === 0xEF, 'ZX80 IC4 I/O1 is D4'); z.clearFaults();
+  z.setPinFault('IC4', 'I/O4', 0); ok(z.read(0x4010) === 0xBF, 'ZX80 IC4 I/O4 is D6'); z.clearFaults();
+  z.setPinFault('IC3', 'CS', 1); ok(z.read(0x4010) === 0xFF && (z.write(0x4010, 0x00), z.read(0x4010)) === 0x87, 'ZX80 IC3 out of circuit: D7, D2, D1 and D0 are lost'); z.clearFaults();
+  const y = new ctx.ZX80(rom, 'zx81'); y.reset(); y.write(0x4010, 0xFF); y.setPinFault('IC3', 'I/O1', 0); ok(y.read(0x4010) === 0xFE, 'ZX81: the first 2114 still holds D0-D3 in order'); }
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);

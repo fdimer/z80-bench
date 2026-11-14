@@ -421,7 +421,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
             <div class="row mcbtns"><button id="mcClear" type="button">Clear this chip's faults</button><button id="mcClearAll" type="button">Clear all faults</button></div>
           </figure>
         </div>
-        <p class="hint">The machine's memory chips: the ROM (IC2: the 4K 2332 of the ZX80, or the 8K 2364), the two 2114s of the built-in 1K (IC3 and IC4 on the ZX80, IC4a and IC4b on the ZX81), the single 2K 4016 that a Timex Sinclair 1000 has in position IC4 instead (read from a real board) or, with a RAM pack, its 4116 dynamic RAMs, one per data bit in each 16K. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the bus on every clock. Assumed: the first 2114 holds data bits 0–3, and the RAM pack is wired in the usual way (its chips have no board numbers here). The 8K of the hi-res board is not included.</p>
+        <p class="hint">The machine's memory chips: the ROM (IC2: the 4K 2732 of the ZX80, whose output enable is on A12 so it is silent where A12 is high, or the 8K 2364), the two 2114s of the built-in 1K (IC3 and IC4 on the ZX80, IC4a and IC4b on the ZX81), the single 2K 4016 that a Timex Sinclair 1000 has in position IC4 instead (read from a real board) or, with a RAM pack, its 4116 dynamic RAMs, one per data bit in each 16K. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the bus on every clock. On the ZX80 the 2114s' data pins are wired out of order, as on its circuit diagram: IC3 holds D7, D1, D0 and D2, IC4 holds D4, D3, D5 and D6. Assumed: on the ZX81 the first 2114 holds data bits 0–3, and the RAM pack is wired in the usual way (its chips have no board numbers here). The 8K of the hi-res board is not included.</p>
         <p class="hint">To simulate a fault, click a pin for its menu. On the ZX81, hold the whole line high or low and every pin on that line is affected, on every chip: the ROM and the built-in RAM share the address lines A0'–A8' with the ULA, their data pins share D0'–D7', and each has its select line from the ULA. Or tick "Disconnected from the line" for a fault on this chip's pin alone. On the ZX80, and on a RAM pack's chips, every pin counts as a line of its own: Disconnected lifts it (an input then floats high), High and Low hold it at that level. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. A chip with a fault is marked in red, and every fault is listed in the Debug panel, where it can be removed. The memory view and the disassembly show what the CPU reads through the faults.</p>
       </section>
   </div>
@@ -2007,7 +2007,7 @@ const MC = {
     else for (let k = 0; k < zx.ramSize >> 14; k++) g.push([`RAM pack · ${k ? ['', 'second', 'third'][k] + ' 16K' : '16K'} at ${h4(0x4000 + k * 0x4000)}h · one 4116 per data bit`, [7, 6, 5, 4, 3, 2, 1, 0].map(b => 4 + k * 8 + b)]);
     return g;
   },
-  tile(c, i) { return i === MC2K ? ['IC4', '4016 · D0–7'] : i < 2 ? ['IC2', c.part + ' · ROM'] : i < 4 ? [zx.machine === 'zx81' ? 'IC4' + 'ab'[i - 2] : c.id, '2114 · D' + (c.nib ? '4–7' : '0–3')] : ['D' + c.bit, '4116']; },
+  tile(c, i) { return i === MC2K ? ['IC4', '4016 · D0–7'] : i < 2 ? ['IC2', c.part + ' · ROM'] : i < 4 ? [zx.machine === 'zx81' ? 'IC4' + 'ab'[i - 2] : c.id, '2114 · D' + (c.dbits ? c.dbits.join(',') : c.nib ? '4–7' : '0–3')] : ['D' + c.bit, '4116']; },
   acc(i) { return i < 2 ? 0 : i < 4 || i === MC2K ? 1 : 2 + ((i - 4) >> 3); },
   bus() {
     const T = curT, A = T.a === null || T.a === 'z' ? null : zx.busA(T.a), mem = T.mreq === 0 && T.rfsh !== 0 && A !== null;
@@ -2019,7 +2019,7 @@ const MC = {
     if (i === MCULA) {                  // the ULA
       const T = B.T, at = T.at === undefined ? zx.t : T.at, u = zx.uv, mq = T.mreq === 0 && A !== null && u.MREQ !== 1, a14 = A === null ? 1 : u.A14 !== undefined ? u.A14 : A >> 14 & 1;
       if ((d = /^A(\d)'$/.exec(name))) return T.fa !== undefined ? T.fa >> +d[1] & 1 : A === null ? 'z' : A >> +d[1] & 1;
-      if ((d = /^D(\d)$/.exec(name))) return T.fa !== undefined ? zx.romGet(T.fa & zx.romMask, true) >> +d[1] & 1 : T.d === null || T.d === undefined ? 'z' : T.d >> +d[1] & 1;
+      if ((d = /^D(\d)$/.exec(name))) return T.fa !== undefined ? zx.romAt(T.fa, true) >> +d[1] & 1 : T.d === null || T.d === undefined ? 'z' : T.d >> +d[1] & 1;
       if ((d = /^KBD(\d)$/.exec(name))) { if (A === null) return 1; let k = 0; for (let r = 0; r < 8; r++) if (!(A & (0x100 << r))) k |= zx.keys[r]; return k >> +d[1] & 1 ? 0 : 1; }
       switch (name) {
         case 'A14': return A === null ? 'z' : A >> 14 & 1; case 'A15': return A === null ? 'z' : A >> 15 & 1;
@@ -2034,10 +2034,12 @@ const MC = {
       return 'z';
     }
     if (i < 2) {                        // the ROM: selected whenever the RAM is not; in the refresh half of a character fetch the ULA sets A0-A8 and reads the character's row
-      if (B.T.fa !== undefined) { const F = B.T.fa; if (m) return (F >> +m[1]) & 1; if ((d = /^D(\d)$/.exec(name))) return zx.romGet(F & zx.romMask, true) >> +d[1] & 1; return name === 'CS' ? (F & 0x4000 ? 1 : 0) : 1; }
+      if (B.T.fa !== undefined) { const F = B.T.fa; if (m) return (F >> +m[1]) & 1; if ((d = /^D(\d)$/.exec(name))) return zx.romAt(F, true) >> +d[1] & 1; return name === 'CS' || name === 'CE' ? (F & 0x4000 ? 1 : 0) : name === 'OE' ? (F >> 12) & 1 : 1; }
       if (m) return A === null ? 'z' : (A >> +m[1]) & 1;
-      if ((d = /^D(\d)$/.exec(name))) return B.rom && B.rd ? D(+d[1]) : 'z';
-      return name === 'CS' ? (B.rom ? 0 : 1) : 1;
+      const oe = c.part !== '2732' || A === null ? 0 : (A >> 12) & 1;      // the ZX80's 2732: output enable (pin 20) is on A12
+      if ((d = /^D(\d)$/.exec(name))) return B.rom && B.rd && !oe ? D(+d[1]) : 'z';
+      if (name === 'OE') return A === null ? 'z' : oe;
+      return name === 'CS' || name === 'CE' ? (B.rom ? 0 : 1) : 1;
     }
     if (i === MC2K) {                   // the 2K static RAM in IC4, as measured on a Timex Sinclair 1000 and drawn on Sinclair's diagram:
                                         // CE (18) and OE (20) are joined to the RAM select, WE (21) is the Z80's /WR, A10 (19) is A10 (link L2)
@@ -2051,7 +2053,7 @@ const MC = {
       const sel = B.ri >= 0 && zx.ramSize <= 0x400;
       if (m) return A === null ? 'z' : (A >> +m[1]) & 1;
       if (name === 'CS') return sel ? 0 : 1; if (name === 'WE') return sel && B.wr ? 0 : 1;
-      if ((d = /^I\/O(\d)$/.exec(name))) return sel && (B.rd || B.wr) ? D(+d[1] - 1 + c.nib) : 'z';
+      if ((d = /^I\/O(\d)$/.exec(name))) return sel && (B.rd || B.wr) ? D(c.ioBit(+d[1])) : 'z';
       return 'z';
     }
     {                                   // RAM pack 4116s: seven address pins carry the row, then the column
