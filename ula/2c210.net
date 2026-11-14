@@ -244,3 +244,10 @@ iowr    nor2     IOWR           N.WR N.IORQ   @33K   high for any I/O write: cle
 iosel   nor2     IOSEL          N.IORQ X35    @35K   X35: from above (column L, row 29 and up; probably A0in), to be traced
 fsl     nor3     FRAME-SYNC     FSA IOWR FSL  @33N   R/2; FSA: the long row 31.6 line (to be traced)
 fsr     nor2     FSL            FRAME-SYNC FSS   @36N   cross-coupled with fsl: FSS sets vertical sync (row 31.8 line from column M)
+
+# ---- differences from the 2C184 seen so far (to be transcribed in full) ----
+# 1. Rows 1-2, columns AT-BA: a new chain of three inverters fed from Q25 (vertical at column AU) into a NOR at
+#    row 1, column BA; it feeds the LINE-SYNC / NMI area. The 2C184 has nothing here.
+# 2. Rows 9-10, columns AZ-BB: N.VIDEO now comes from a NOR2 (one input from the row 13 video NOR, R/2, the other from
+#    above) through an R/2 inverter, where the 2C184 goes more directly: the 2C210 gates the picture with a second signal
+#    (probably blanking during sync).
