@@ -117,6 +117,11 @@ real ZX81 in Node, and at about full speed in a browser (90% measured in headles
 as in the hybrid emulator. Not modelled: the tape signal (LOAD puts the program straight into RAM), and a RAM pack's
 own decoding (the RAM is one block on RAM CS).
 
+3D Monster Maze (10.5K, machine code, inverse and graphics characters) loads and runs through its opening screens.
+At the cursor every frame is the same: 304 lines of 207 T-states and a sync of 6 lines, except that the line before
+the display is 4 T-states longer (where the ROM changes from NMI-timed lines to interrupt-timed ones). A key going
+down or up changes the line count for a few frames; that timing is the ROM's.
+
 The page's picture check reads the dots on the TV/TAPE pin back as characters, with the ROM's font, and compares them
 with the display file in RAM: 768 of 768 on the screens tried.
 

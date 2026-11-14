@@ -31,7 +31,7 @@ class Zx81Ula {
     this.mem = 0xFF;                                // what the memory drives (FFh: nothing)
     // the TV: one sample per dot; a short sync ends a line, a long one a frame
     this.W = 414; this.H = 312; this.fb = new Uint8Array(this.W * this.H); this.frame = new Uint8Array(this.W * this.H);
-    this.x = 0; this.y = 0; this.syncLen = 0; this.frames = 0; this.onFrame = null;
+    this.x = 0; this.y = 0; this.syncLen = 0; this.frames = 0; this.onFrame = null; this.frameLines = 0; this.frameSync = 0; this.lastLines = 0; this.oddFrames = 0;
     this.nmiAt = null; this.r1 = null; this.waits = 0; this.nmis = 0; this.ints = 0;
     const u = this.u;
     u.watch['N.PHI'] = (v, t) => { if (v === 0 && this.r1 === null) this.r1 = t; };
@@ -59,7 +59,7 @@ class Zx81Ula {
     const v = this.u.get('TV/TAPE');
     if (v === 0) { this.syncLen++; return; }
     if (this.syncLen) {
-      if (this.syncLen > 200) { this.frame.set(this.fb); this.fb.fill(0); this.y = 0; this.frames++; if (this.onFrame) this.onFrame(this.frame); }
+      if (this.syncLen > 200) { this.frameLines = this.y; this.frameSync = this.syncLen; if (this.frameLines !== this.lastLines && this.lastLines) this.oddFrames++; this.lastLines = this.frameLines; this.frame.set(this.fb); this.fb.fill(0); this.y = 0; this.frames++; if (this.onFrame) this.onFrame(this.frame); }
       else if (++this.y >= this.H) this.y = 0;      // no vertical sync: the picture rolls
       this.x = 0; this.syncLen = 0;
     }

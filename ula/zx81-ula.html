@@ -43,12 +43,18 @@ button:disabled { opacity: .5; cursor: default; }
 #tv { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #808080; aspect-ratio: 414 / 312; max-width: 100%; }
 .msg { font-size: 14px; color: var(--muted); } .msg.err { color: var(--bad); } .msg.ok { color: var(--ok); }
 dl.meters { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-variant-numeric: tabular-nums; }
-dl.meters dt { color: var(--muted); } dl.meters dd { margin: 0; font-family: var(--f-mono); font-size: 13.5px; text-align: right; overflow-wrap: anywhere; }
+dl.meters dt { color: var(--muted); } dl.meters dd { margin: 0; min-height: 1.5em; font-family: var(--f-mono); font-size: 13.5px; text-align: right; overflow-wrap: anywhere; }
+.pcbox { min-height: 4.6em; } #msg { min-height: 3em; }
 .pill { display: inline-block; font: 600 12px var(--f-mono); padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
 .pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); } .pill.idle { color: var(--muted); }
-.kbd { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
-.kbd button { padding: 7px 0; font: 600 12.5px var(--f-mono); min-width: 0; overflow: hidden; }
-.kbd button.down { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.kbd { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; --red: var(--bad); container-type: inline-size; }
+.kbd button { padding: 3px 1px; min-width: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.15; font-family: var(--f-mono); }
+.kbd .kword, .kbd .kfn { font-size: clamp(6px, 1.55cqw, 10px); white-space: nowrap; letter-spacing: -.02em; }
+.kbd .kword { font-weight: 600; } .kbd .kfn { color: var(--muted); }
+.kbd .kmid { display: flex; align-items: baseline; justify-content: center; gap: 3px; width: 100%; }
+.kbd .kname { font-size: clamp(11px, 2.6cqw, 16px); font-weight: 600; } .kbd .kname.word { font-size: clamp(6px, 1.55cqw, 10px); text-align: center; }
+.kbd .kshift { font-size: clamp(6px, 1.55cqw, 10px); color: var(--red); white-space: nowrap; letter-spacing: -.02em; }
+.kbd button.down { background: var(--accent); border-color: var(--accent); } .kbd button.down span { color: var(--accent-ink); }
 .scope { overflow-x: auto; } #wave { display: block; }
 .small { font-size: 13px; color: var(--muted); max-width: 80ch; }
 textarea { width: 100%; box-sizing: border-box; font: 12.5px/1.45 var(--f-mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; min-height: 150px; }
@@ -74,7 +80,7 @@ footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; fl
       <p class="msg" id="msg">Choose a ZX81 ROM image (8K, 8192 bytes). The ROM is Sinclair's and is not part of this page; it stays in your browser.</p>
       <div class="tvbox"><canvas id="tv" width="414" height="312" tabindex="0" aria-label="ZX81 picture. Click here and type."></canvas></div>
       <div class="kbd" id="kbd" aria-label="ZX81 keyboard"></div>
-      <p class="small">Click the picture and type, or use the keys. SHIFT on the key row latches for one key. Backspace is SHIFT+0 (RUBOUT). To load a program, choose a .p file: the page then types LOAD "" for you.</p>
+      <p class="small">Click the picture and type, or use the keys, which are marked as on a ZX81: the keyword above (what the key gives at the K cursor), the red symbol or word with SHIFT, and the function below (after SHIFT + NEW LINE). SHIFT latches for one key. Backspace is SHIFT+0 (RUBOUT). To load a program, choose a .p file: the page then types LOAD "" for you.</p>
     </section>
 
     <section class="panel" aria-label="Instruments">
@@ -91,13 +97,15 @@ footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; fl
         <dt>Speed</dt><dd id="mSpeed">–</dd>
         <dt>ZX81 time run</dt><dd id="mTime">–</dd>
         <dt>Frames (vertical syncs)</dt><dd id="mFrames">–</dd>
+        <dt>Last frame</dt><dd id="mFrame">–</dd>
+        <dt>Frames whose line count changed</dt><dd id="mOdd">–</dd>
         <dt>NMIs taken</dt><dd id="mNmi">–</dd>
         <dt>Interrupts</dt><dd id="mInt">–</dd>
         <dt>Wait states</dt><dd id="mWait">–</dd>
         <dt>Program counter</dt><dd id="mPc">–</dd>
       </dl>
       <h2>Picture check</h2>
-      <p><span class="pill idle" id="pcPill">waiting</span> <span id="pcText" class="small"></span></p>
+      <p class="pcbox"><span class="pill idle" id="pcPill">waiting</span> <span id="pcText" class="small"></span></p>
       <p class="small">Every half second the dots on the ULA's TV pin are read back as characters and compared with the display file in RAM, using the ROM's own font. It only applies to ordinary character screens, and a screen that is being redrawn can differ for a moment.</p>
       <h2>Report</h2>
       <div class="row"><button id="btnReport" type="button">Write report</button><button id="btnCopy" type="button">Copy</button></div>
@@ -120,7 +128,7 @@ footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; fl
   </section>
 
   <footer>
-    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6679/ULA2C210/1 (12 January 1982) and the cell circuits ULA 2C158/2, from the Ferranti archive catalogued in 2026 by Happy Little Diodes. The netlist, the Verilog and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/zx81-ULA/ula">zx81-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">183acc6 2026-11-14</span>.</p>
+    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6679/ULA2C210/1 (12 January 1982) and the cell circuits ULA 2C158/2, from the Ferranti archive catalogued in 2026 by Happy Little Diodes. The netlist, the Verilog and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/zx81-ULA/ula">zx81-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">5a66dfd 2026-11-14</span>.</p>
     <p class="small"><b>Terms of use.</b> The archive's documents are for preserving material of historical interest and for non-commercial, educational and archival research only; commercial use of them or their contents, including in connection with the manufacture, marketing or sale of goods, is prohibited by Sky UK Limited. This page, the netlist and the Verilog are made from those contents and carry the same terms: strictly not for commercial use of any kind. The code is under the PolyForm Noncommercial License 1.0.0.</p>
     <p class="small"><b>Not modelled.</b> The tape (LOAD is done by putting the program straight into RAM), a RAM pack's own address decoding (the 16K is one block on the ULA's RAM CS), and the analogue side of the pins. The Z80's timing follows the data sheet's shape with fixed delays.</p>
   </footer>
@@ -786,7 +794,7 @@ class Zx81Ula {
     this.mem = 0xFF;                                // what the memory drives (FFh: nothing)
     // the TV: one sample per dot; a short sync ends a line, a long one a frame
     this.W = 414; this.H = 312; this.fb = new Uint8Array(this.W * this.H); this.frame = new Uint8Array(this.W * this.H);
-    this.x = 0; this.y = 0; this.syncLen = 0; this.frames = 0; this.onFrame = null;
+    this.x = 0; this.y = 0; this.syncLen = 0; this.frames = 0; this.onFrame = null; this.frameLines = 0; this.frameSync = 0; this.lastLines = 0; this.oddFrames = 0;
     this.nmiAt = null; this.r1 = null; this.waits = 0; this.nmis = 0; this.ints = 0;
     const u = this.u;
     u.watch['N.PHI'] = (v, t) => { if (v === 0 && this.r1 === null) this.r1 = t; };
@@ -814,7 +822,7 @@ class Zx81Ula {
     const v = this.u.get('TV/TAPE');
     if (v === 0) { this.syncLen++; return; }
     if (this.syncLen) {
-      if (this.syncLen > 200) { this.frame.set(this.fb); this.fb.fill(0); this.y = 0; this.frames++; if (this.onFrame) this.onFrame(this.frame); }
+      if (this.syncLen > 200) { this.frameLines = this.y; this.frameSync = this.syncLen; if (this.frameLines !== this.lastLines && this.lastLines) this.oddFrames++; this.lastLines = this.frameLines; this.frame.set(this.fb); this.fb.fill(0); this.y = 0; this.frames++; if (this.onFrame) this.onFrame(this.frame); }
       else if (++this.y >= this.H) this.y = 0;      // no vertical sync: the picture rolls
       this.x = 0; this.syncLen = 0;
     }
@@ -950,6 +958,7 @@ class Zx81Fast {
     this.mem = 0xFF; this.memQ = 0xFF;            // the memory's output now, and what it will be one period on
     this.W = 414; this.H = 312; this.fb = new Uint8Array(this.W * this.H); this.frame = new Uint8Array(this.W * this.H);
     this.x = 0; this.y = 0; this.syncLen = 0; this.frames = 0; this.onFrame = null;
+    this.frameLines = 0; this.frameSync = 0; this.lastLines = 0; this.oddFrames = 0;     // the last frame: its lines and its sync in dots; frames whose line count changed
     this.n = 0;                                   // clock edges so far
     this.nmiEdge = -1; this.nmiWas = 0; this.waits = 0; this.nmis = 0; this.ints = 0; this.T = 0;
     this.rec = null; this.cpu = new Z80(this); this.done = 0; this.lastA = 0xFFFF; this.tape = null;   // tape: a .p file waiting for LOAD
@@ -981,7 +990,7 @@ class Zx81Fast {
   dot(v) {                                        // the level on TV/TAPE for one dot: 0 sync, 1 black, 2 white
     if (v === 0) { this.syncLen++; return; }
     if (this.syncLen) {
-      if (this.syncLen > 200) { this.frame.set(this.fb); this.fb.fill(0); this.y = 0; this.frames++; if (this.onFrame) this.onFrame(this.frame); }
+      if (this.syncLen > 200) { this.frameLines = this.y; this.frameSync = this.syncLen; if (this.frameLines !== this.lastLines && this.lastLines) this.oddFrames++; this.lastLines = this.frameLines; this.frame.set(this.fb); this.fb.fill(0); this.y = 0; this.frames++; if (this.onFrame) this.onFrame(this.frame); }
       else if (++this.y >= this.H) this.y = 0;    // no vertical sync: the picture rolls
       this.x = 0; this.syncLen = 0;
     }
@@ -1144,11 +1153,11 @@ const ULA_NET = "# ZX81 ULA 2C210, gate-level netlist transcribed from Ferranti 
     engine = $('engine').value;
     if (engine === 'fast') { m = new Zx81Fast(Z80, ULA_CORE, rom, { ramSize: 0x4000 }); m.rec = rec; }
     else m = new Zx81Ula(Z80, new UlaSim(ULA_NET, { init: { NMION: 0, NMIOFF: 1, 'FRAME-SYNC': 0, FSL: 1 } }), rom, { ramSize: 0x4000 });
-    m.T0 = m.T; ranT = 0; rp = 0; rcount = 0; Object.assign(pc, { checks: 0, bad: 0, last: null, origin: null, prev: '', frames: -1 }); typing = []; shiftLatch = false;
+    m.T0 = m.T; ranT = 0; drawn = -1; rp = 0; rcount = 0; Object.assign(pc, { checks: 0, bad: 0, last: null, origin: null, prev: '', frames: -1 }); typing = []; shiftLatch = false;
     $('engNote').textContent = engine === 'fast' ? 'One 13 MHz clock, as it would run in an FPGA. Fast enough to use at full speed.' : 'Every gate and flip-flop of the 2C210 with its delay. Expect about one hundredth of full speed: the ROM takes minutes to reach the cursor. The logic analyser does not record in this mode.';
     for (const b of ['btnRun', 'btnReset', 'btnStepI', 'btnStepF']) $(b).disabled = false;
   }
-  function setRunning(on) { running = on; $('btnRun').textContent = on ? 'Pause' : 'Run'; if (on) { last = performance.now(); requestAnimationFrame(loop); } else { draw(); drawWave(); meters(); } }
+  function setRunning(on) { running = on; $('btnRun').textContent = on ? 'Pause' : 'Run'; if (on) { last = performance.now(); requestAnimationFrame(loop); } else { draw(true); drawWave(); meters(); } }
 
   // ---- typing: real keys, the key grid, and text typed for you ----
   let typing = [], shiftLatch = false, held = new Set();
@@ -1157,10 +1166,20 @@ const ULA_NET = "# ZX81 ULA 2C210, gate-level netlist transcribed from Ferranti 
   $('tv').addEventListener('keydown', e => { const k = keyName(e); if (!k) return; e.preventDefault(); if (k === 'Rubout') { press('Shift', true); press('0', true); } else press(k, true); });
   $('tv').addEventListener('keyup', e => { const k = keyName(e); if (!k) return; e.preventDefault(); if (k === 'Rubout') { press('0', false); press('Shift', false); } else press(k, false); });
   $('tv').addEventListener('blur', () => { for (const r of KEYS) for (const k of r) press(k, false); });
+  // as printed on a ZX81: [keyword above the key, shifted symbol or word (red), function below the key]
+  const LEG = { 1: ['', 'EDIT', ''], 2: ['', 'AND', ''], 3: ['', 'THEN', ''], 4: ['', 'TO', ''], 5: ['', '\u2190', ''], 6: ['', '\u2193', ''], 7: ['', '\u2191', ''], 8: ['', '\u2192', ''], 9: ['', 'GRAPHICS', ''], 0: ['', 'RUBOUT', ''],
+    Q: ['PLOT', '""', 'SIN'], W: ['UNPLOT', 'OR', 'COS'], E: ['REM', 'STEP', 'TAN'], R: ['RUN', '<=', 'INT'], T: ['RAND', '<>', 'RND'], Y: ['RETURN', '>=', 'STR$'], U: ['IF', '$', 'CHR$'], I: ['INPUT', '(', 'CODE'], O: ['POKE', ')', 'PEEK'], P: ['PRINT', '"', 'TAB'],
+    A: ['NEW', 'STOP', 'ARCSIN'], S: ['SAVE', 'LPRINT', 'ARCCOS'], D: ['DIM', 'SLOW', 'ARCTAN'], F: ['FOR', 'FAST', 'SGN'], G: ['GOTO', 'LLIST', 'ABS'], H: ['GOSUB', '**', 'SQR'], J: ['LOAD', '-', 'VAL'], K: ['LIST', '+', 'LEN'], L: ['LET', '=', 'USR'], NewLine: ['', 'FUNCTION', ''],
+    Shift: ['', '', ''], Z: ['COPY', ':', 'LN'], X: ['CLEAR', ';', 'EXP'], C: ['CONT', '?', 'AT'], V: ['CLS', '/', ''], B: ['SCROLL', '*', 'INKEY$'], N: ['NEXT', '<', 'NOT'], M: ['PAUSE', '>', 'PI'], '.': ['', ',', ''], Space: ['', '\u00A3', ''] };
   { const order = [3, 4, 2, 5, 1, 6, 0, 7], kb = $('kbd');           // the keyboard's rows: 1-5 6-0, Q-T Y-P, A-G H-NewLine, Shift-V B-Space
     for (let row = 0; row < 4; row++) { const L = KEYS[order[row * 2]], Rr = KEYS[order[row * 2 + 1]].slice().reverse();
-      for (const k of [...L, ...Rr]) { const b = document.createElement('button'); b.type = 'button'; b.dataset.k = k; b.textContent = k === 'NewLine' ? 'NL' : k === 'Shift' ? 'SHF' : k === 'Space' ? 'SPC' : k;
-        b.title = k === 'NewLine' ? 'NEW LINE' : k === 'Shift' ? 'SHIFT (latches for one key)' : k === 'Space' ? 'SPACE (BREAK)' : k;
+      for (const k of [...L, ...Rr]) { const b = document.createElement('button'), g = LEG[k]; b.type = 'button'; b.dataset.k = k;
+        const name = k === 'NewLine' ? 'NEW LINE' : k === 'Shift' ? 'SHIFT' : k === 'Space' ? 'SPACE' : k;
+        const span = (cls, s) => { const e = document.createElement('span'); e.className = cls; e.textContent = s || '\u00A0'; return e; };
+        const above = !g[0] && g[1].length > 1;      // digits and NEW LINE: the shifted word sits above the key, in red
+        const mid = span('kmid', ''); mid.textContent = ''; mid.append(span('kname' + (name.length > 1 ? ' word' : ''), name)); if (!above && g[1]) mid.append(span('kshift', g[1]));
+        b.append(span(above ? 'kword kshift' : 'kword', above ? g[1] : g[0]), mid, span('kfn', g[2]));
+        b.title = [name, g[0] && 'keyword ' + g[0], g[1] && 'with SHIFT ' + g[1], g[2] && 'function ' + g[2], k === 'Shift' && 'latches for one key', k === 'Space' && 'BREAK'].filter(Boolean).join('; ');
         b.addEventListener('pointerdown', e => { e.preventDefault(); if (k === 'Shift') { shiftLatch = !shiftLatch; press('Shift', shiftLatch); return; } press(k, true); held.add(k); });
         const up = () => { if (!held.has(k)) return; held.delete(k); setTimeout(() => { press(k, false); if (shiftLatch) { shiftLatch = false; press('Shift', false); } }, 90); };
         b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); kb.appendChild(b); } } }
@@ -1178,21 +1197,23 @@ const ULA_NET = "# ZX81 ULA 2C210, gate-level netlist transcribed from Ferranti 
     catch (e) { say('The machine stopped: ' + e.message, 'err'); setRunning(false); return; }
     if (performance.now() - t0 >= 14) owed = Math.min(owed, FRAME_T);         // it cannot keep up: do not let the debt grow
     ranT += m.T - T0; speed = speed * 0.9 + 0.1 * ((m.T - T0) / T_HZ) / (dt / 1000);
-    draw(); if ((pcT += dt) > 500) { pcT = 0; pictureCheck(); meters(); }
+    draw(engine !== 'fast'); if ((pcT += dt) > 500) { pcT = 0; pictureCheck(); meters(); }
     requestAnimationFrame(loop);
   }
 
-  // ---- the picture: finished lines of the frame being drawn over the last whole frame ----
-  const tv = $('tv').getContext('2d'), img = tv.createImageData(414, 312);
-  function draw() {
-    if (!m) return; const d = img.data, W = m.W, H = m.H, y0 = m.y;
+  // ---- the picture: the last whole frame, as a TV shows it. Only when the machine is too slow to finish frames
+  // (the netlist) or is being stepped is the frame in progress laid over it, so that something is seen to happen ----
+  const tv = $('tv').getContext('2d'), img = tv.createImageData(414, 312); let drawn = -1;
+  function draw(progress) {
+    if (!m) return; if (!progress && m.frames === drawn) return; drawn = m.frames;
+    const d = img.data, W = m.W, H = m.H, y0 = progress ? m.y : 0;
     for (let y = 0, i = 0; y < H; y++) { const src = y < y0 ? m.fb : m.frame; for (let x = 0; x < W; x++, i += 4) { const v = src[y * W + x], c = v === 1 ? 16 : v === 2 ? 236 : 128; d[i] = d[i + 1] = d[i + 2] = c; d[i + 3] = 255; } }
     tv.putImageData(img, 0, 0);
   }
   function meters() {
     if (!m) return; const t = ranT / T_HZ;
     $('mSpeed').textContent = running ? (speed * 100).toFixed(speed < 0.1 ? 1 : 0) + '% of a ZX81' : 'paused';
-    $('mTime').textContent = t.toFixed(1) + ' s'; $('mFrames').textContent = m.frames; $('mNmi').textContent = m.nmis; $('mInt').textContent = m.ints; $('mWait').textContent = m.waits;
+    $('mTime').textContent = t.toFixed(1) + ' s'; $('mFrames').textContent = m.frames; $('mFrame').textContent = m.frameLines ? `${m.frameLines} lines + ${(m.frameSync / 414).toFixed(1)} of sync` : '–'; $('mOdd').textContent = m.oddFrames; $('mNmi').textContent = m.nmis; $('mInt').textContent = m.ints; $('mWait').textContent = m.waits;
     $('mPc').textContent = m.cpu.pc.toString(16).toUpperCase().padStart(4, '0') + 'h';
   }
 
@@ -1265,7 +1286,7 @@ const ULA_NET = "# ZX81 ULA 2C210, gate-level netlist transcribed from Ferranti 
     if (!m) return 'No machine yet: load a ROM first.';
     return ['ZX81 ULA Test Bench report', 'Design version: ' + $('ver').textContent, 'Logic: ' + (engine === 'fast' ? 'synchronous design (2c210_sync.v)' : 'gate-level netlist (2c210.net)'),
       'ROM: ' + rom.length + ' bytes, CRC32 ' + crc32(rom), 'Program: ' + (progName || 'none'), 'ZX81 time run: ' + (ranT / T_HZ).toFixed(1) + ' s' + (speed ? ', at ' + (speed * 100).toFixed(0) + '% of full speed' : ''),
-      `Frames ${m.frames}, NMIs ${m.nmis}, interrupts ${m.ints}, wait states ${m.waits}, PC ${m.cpu.pc.toString(16).toUpperCase()}h`,
+      `Frames ${m.frames} (last: ${m.frameLines} lines + ${(m.frameSync / 414).toFixed(1)} lines of sync; ${m.oddFrames} changed their line count), NMIs ${m.nmis}, interrupts ${m.ints}, wait states ${m.waits}, PC ${m.cpu.pc.toString(16).toUpperCase()}h`,
       'Picture check: ' + (pc.checks ? `${pc.checks} checks, ${pc.bad} with differences; last: ${pc.last ? pc.last + ' of 768 characters differ' : 'all 768 match'}` + (pc.origin ? `; picture starts ${pc.origin[0]} dots after line sync, ${pc.origin[1]} lines after frame sync` : '') : 'no checks yet'),
       'Browser: ' + navigator.userAgent, '', 'What I saw (describe what a real ZX81 does differently):', ''].join('\n');
   }
@@ -1287,7 +1308,7 @@ const ULA_NET = "# ZX81 ULA 2C210, gate-level netlist transcribed from Ferranti 
   $('btnRun').onclick = () => { setRunning(!running); $('tv').focus(); };
   $('btnReset').onclick = () => { build(); say('Reset. The ROM starts again from power-on.'); if (!running) setRunning(true); };
   $('engine').onchange = () => { if (rom) { build(); say('Logic changed; the machine starts again from power-on.'); if (!running) setRunning(true); } };
-  const stepBy = f => { if (!m) return; if (running) setRunning(false); try { f(); } catch (e) { say('The machine stopped: ' + e.message, 'err'); } ranT = m.T - m.T0; draw(); drawWave(); meters(); };
+  const stepBy = f => { if (!m) return; if (running) setRunning(false); try { f(); } catch (e) { say('The machine stopped: ' + e.message, 'err'); } ranT = m.T - m.T0; draw(true); drawWave(); meters(); };
   $('btnStepI').onclick = () => stepBy(() => m.step());
   $('btnStepF').onclick = () => stepBy(() => { const f = m.frames, lim = m.T + 4 * FRAME_T; while (m.frames === f && m.T < lim) m.step(); pc.frames = -1; pictureCheck(); pc.frames = -1; pictureCheck(); });
   $('zoom').onchange = drawWave; $('back').oninput = drawWave;

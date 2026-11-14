@@ -25,6 +25,7 @@ class Zx81Fast {
     this.mem = 0xFF; this.memQ = 0xFF;            // the memory's output now, and what it will be one period on
     this.W = 414; this.H = 312; this.fb = new Uint8Array(this.W * this.H); this.frame = new Uint8Array(this.W * this.H);
     this.x = 0; this.y = 0; this.syncLen = 0; this.frames = 0; this.onFrame = null;
+    this.frameLines = 0; this.frameSync = 0; this.lastLines = 0; this.oddFrames = 0;     // the last frame: its lines and its sync in dots; frames whose line count changed
     this.n = 0;                                   // clock edges so far
     this.nmiEdge = -1; this.nmiWas = 0; this.waits = 0; this.nmis = 0; this.ints = 0; this.T = 0;
     this.rec = null; this.cpu = new Z80(this); this.done = 0; this.lastA = 0xFFFF; this.tape = null;   // tape: a .p file waiting for LOAD
@@ -56,7 +57,7 @@ class Zx81Fast {
   dot(v) {                                        // the level on TV/TAPE for one dot: 0 sync, 1 black, 2 white
     if (v === 0) { this.syncLen++; return; }
     if (this.syncLen) {
-      if (this.syncLen > 200) { this.frame.set(this.fb); this.fb.fill(0); this.y = 0; this.frames++; if (this.onFrame) this.onFrame(this.frame); }
+      if (this.syncLen > 200) { this.frameLines = this.y; this.frameSync = this.syncLen; if (this.frameLines !== this.lastLines && this.lastLines) this.oddFrames++; this.lastLines = this.frameLines; this.frame.set(this.fb); this.fb.fill(0); this.y = 0; this.frames++; if (this.onFrame) this.onFrame(this.frame); }
       else if (++this.y >= this.H) this.y = 0;    // no vertical sync: the picture rolls
       this.x = 0; this.syncLen = 0;
     }
