@@ -179,7 +179,7 @@ cc2     inv      n_cc2          n_cc1         @9AN  ok210
 cc3     inv      n_cc3          n_cc2         @8AN  ok210
 cc4     inv      CCLK           n_cc3         @8AL  ok210
 cr      inv      CRES           CRESn         @11AT  R/3
-crn     nor2     CRESn          T207 CRX      @11AW  ok210; drawn pointing left; CRX: the second input, from the right (to be traced)  ok210
+crn     nor2     CRESn          T207 INTACK   @11AW  ok210; drawn pointing left; INTACK comes up column AV from row 27.3: the line counter restarts at count 207 and at every interrupt acknowledge
 
 # ---- delay chains (rows 17-24) ----
 # Chain A (row 17): R/? inverter output up at 17N, then three NOR2 gates with both inputs tied (inverters).
@@ -224,9 +224,9 @@ pa6     pin_ts   A6'            n_oa6 ~AEN    @15BH  PN39
 pa7     pin_ts   A7'            n_oa7 ~AEN    @16BH  PN1
 pa8     pin_ts   A8'            n_oa8 ~AEN    @17BH  PN2
 # row counter Q29, Q30, NQ31 (rows 19-23, columns BB-BD): ripple toggles, reset together by RRES (column BA)
-Q29     tff      Q29 Q29n       ~RCLK RRES    @19BB  RCLK: the long line from the left at row 18-19 (to be traced)
-Q30     tff      Q30 Q30n       ~Q29 RRES     @21BB
-NQ31    tff      - NQ31         ~Q30 RRES     @23BB  only the inverted output is drawn
+Q29     tff      Q29 Q29n       ~RCLK FRAME-SYNC   @19BB  ok210; reset: FRAME-SYNC, via row 28.3 and column BA; RCLK comes down column BA from above (to be traced)
+Q30     tff      Q30 Q30n       ~Q29 FRAME-SYNC     @21BB
+NQ31    tff      - NQ31         ~Q30 FRAME-SYNC     @23BB  only the inverted output is drawn
 oa0     inv      n_oa0          Q29n          @20BE
 oa1     inv      n_oa1          Q30n          @21BE
 oa2     inv      n_oa2          NQ31          @22BE
