@@ -2224,7 +2224,7 @@ $('mcTiles').addEventListener('click', e => { const b = e.target.closest('[data-
 $('mcClear').onclick = () => { zx.clearChip(MC.m.chips[mcSel].id); disDirty = true; render(); };
 $('mcClearAll').onclick = () => { zx.clearFaults(); disDirty = true; render(); };
 function renderMemChips() {
-  const ch = MC.m.chips; if (mcSel >= ch.length) mcSel = 0;
+  const ch = MC.m.chips, shown = MC.groups().flatMap(g => g[1]); if (!shown.includes(mcSel)) mcSel = shown[0];       // a chip that is fitted
   if (mcDrawn !== ch[mcSel].id + '/' + ch[mcSel].part) mcDraw();
   mcTiles();
   // a tile's dot stays lit for half a second after its chip was last accessed
