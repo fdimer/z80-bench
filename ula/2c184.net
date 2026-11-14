@@ -189,12 +189,10 @@ dB2     nor2     DB2            DB1 DB1       @21X
 dB3     nor2     DB3            DB2 DB2       @21AA
 dB4     nor2     DB4            DB3 DB3       @21AC
 dB5     nor2     DB5            DB4 DB4       @21AE
-dB6     nor2     DB6            DB5 DB5       @22AG?
-dC1     nor2     DC1            C24R C24R     @24Z
+dC1     nor2     DC1            N.MREQ N.MREQ @24Z
 dC2     nor2     DC2            DC1 DC1       @24AC
 dC3     nor2     DC3            DC2 DC2       @24AE
-dC4     nor2     DC4            DC3 DC3       @24AG?
-d21     nor3     n_22AJ         DB4? DB6 DC4  @22AJ  R/2 (inputs to be confirmed)
+d21     nor3     n_22AJ         X21 DB5 DC3   @22AJ  R/2; X21 from above (column AA, to be traced); chain B has five stages
 d21b    inv      n_22AM         n_22AJ        @22AM  R/3; output goes up column AT
 
 # ---- address outputs (rows 12-24, columns BD-BJ) ----
@@ -226,3 +224,14 @@ pa2     pin_ts   A2'            n_oa2 ~AEN    @22BH  PN3
 # A0' and A1' are read back into the chip for the port decode
 ba0     buf_ef   A0in           A0'           @25BF
 ba1     buf_ef   A1in           A1'           @26BF
+
+# ---- memory request logic (rows 22-30, columns N-AF) ----
+# N.MREQ runs from the PN9 buffer (row 23) right to the column T vertical, which feeds chain C, two NORs and Q20's clock.
+# N.M1 (row 24) turns down at column S to an inverter whose output resets Q20.
+m1i     inv      M1             N.M1          @26W
+a14i    inv      A14n           A14           @29V
+romsel  nor2     ROMSEL         N.MREQ A14n   @29Z   high for a memory cycle with A14 low (to the ROM select, row 29 line)
+ramsel  nor2     RAMSELa        N.MREQ A14    @27Z   high for a memory cycle with A14 high
+Q20     dff      Q20            Q20D ~N.MREQ M1   @28AC  D from the long loop to the right (column BA, to be traced)
+ramblk  nor2     RAMSELn        Q20 RAMSELa   @30AD  low when the RAM is selected and Q20 is clear (to RAM N.CS, row 30)
+# chain C input is N.MREQ: dC1..dC3 are three NOR-inverters (rows 24), output up column AG to the row 22 NOR
