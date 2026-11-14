@@ -133,10 +133,13 @@ NQ15    dlatch   NQ15           D4 ~LCLK      @14AG?
 NQ16    dlatch   NQ16           D5 ~LCLK      @14AJ?
 Q17     dlatch   Q17            n_Q17D ~LCLK  @14AL  true output; D from a horizontal at row 13 (to be traced: D6 or D6L)
 NQ18    dlatch   NQ18           D7 ~LCLK      @14AN  D7 = the inverse-video bit (to be confirmed)
-i17     inv      n_12AO         Q17           @12AO  R/3
-vnor    nor2     n_13AS         n_12AO NQ18   @13AS
-Q32     dff      Q32            n_13AS ~SCLK? @13AU  clock from the column AH vertical (to be confirmed)
-vor     or2      N.VIDEO?       Q8 Q32        @13AX  (to be confirmed)
+# video (rows 12-15, columns AL-AT), 2C210 as drawn: Q32 holds the inverse-video bit; four NORs make VID = XNOR(SV, Q32)
+q32d    nor2     n_q32d         QA QB         @13AM  ok210; QA (row 13.3) and QB (row 13.6) from the left (2C184: ~Q17 and NQ18)
+Q32     dff      Q32            n_q32d ~QCK VCC   @13AP  ok210; QCK from the left (row 14); no reset drawn
+vx      nor2     VX             SV Q32        @13AR  ok210; SV: row 12 line from column AL (the shift register output, to be confirmed Q8)
+vy      nor2     VY             SV VX         @12AU  ok210
+vz      nor2     VZ             VX Q32        @14AU  ok210
+vid     nor2     VID            VY VZ         @13AX  ok210; R/2. VID = XNOR(SV, Q32)
 
 # ---- line counter Q21-Q28 (rows 4-6, columns AN-BB): ripple toggle stages, each clocked on the falling edge of
 # the previous stage's true output; all reset together by CRES (row 6.5). Inverted outputs marked n.
