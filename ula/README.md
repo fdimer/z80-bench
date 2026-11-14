@@ -1,8 +1,42 @@
 # ZX81 ULA, gate level (branch zx81-ULA)
 
-Sources: Ferranti drawings LD6679/ULA2C210/1, "ULA-2C210 Logic", issue 1, 12 January 1982 (the chip in the user's
-machines; the main target) and LD6532/ULA2C184/1, "ULA-2C184 Logic", issue 1, 7 April 1981 (the earlier chip). Both are
-one sheet on the same grid (rows 1-38, columns A-BJ) with the same layout, so a reading on one can be checked on the other.
+Sources: Ferranti logic diagrams from the Ferranti archive catalogued in 2026 by Happy Little Diodes
+(catalogue: "Ferranti Docs" workbook, https://docs.google.com/spreadsheets/d/1_6S9HtXdFBRyo7NQ52pcOQgZlP1N_M-T):
+
+| Archive no. | Drawing | Chip | Date | Use here |
+|---|---|---|---|---|
+| ZX81-FER-SCH-102 | LD6679/ULA2C210/1, "ULA-2C210 Logic", issue 1 | 2C210 | 12 January 1982 | The chip in the ZX81s modelled here; the main target |
+| ZX81-FER-SCH-011 | LD6532/ULA2C184/1, "ULA-2C184 Logic", issue 1 | 2C184 | 7 April 1981 | The earlier chip, kept for comparison |
+
+Both are one sheet on the same grid (rows 1-38, columns A-BJ) with the same layout, so a reading on one can be checked on
+the other. The archive also holds the 2C158 logic and block diagrams (ZX81-FER-SCH-103 and -105, September 1980), not used
+yet. The drawings themselves are not in this repository: only the netlists transcribed from them, with grid references.
+
+The other sources (Sinclair's ZX81 circuit diagram SRC 049 for the pinout and board, and the behaviour model in
+`src/zx80.js`) are described in the main README.
+
+## Terms of use and licence
+
+**The drawings.** The archive's terms: the documents are presented only for preserving material of historical interest
+and for non-commercial, educational and archival research. Consent is strictly limited to non-commercial use. Any
+commercial use of the documents or their contents, including use in connection with the manufacture, marketing or sale
+of goods, is prohibited by Sky UK Limited.
+
+**What is derived from them.** The netlists (`2c210.net`, `2c184.net`), and anything generated from them (the
+simulation results and any Verilog or FPGA design that follows), are a transcription of those contents, so the same
+terms apply: **strictly not for commercial use of any kind**. That includes making, selling or marketing replacement
+chips, boards or kits built from this work, even to repair machines. Building one for your own machine, research or
+teaching is the intended use.
+
+**The code.** `sim.js`, `tb.js` and the rest of Z80 Bench are under the repository's licence, the
+[PolyForm Noncommercial License 1.0.0](../LICENSE.md), which also allows noncommercial use only.
+
+**ROMs.** The ZX81 ROM is copyrighted and is not part of this repository; the testbench reads a copy from a path you give.
+
+**Third-party designs.** The jjmz/ula-vhdl design compared below has no licence file, so it is only compared with, not
+copied: none of its code is in this repository.
+
+If you appreciate the archive, its compiler asks that you consider supporting the Happy Little Diodes channel.
 
 Goal: a gate-for-gate description of the 2C210 accurate enough to build a replacement chip from; the 2C184 kept for
 comparison.
@@ -15,7 +49,7 @@ comparison.
 | `ula/2c184.net` | The 2C184 netlist, transcribed from its drawing (partial). One line per gate, flip-flop or pin buffer, each with its grid square, so it can be checked against the drawing |
 | `ula/sim.js` | Event-driven simulation of the netlist, one element per gate, flip-flop or pin buffer, each with a delay (inertial: shorter pulses are swallowed) |
 | `ula/tb.js` | Testbench: the emulator boots the real ROM, and its Z80 bus cycles are replayed as bus waveforms on the gate-level ULA, clocked by the ULA's own clock; what the ULA does is checked against the emulator. `ZX81_ROM=/path/to/rom node ula/tb.js [frames]` (the ROM is never copied into the repository) |
-| (to come) `ula/2c184.v` | Verilog generated from the netlist: a timed model, and a synchronous version for an FPGA or CPLD |
+| (to come) `ula/2c210.v` | Verilog generated from the netlist: a timed model, and a synchronous version for an FPGA or CPLD |
 
 ## Netlist format
 
@@ -51,8 +85,9 @@ A0'-A8' with the ROM selected, the row counter agrees, ROM and RAM selects agree
 (keyboard included) agree, vertical sync starts and ends within 3 T-states of the emulator, and the video output matches
 the emulator's dots exactly with no offset.
 
-What the gate level says the emulator has slightly wrong (its constants, not its logic): the NMI arrives 6.8 T-states
-later than the emulator's HSYNC_DELAY puts it, and the line sync lasts 16 T-states, not 20.
+The gate level corrected two of the emulator's constants (its logic was right): the sync, and so the NMI, starts 20
+T-states after the interrupt acknowledge begins, not 13, and lasts 16 T-states, not 20 (`ULA_HSYNC_DELAY` and
+`ULA_HSYNC_LEN` in `src/zx80.js`). With them the NMIs agree to within 0.2 of a T-state.
 
 ## Comparison with other replacements
 

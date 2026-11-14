@@ -16,7 +16,10 @@ const ZX = {
   LINE_T: 207,              // T-states per scan line as the ROM times it (64 us at 3.25 MHz is 208)
   W: 414,                   // 2 pixels per T-state across a whole line
   H: 312,                   // lines kept by the virtual TV
-  HSYNC_DELAY: 13, HSYNC_LEN: 20
+  HSYNC_DELAY: 13, HSYNC_LEN: 20,
+  // ZX81: from the gate-level 2C210 (ula/), driven by this emulator's bus cycles: the line counter restarts on the
+  // interrupt acknowledge and its sync (counts 16-31) begins 20 T-states after the acknowledge cycle starts, for 16
+  ULA_HSYNC_DELAY: 20, ULA_HSYNC_LEN: 16
 };
 // Keyboard half-rows, selected by A8-A15 low; keys read on D0-D4 (first key = D0), active low.
 const ZX_KEYS = [
@@ -409,7 +412,7 @@ class ZX80 {
   hsyncs() {
     if (this.oscDead) { while (this.nextH <= this.t) this.nextH += ZX.LINE_T; return; }     // no oscillator: no sync, no NMI
     while (this.nextH <= this.t) {
-      this.newLine(this.nextH + ZX.HSYNC_LEN);
+      this.newLine(this.nextH + ZX.ULA_HSYNC_LEN);
       if (this.nmiGen && !this.nmiCut) { this.cpu.nmiPending = true; this.nmis++; }
       if (this.ackLost) this.lcntr = (this.lcntr + 1) & 7;
       this.nextH += ZX.LINE_T;
@@ -568,7 +571,7 @@ class ZX80 {
     if (this.cpu.lastEvent === 'INT' && this.ackLost) { if (this.nextH === Infinity) this.nextH = t0 + ZX.LINE_T; }      // the ULA misses the acknowledge: its sync counter runs free
     else if (this.cpu.lastEvent === 'INT') {   // acknowledge: next character row line, then horizontal sync
       this.lcntr = (this.lcntr + 1) & 7;
-      if (this.ula) this.nextH = t0 + ZX.HSYNC_DELAY;          // ZX81: the acknowledge re-phases the ULA's sync counter
+      if (this.ula) this.nextH = t0 + ZX.ULA_HSYNC_DELAY;          // ZX81: the acknowledge re-phases the ULA's sync counter
       else this.newLine(t0 + ZX.HSYNC_DELAY + ZX.HSYNC_LEN);
     }
     if (this.ula) this.hsyncs();
@@ -584,7 +587,7 @@ class ZX80 {
   }
   run(tStates) { let t = 0; while (t < tStates) t += this.step(); return t; }
   // is the ULA's horizontal sync pulse on at T-state at? (ZX81; worked out from the next pulse, so approximate just after an interrupt acknowledge)
-  hsyncAt(at) { if (!this.ula || this.oscDead || !isFinite(this.nextH)) return false; let d = (at - this.nextH) % ZX.LINE_T; if (d < 0) d += ZX.LINE_T; return d < ZX.HSYNC_LEN; }
+  hsyncAt(at) { if (!this.ula || this.oscDead || !isFinite(this.nextH)) return false; let d = (at - this.nextH) % ZX.LINE_T; if (d < 0) d += ZX.LINE_T; return d < ZX.ULA_HSYNC_LEN; }
   beam() { return { line: this.line, x: Math.max(0, (this.t - this.lineStart) * 2) }; }
 }
 if (typeof module !== 'undefined') module.exports = { ZX80, ZXChip, ZX_ULA_PINS, ZX, ZX_KEYS, ZX_TOKENS, zxText, ZX81_TOKENS, zx81Text };

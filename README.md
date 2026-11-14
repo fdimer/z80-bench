@@ -39,7 +39,7 @@ To get a single self-contained file instead, run `python build.py`, which writes
 `src/zx80.js` emulates the ZX80 (4K ROM), the ZX80 with the 8K ROM, and the ZX81, with 1K, 2K (Timex Sinclair 1000) or 16K–48K of RAM. The page built from it (see `zx80web` on the site) adds the TV picture, the keyboard, tape files and these hardware views:
 
 - **Memory chips**: the ROM and RAM chips with live pins.
-- **Processor and ULA** (ZX81): the ULA (IC1) drawn beside the Z80 with live pins, clock by clock. Its pinout is from Sinclair's circuit diagram SRC 049; Ferranti published no data sheet, so its inside is a model of its behaviour.
+- **Processor and ULA** (ZX81): the ULA (IC1) drawn beside the Z80 with live pins, clock by clock. Its pinout is from Sinclair's circuit diagram SRC 049; Ferranti published no data sheet, so its inside is a model of its behaviour. The `zx81-ULA` branch has a gate-level netlist of the 2C210 transcribed from Ferranti's logic diagram, with a simulator that checks this model against it; see `ula/README.md` there for its sources and its non-commercial terms.
 - **Faults**, two kinds, as on the CPC branch: a **line held high or low** (every pin on that line, on every chip, sees it) and a **pin disconnected from its line** (only that chip is affected). The ZX81's lines follow the diagram: A0'–A8' and D0'–D7' on the memory side of the 1K and 470 ohm resistors, D0–D7 between the Z80 and the ULA, the control lines, NMI, the clock, ROMCS and RAMCS, and the Z80's INT pin on A6. On the ZX80 and the RAM pack's chips every pin counts as a line of its own.
 
 `tests/zx80-test.js` checks the video logic with a synthetic ROM (no Sinclair code) and the lines and faults (`node tests/zx80-test.js`). The ROMs are not included.
