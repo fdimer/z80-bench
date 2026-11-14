@@ -61,4 +61,77 @@ bRD     buf_ef   N.RD           nRD    @36F
 # PN14 N.Ø (clock to the Z80, row 2), PN15 N.NMI (row 5, open collector with 5K to VCC), PN16 TV/TAPE (row 10,
 # 3-level output from N.SYNC and N.VIDEO), PN36-39 and PN1-2 A3'-A8' (rows 12-17), PN5/4/3 A0'-A2' (rows 21-23),
 # PN12 RAM N.CS and PN13 ROM N.CS (rows 30-32, RTL stages "see cct diagram").
-# (gates to follow, region by region)
+
+# ---- port read and the NOP: open-collector drivers onto the data pins (rows 12-19, columns K-Y) ----
+# EN = "not reading the port" (high: the drivers let go), from the R/2 inverter at 20K. FORCE = pull the data low
+# (the NOP fed to the Z80 for a character), vertical at column W. Checked: row 12 drives D0 ... row 19 drives D7.
+kb0a    nor2     n_12R          KB0 EN        @12R
+kb0b    nor2     n_12V          n_12R FORCE   @12V
+kb0c    pin_oc   nD0            n_12V         @12Y   drives D0 low when n_12V is low
+kb1a    nor2     n_13R          KB1 EN        @13R
+kb1b    nor2     n_13V          n_13R FORCE   @13V
+kb1c    pin_oc   nD1            n_13V         @13Y
+kb2a    nor2     n_14R          KB2 EN        @14R
+kb2b    nor2     n_14V          n_14R FORCE   @14V
+kb2c    pin_oc   nD2            n_14V         @14Y
+kb3a    nor2     n_15R          KB3 EN        @15R
+kb3b    nor2     n_15V          n_15R FORCE   @15V
+kb3c    pin_oc   nD3            n_15V         @15Y
+kb4a    nor2     n_16R          KB4 EN        @16R
+kb4b    nor2     n_16V          n_16R FORCE   @16V
+kb4c    pin_oc   nD4            n_16V         @16Y
+d5a     inv      n_17V          FORCE         @17V   D5 has no input: it reads high (pull-up), and is pulled low for the NOP
+d5c     pin_oc   nD5            n_17V         @17Y
+usaa    nor2     n_17R          USA EN        @17R
+usab    inv      n_18V          n_17R         @18V   D6 is not forced for the NOP (a character byte has D6 low already)
+usac    pin_oc   nD6            n_18V         @18Y
+tapa    nor2     n_18R          TAPE EN       @18R
+tapb    nor2     n_19V          n_18R FORCE   @19V
+tapc    pin_oc   nD7            n_19V         @19Y
+en      inv      EN             n_20AA        @20U   R/2; input from the port decode (to be traced)
+
+# ---- dot shift register Q1-Q8 (rows 3-10, columns T-AL) ----
+# Inverters A-H take D0-D7. Each stage's reset is NOR(~Dn, S/L, D6L): with S/L and D6L low, a 1 in the ROM byte
+# clears that stage. Stages shift on the falling edge of SCLK (the clock pins carry a bubble), Q1 shifting in a 1.
+iA      inv      nA             D0            @6T
+iB      inv      nB             D1            @6V
+iC      inv      nC             D2            @6X
+iD      inv      nD             D3            @6Z
+iE      inv      nE             D4            @6AB
+iF      inv      nF             D5            @6AD
+iG      inv      nG             D6            @6AF
+iH      inv      nH             D7            @6AH
+rA      nor3     R1             nA S/L D6L    @8T
+rB      nor3     R2             nB S/L D6L    @8V
+rC      nor3     R3             nC S/L D6L    @8X
+rD      nor3     R4             nD S/L D6L    @8Z
+rE      nor3     R5             nE S/L D6L    @8AB
+rF      nor3     R6             nF S/L D6L    @8AD
+rG      nor3     R7             nG S/L D6L    @8AF
+rH      nor3     R8             nH S/L D6L    @8AH
+Q1      dff      Q1             VCC ~SCLK R1  @10T  D tied to '1'
+Q2      dff      Q2             Q1  ~SCLK R2  @10V
+Q3      dff      Q3             Q2  ~SCLK R3  @10X
+Q4      dff      Q4             Q3  ~SCLK R4  @10Z
+Q5      dff      Q5             Q4  ~SCLK R5  @10AB
+Q6      dff      Q6             Q5  ~SCLK R6  @10AD
+Q7      dff      Q7             Q6  ~SCLK R7  @10AF
+Q8      dff      Q8             Q7  ~SCLK R8  @10AH
+
+# ---- character latch NQ11-NQ18 (rows 13-16, columns U-AK): D-type latches, inverted outputs ----
+# Inputs checked: NQ11 D0, NQ12 D1, NQ13 D2, NQ14 D3, NQ15 D4, NQ16 D5. Latch clock LCLK is driven by two R/3
+# inverters in parallel (rows 18-19, columns AE and AG) from LCLKn.
+lck1    inv      LCLK           LCLKn         @18AE  R/3
+lck2    inv      LCLK           LCLKn         @18AG  R/3 (in parallel with lck1)
+NQ11    dlatch   NQ11           D0 ~LCLK      @14U   output inverted
+NQ12    dlatch   NQ12           D1 ~LCLK      @14X
+NQ13    dlatch   NQ13           D2 ~LCLK      @14AA
+NQ14    dlatch   NQ14           D3 ~LCLK      @14AD
+NQ15    dlatch   NQ15           D4 ~LCLK      @14AG?
+NQ16    dlatch   NQ16           D5 ~LCLK      @14AJ?
+Q17     dlatch   Q17            n_Q17D ~LCLK  @14AL  true output; D from a horizontal at row 13 (to be traced: D6 or D6L)
+NQ18    dlatch   NQ18           D7 ~LCLK      @14AN  D7 = the inverse-video bit (to be confirmed)
+i17     inv      n_12AO         Q17           @12AO  R/3
+vnor    nor2     n_13AS         n_12AO NQ18   @13AS
+Q32     dff      Q32            n_13AS ~SCLK? @13AU  clock from the column AH vertical (to be confirmed)
+vor     or2      N.VIDEO?       Q8 Q32        @13AX  (to be confirmed)
