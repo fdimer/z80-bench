@@ -1,0 +1,64 @@
+# ZX81 ULA 2C184, gate-level netlist transcribed from Ferranti drawing LD6532/ULA2C184/1 issue 1 (7/4/81).
+# Format: see README.md. Grid squares are row then column, as printed on the drawing's edges.
+
+# ---- power ----
+VCC     pin_in   VCC            PN40   @1A
+GND     pin_in   GND            PN34   @37A
+
+# ---- data pins D0-D7: 16K pull-up, then an emitter-follower input buffer ----
+# The pin node itself (nDn) is also driven by the keyboard and port outputs (open collector, rows 12-19).
+pD0     pin_io   nD0            PN32   @3B   pullup=16k
+pD1     pin_io   nD1            PN30   @4B   pullup=16k
+pD2     pin_io   nD2            PN28   @5B   pullup=16k
+pD3     pin_io   nD3            PN26   @6B   pullup=16k
+pD4     pin_io   nD4            PN24   @7B   pullup=16k
+pD5     pin_io   nD5            PN23   @8B   pullup=16k
+pD6     pin_io   nD6            PN21   @9B   pullup=16k
+pD7     pin_io   nD7            PN19   @10B  pullup=16k
+bD0     buf_ef   D0             nD0    @3N
+bD1     buf_ef   D1             nD1    @4N
+bD2     buf_ef   D2             nD2    @5N
+bD3     buf_ef   D3             nD3    @6N
+bD4     buf_ef   D4             nD4    @7N
+bD5     buf_ef   D5             nD5    @8N
+bD6     buf_ef   D6             nD6    @9N
+bD7     buf_ef   D7             nD7    @10N
+
+# ---- other input pins (16K pull-up, emitter-follower buffer) ----
+pKB0    pin_in   nKB0           PN33   @12B  pullup=16k
+pKB1    pin_in   nKB1           PN31   @13B  pullup=16k
+pKB2    pin_in   nKB2           PN29   @14B  pullup=16k
+pKB3    pin_in   nKB3           PN27   @15B  pullup=16k
+pKB4    pin_in   nKB4           PN25   @16B  pullup=16k
+pUSA    pin_in   nUSA           PN22   @17B  pullup=16k
+pTAPE   pin_in   nTAPE          PN20   @18B  series=400R clamp=diode-to-GND divider=5k-to-VS
+pOSC    osc      OSC            PN35   @21B  ceramic resonator
+pMREQ   pin_in   nMREQ          PN9    @23B  pullup=16k
+pM1     pin_in   nM1            PN10   @24B  pullup=16k
+pA15    pin_in   nA15           PN18   @26B  pullup=16k
+pHALT   pin_in   nHALT          PN17   @27B  pullup=16k
+pA14    pin_in   nA14           PN11   @29B  pullup=16k
+pWR     pin_in   nWR            PN8    @32B  pullup=16k
+pIORQ   pin_in   nIORQ          PN7    @34B  pullup=16k
+pRD     pin_in   nRD            PN6    @36B  pullup=16k
+bKB0    buf_ef   KB0            nKB0   @12F  note=(3VBE)
+bKB1    buf_ef   KB1            nKB1   @13F  note=(3VBE)
+bKB2    buf_ef   KB2            nKB2   @14F  note=(3VBE)
+bKB3    buf_ef   KB3            nKB3   @15F  note=(3VBE)
+bKB4    buf_ef   KB4            nKB4   @16F  note=(3VBE)
+bUSA    buf_ef   USA            nUSA   @17G
+iTAPE   inv      TAPE           nTAPE  @18G  ?buffer drawn with output circle
+bMREQ   buf_ef   N.MREQ         nMREQ  @23F
+bM1     buf_ef   N.M1           nM1    @24F
+bA15    buf_ef   A15            nA15   @26F
+bHALT   buf_ef   N.HALT         nHALT  @27F
+bA14    buf_ef   A14            nA14   @29F
+bWR     buf_ef   N.WR           nWR    @32F
+bIORQ   buf_ef   N.IORQ         nIORQ  @34F
+bRD     buf_ef   N.RD           nRD    @36F
+
+# ---- output pins ----
+# PN14 N.Ø (clock to the Z80, row 2), PN15 N.NMI (row 5, open collector with 5K to VCC), PN16 TV/TAPE (row 10,
+# 3-level output from N.SYNC and N.VIDEO), PN36-39 and PN1-2 A3'-A8' (rows 12-17), PN5/4/3 A0'-A2' (rows 21-23),
+# PN12 RAM N.CS and PN13 ROM N.CS (rows 30-32, RTL stages "see cct diagram").
+# (gates to follow, region by region)
