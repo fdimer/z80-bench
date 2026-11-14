@@ -10,6 +10,8 @@ const core = `const ULA_CORE = {\n  width: ${JSON.stringify(M.width)},\n  kind: 
 let ver = 'unknown'; try { ver = execSync('git log -1 --format=%h\\ %cs', { cwd: __dirname }).toString().trim(); } catch (e) {}
 let page = read('page.src.html').replace(/\/\*INCLUDE:([^*]+)\*\//g, (_, f) => { const s = read(f); if (s.includes('</script')) throw new Error(f + ' contains a script end tag'); return '\n' + s; })
   .replace('/*CORE*/', () => core).replace('/*NET*/', () => JSON.stringify(read('2c210.net'))).replace('__VERSION__', ver);
-fs.writeFileSync(here('zx81-ula.html'), '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n</head>\n<body style="margin:0">\n' + page + '</body>\n</html>\n');
+const cut = page.indexOf('</style>') + 8;      // the title, fonts and style go in the head of the standalone page
+fs.writeFileSync(here('zx81-ula.html'), '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<meta name="description" content="A ZX81 run from the gate-level logic of its Ferranti ULA, for testing the ULA against real programs. Non-commercial use only.">\n'
+  + page.slice(0, cut) + '\n</head>\n<body style="margin:0">\n' + page.slice(cut) + '</body>\n</html>\n');
 if (process.argv[2]) fs.writeFileSync(process.argv[2], page);
 console.log('wrote ula/zx81-ula.html,', page.length, 'bytes; design version', ver);

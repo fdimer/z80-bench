@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body style="margin:0">
+<meta name="description" content="A ZX81 run from the gate-level logic of its Ferranti ULA, for testing the ULA against real programs. Non-commercial use only.">
 <title>ZX81 ULA Test Bench</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;600&display=swap">
@@ -62,6 +61,9 @@ a { color: var(--accent); }
 footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 8px; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 </style>
+</head>
+<body style="margin:0">
+
 
 <div class="wrap">
   <header>
@@ -128,7 +130,7 @@ footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; fl
   </section>
 
   <footer>
-    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6679/ULA2C210/1 (12 January 1982) and the cell circuits ULA 2C158/2, from the Ferranti archive catalogued in 2026 by Happy Little Diodes. The netlist, the Verilog and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/zx81-ULA/ula">zx81-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">9e3f0e2 2026-11-14</span>.</p>
+    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6679/ULA2C210/1 (12 January 1982) and the cell circuits ULA 2C158/2, from the Ferranti archive catalogued in 2026 by Happy Little Diodes. The netlist, the Verilog and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/zx81-ULA/ula">zx81-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">1df6be7 2026-11-14</span>.</p>
     <p class="small"><b>Terms of use.</b> The archive's documents are for preserving material of historical interest and for non-commercial, educational and archival research only; commercial use of them or their contents, including in connection with the manufacture, marketing or sale of goods, is prohibited by Sky UK Limited. This page, the netlist and the Verilog are made from those contents and carry the same terms: strictly not for commercial use of any kind. The code is under the PolyForm Noncommercial License 1.0.0.</p>
     <p class="small"><b>Not modelled.</b> The tape (LOAD is done by putting the program straight into RAM), a RAM pack's own address decoding (the 16K is one block on the ULA's RAM CS), and the analogue side of the pins. The Z80's timing follows the data sheet's shape with fixed delays.</p>
   </footer>
