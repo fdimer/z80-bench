@@ -38,6 +38,7 @@ teaching is the intended use.
 **Third-party designs.** The jjmz/ula-vhdl design compared below has no licence file, so it is only compared with, not
 copied: none of its code is in this repository.
 
+The archive and how it was found are presented in the Happy Little Diodes video: https://youtu.be/jiW3P1rJRMc
 If you appreciate the archive, its compiler asks that you consider supporting the Happy Little Diodes channel.
 
 Goal: a gate-for-gate description of the 2C210 accurate enough to build a replacement chip from; the 2C184 kept for
