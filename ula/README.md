@@ -94,7 +94,7 @@ T-states after the interrupt acknowledge begins, not 13, and lasts 16 T-states, 
 
 ## Verilog
 
-**`2c210_gates.v`** is the drawing in Verilog: 217 elements, the same delays as `sim.js` (estimates, not Ferranti's
+**`2c210_gates.v`** is the drawing in Verilog: 189 gates, flip-flops and pin drivers, with the same delays as `sim.js` (estimates, not Ferranti's
 figures). Like the chip it makes its latch, load and reset pulses from gate delays, so it is for a simulator. Read back
 into a netlist and run through the testbench (`ULA=gates.v`), it gives the same result as the netlist it came from.
 
