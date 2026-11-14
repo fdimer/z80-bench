@@ -144,7 +144,7 @@ vid     nor2     VID            VY VZ         @13AX  ok210; R/2. VID = XNOR(Q8, 
 
 # ---- line counter Q21-Q28 (rows 4-6, columns AN-BB): ripple toggle stages, each clocked on the falling edge of
 # the previous stage's true output; all reset together by CRES (row 6.5). Inverted outputs marked n.
-Q21     tff      Q21 Q21n       ~CCLK CRES    @5AN   clock source to be traced (rows 6-8, columns AL-AN: two inverter pairs)  ok210
+Q21     tff      Q21 Q21n       ~CCLK CRES    @5AN   ok210; CCLK: the clock (column AK) delayed by four inverters
 Q22     tff      Q22 Q22n       ~Q21 CRES     @5AQ  ok210
 Q23     tff      Q23 Q23n       ~Q22 CRES     @5AS  ok210
 Q24     tff      Q24 Q24n       ~Q23 CRES     @5AV  ok210
@@ -172,7 +172,7 @@ ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output  ok
 # ---- clock: oscillator, Q19, the counter clock (rows 17-25, columns N-AL) ----
 oscb    inv      OSCn           OSC           @21E   inverter after the oscillator cell and a cross-under
 Q19     tff      Q19 Q19n       ~OSCn VCC     @21R   ok210; R/2 cell; clocked from the oscillator line; no reset drawn; Q19 = 3.25 MHz
-# CLKSRC (the line that goes up column AK to row 2 and right to the N.PHI output) is Q19's true output (row 21).
+# CLKSRC (the line that goes up column AK to row 2 and right to the N.PHI output) is Q19's true output (row 21). ok210
 alias   CLKSRC   Q19
 cc1     inv      n_cc1          Q19           @9AL   four inverters in series delay Q19 into the counter clock  ok210
 cc2     inv      n_cc2          n_cc1         @9AN  ok210
