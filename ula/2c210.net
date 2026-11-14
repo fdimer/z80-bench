@@ -269,3 +269,17 @@ vbi     inv      N.VIDEO        n_vb          @10BC  ok210; R/2. The 2C210 blank
 # 2. Rows 9-10, columns AZ-BB: N.VIDEO now comes from a NOR2 (one input from the row 13 video NOR, R/2, the other from
 #    above) through an R/2 inverter, where the 2C184 goes more directly: the 2C210 gates the picture with a second signal
 #    (probably blanking during sync).
+
+# ---- port decode and the NMI on/off latch (rows 33-37, columns AR-AX), 2C210 as drawn ----
+# Three NOR3 gates take lines from the row 31-32 bus (A0in, A1in, IOWR, IOSEL and others; exact assignment to be traced).
+pd1     nor3     PD1            P1a P1b P1c   @34AS  ok210; output right to column AU and up (taken as the keyboard read enable EN, to be confirmed)
+pd2     nor3     PD2            P2a P2b P2c   @35AS  ok210; sets the latch (taken as OUT with A0 low: NMI on)
+pd3     nor3     PD3            P3a P3b P3c   @37AS  ok210; resets the latch (taken as OUT with A1 low: NMI off)
+nl1     nor2     NMION          PD2 NMIOFF    @35AW  ok210; cross-coupled
+nl2     nor2     NMIOFF         PD3 NMION     @37AW  ok210; NMIOFF runs right to column BC and up to the NMI gate (nm2)
+
+# ---- memory select outputs (rows 30-32, columns BE-BJ): "see cct diagram" (RTL stages and totem-pole outputs) ----
+rmi     inv_rtl  RAMCSi         RAMSELn       @30BF  ok210; RTL; input from the row 30 line (the RAM select logic, via an inverter at 30AJ)
+rmo     pin_tp   RAM.N.CS       RAMCSi        @30BI  ok210; PN12
+rom     nor2_rtl ROMCSi         ROMLINE RAMCSi   @31BF  ok210; RTL; ROMLINE: the row 31 line from the left
+romo    pin_tp   ROM.N.CS       ROMCSi        @31BI  ok210; PN13
