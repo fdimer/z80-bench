@@ -131,15 +131,16 @@ NQ13    dlatch   NQ13           D2 ~LCLK      @14AA
 NQ14    dlatch   NQ14           D3 ~LCLK      @14AD
 NQ15    dlatch   NQ15           D4 ~LCLK      @14AG?
 NQ16    dlatch   NQ16           D5 ~LCLK      @14AJ?
-Q17     dlatch   Q17            n_Q17D ~LCLK  @14AL  true output; D from a horizontal at row 13 (to be traced: D6 or D6L)
-NQ18    dlatch   NQ18           D7 ~LCLK      @14AN  D7 = the inverse-video bit (to be confirmed)
-# video (rows 12-15, columns AL-AT), 2C210 as drawn: Q32 holds the inverse-video bit; four NORs make VID = XNOR(SV, Q32)
-q32d    nor2     n_q32d         QA QB         @13AM  ok210; QA (row 13.3) and QB (row 13.6) from the left (2C184: ~Q17 and NQ18)
-Q32     dff      Q32            n_q32d ~QCK VCC   @13AP  ok210; QCK from the left (row 14); no reset drawn
-vx      nor2     VX             SV Q32        @13AR  ok210; SV: row 12 line from column AL (the shift register output, to be confirmed Q8)
-vy      nor2     VY             SV VX         @12AU  ok210
+Q17     dlatch   Q17            D6 ~LCLK      @14AL  ok210; true output; D from the row 13.9 line from the left (taken as D6, to be confirmed)
+d6l     inv      D6L            Q17           @12AN  ok210; R/3; its output also runs up column AN to the shift register's D6L line
+NQ18    dlatch   NQ18           D7 ~LCLK      @14AN  ok210; D from the row 11.4 line (D7)
+# video (rows 12-15, columns AL-AT), 2C210 as drawn: Q32 holds the inverse-video bit; four NORs make VID = XNOR(Q8, Q32)
+q32d    nor2     n_q32d         D6L NQ18      @13AM  ok210
+Q32     dff      Q32            n_q32d ~QCK VCC   @13AP  ok210; QCK: the column AN vertical, row 14 (to be traced); no reset drawn
+vx      nor2     VX             Q8 Q32        @13AR  ok210; SV = Q8 (Q8's output runs right to column AM and down)
+vy      nor2     VY             Q8 VX         @12AU  ok210
 vz      nor2     VZ             VX Q32        @14AU  ok210
-vid     nor2     VID            VY VZ         @13AX  ok210; R/2. VID = XNOR(SV, Q32)
+vid     nor2     VID            VY VZ         @13AX  ok210; R/2. VID = XNOR(Q8, Q32)
 
 # ---- line counter Q21-Q28 (rows 4-6, columns AN-BB): ripple toggle stages, each clocked on the falling edge of
 # the previous stage's true output; all reset together by CRES (row 6.5). Inverted outputs marked n.
