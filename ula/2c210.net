@@ -191,8 +191,9 @@ sck     inv      SCLK           DA0           @16N   ok210; R/3; output up colum
 dA1     nor2     DA1            DA0 DA0       @17P  ok210
 dA2     nor2     DA2            DA1 DA1       @17S  ok210
 dA3     nor2     DA3            DA2 DA2       @17U  ok210
-lckn    nor4     LCLKn          T17W DA3 R18O Q19   @18V   ok210; R/3; T17W: column W from above; R18O: row 18 line from the left (to be traced)
-lk2     nor4     LK2            LCLKn L186 L189 L192   @18AE  ok210; R/3, 2C210 only; inputs: LCLKn and three lines from the left (rows 18.6, 18.9, 19.2, to be traced); output loops down to row 19.8 and back left (to be traced)
+lckn    nor4     LCLKn          DA1 DA3 R18O Q19   @18V   ok210; R/3; DA1 via row 16.3; R18O: the row 18.3 line from column O, which comes up from below (to be traced)
+i19     inv      n_i19          R19           @19T   ok210; R19: column R from above joined to the row 19.1 line from column O, which comes up from below (to be traced)
+lk2     nor3     LK2            LCLKn R18O n_i19   @18AE  ok210; R/3, 2C210 only; output down to row 19.8 and left (destination to be traced)
 dB1     nor2     DB1            Q19n Q19n     @21U  ok210
 dB2     nor2     DB2            DB1 DB1       @21X  ok210
 dB3     nor2     DB3            DB2 DB2       @21AA  ok210
