@@ -40,7 +40,7 @@ class Zx81Ula {
     for (const p of ['nMREQ', 'nM1', 'nRD', 'nWR', 'nIORQ', 'nHALT']) u.set(p, 1);
     this.adv(3000); if (this.r1 === null) throw new Error('the ULA puts out no clock');
     this.T = Math.floor((this.u.t - this.r1) / this.P2) + 3;       // the T-state the next cycle starts in (CLK rises at rise(T))
-    this.cpu = new Z80(this); this.done = 0; this.lastA = 0xFFFF;
+    this.cpu = new Z80(this); this.done = 0; this.lastA = 0xFFFF; this.tape = null;
   }
   rise(k) { return this.r1 + (k - 1) * this.P2; }
   fall(k) { return this.rise(k) + this.OSC; }
@@ -152,13 +152,17 @@ class Zx81Ula {
   // one instruction. NMI: its falling edge, if it came before the last T-state began. INT: A6, as that T-state begins.
   step() {
     const cpu = this.cpu;
+    // LOAD: the tape is not modelled; the ROM's byte reader (034Ch) is replaced, as in zx81fast.js
+    if (cpu.pc === 0x034C && this.tape && !cpu.halted && this.rom[0x34C] === 0x0E && this.rom[0x207] === 0x21) {
+      this.loadP(this.tape); this.tape = null; cpu.sp = (cpu.sp + 2) & 0xFFFF; cpu.pc = 0x0207;
+    }
     if (this.nmiAt !== null && this.nmiAt <= this.rise(this.T - 1)) { cpu.nmiPending = true; this.nmiAt = null; this.nmis++; }
     cpu.intLine = !(this.lastA & 0x40);
     this.done = 0; cpu.step(); this.flush();
   }
   run(tStates) { const end = this.T + tStates; while (this.T < end) this.step(); }
   key(name, down) { for (let r = 0; r < 8; r++) { const b = ZX81ULA_KEYS[r].indexOf(name); if (b >= 0) { this.keys[r] = down ? this.keys[r] | 1 << b : this.keys[r] & ~(1 << b); return true; } } return false; }
-  // a .p file: RAM from 4009h. Put in once the ROM is waiting for a key; the display file comes with it.
-  loadP(b) { this.ram.set(b.subarray(0, Math.min(b.length, this.ramSize - 9)), 9); }
+  // a .p file is RAM from 4009h up to E_LINE (which it holds at 4014h)
+  loadP(b) { const n = Math.min(b.length, (b[0x0B] | b[0x0C] << 8) - 0x4009, this.ramSize - 9); this.ram.set(b.subarray(0, n), 9); }
 }
 if (typeof module !== 'undefined') module.exports = { Zx81Ula, ZX81ULA_KEYS };

@@ -1,0 +1,1302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0">
+<title>ZX81 ULA Test Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* layout: a bench. Left, the TV and what you do to the machine; right, the instruments; below, the logic analyser. */
+:root {
+  --bg: #f3f5f2; --panel: #ffffff; --ink: #1b2420; --muted: #5d6b64; --line: #d3dad5;
+  --accent: #0b6e4f; --accent-ink: #ffffff; --ok: #1d7a46; --warn: #a65f00; --bad: #b3261e;
+  --trace: #0b6e4f; --trace2: #8a4b00; --grid: #e4e9e5; --tv: #c9cdc8;
+  --f-head: "Space Grotesk", "Segoe UI", system-ui, sans-serif; --f-body: Inter, "Segoe UI", system-ui, sans-serif; --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121715; --panel: #1b221f; --ink: #e6ece8; --muted: #9aa8a0; --line: #303a35;
+  --accent: #4fc79a; --accent-ink: #06231a; --ok: #6ad18f; --warn: #e3a54a; --bad: #f08a80;
+  --trace: #4fc79a; --trace2: #e3a54a; --grid: #26302b; --tv: #3a423e; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121715; --panel: #1b221f; --ink: #e6ece8; --muted: #9aa8a0; --line: #303a35;
+  --accent: #4fc79a; --accent-ink: #06231a; --ok: #6ad18f; --warn: #e3a54a; --bad: #f08a80;
+  --trace: #4fc79a; --trace2: #e3a54a; --grid: #26302b; --tv: #3a423e; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 20px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 18px; }
+h1 { font: 600 26px/1.15 var(--f-head); margin: 0; text-wrap: balance; }
+h2 { font: 600 13px/1.2 var(--f-head); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+p { margin: 0; } .lede { color: var(--muted); max-width: 68ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, select, .filebtn { font: 500 14px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 6px 11px; cursor: pointer; }
+button:hover, .filebtn:hover, select:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible, .filebtn:focus-within, canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.tvbox { background: var(--tv); border-radius: 4px; padding: 10px; }
+#tv { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #808080; aspect-ratio: 414 / 312; max-width: 100%; }
+.msg { font-size: 14px; color: var(--muted); } .msg.err { color: var(--bad); } .msg.ok { color: var(--ok); }
+dl.meters { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-variant-numeric: tabular-nums; }
+dl.meters dt { color: var(--muted); } dl.meters dd { margin: 0; font-family: var(--f-mono); font-size: 13.5px; text-align: right; overflow-wrap: anywhere; }
+.pill { display: inline-block; font: 600 12px var(--f-mono); padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); } .pill.idle { color: var(--muted); }
+.kbd { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.kbd button { padding: 7px 0; font: 600 12.5px var(--f-mono); min-width: 0; overflow: hidden; }
+.kbd button.down { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.scope { overflow-x: auto; } #wave { display: block; }
+.small { font-size: 13px; color: var(--muted); max-width: 80ch; }
+textarea { width: 100%; box-sizing: border-box; font: 12.5px/1.45 var(--f-mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; min-height: 150px; }
+a { color: var(--accent); }
+footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>ZX81 ULA Test Bench</h1>
+    <p class="lede">A ZX81 whose ULA is the real logic, not a model of its behaviour: the Ferranti 2C210 transcribed gate for gate from its logic diagram, or the single-clock design made from it for an FPGA. The Z80 and the picture get everything from the ULA's pins. Load the ROM, run programs, and report anything a real ZX81 would not do.</p>
+  </header>
+
+  <div class="bench">
+    <section class="panel" aria-label="The machine">
+      <div class="row">
+        <label class="filebtn" for="romFile">Load ROM…<input type="file" id="romFile"></label>
+        <label class="filebtn" for="pFile">Load program (.p)…<input type="file" id="pFile" accept=".p,.P,.81"></label>
+        <button id="btnRun" class="primary" type="button" disabled>Run</button>
+        <button id="btnReset" type="button" disabled>Reset</button>
+      </div>
+      <p class="msg" id="msg">Choose a ZX81 ROM image (8K, 8192 bytes). The ROM is Sinclair's and is not part of this page; it stays in your browser.</p>
+      <div class="tvbox"><canvas id="tv" width="414" height="312" tabindex="0" aria-label="ZX81 picture. Click here and type."></canvas></div>
+      <div class="kbd" id="kbd" aria-label="ZX81 keyboard"></div>
+      <p class="small">Click the picture and type, or use the keys. SHIFT on the key row latches for one key. Backspace is SHIFT+0 (RUBOUT). To load a program, choose a .p file: the page then types LOAD "" for you.</p>
+    </section>
+
+    <section class="panel" aria-label="Instruments">
+      <h2>ULA</h2>
+      <div class="row">
+        <label for="engine">Logic</label>
+        <select id="engine">
+          <option value="fast">Synchronous design (the FPGA Verilog)</option>
+          <option value="net">Gate-level netlist (2C210, slow)</option>
+        </select>
+      </div>
+      <p class="small" id="engNote"></p>
+      <dl class="meters">
+        <dt>Speed</dt><dd id="mSpeed">–</dd>
+        <dt>ZX81 time run</dt><dd id="mTime">–</dd>
+        <dt>Frames (vertical syncs)</dt><dd id="mFrames">–</dd>
+        <dt>NMIs taken</dt><dd id="mNmi">–</dd>
+        <dt>Interrupts</dt><dd id="mInt">–</dd>
+        <dt>Wait states</dt><dd id="mWait">–</dd>
+        <dt>Program counter</dt><dd id="mPc">–</dd>
+      </dl>
+      <h2>Picture check</h2>
+      <p><span class="pill idle" id="pcPill">waiting</span> <span id="pcText" class="small"></span></p>
+      <p class="small">Every half second the dots on the ULA's TV pin are read back as characters and compared with the display file in RAM, using the ROM's own font. It only applies to ordinary character screens, and a screen that is being redrawn can differ for a moment.</p>
+      <h2>Report</h2>
+      <div class="row"><button id="btnReport" type="button">Write report</button><button id="btnCopy" type="button">Copy</button></div>
+      <textarea id="report" readonly aria-label="Test report" placeholder="A summary of this run, to paste into an issue or an email."></textarea>
+    </section>
+  </div>
+
+  <section class="panel" aria-label="Logic analyser">
+    <div class="row">
+      <h2>Logic analyser</h2>
+      <button id="btnStepI" type="button" disabled>Step one instruction</button>
+      <button id="btnStepF" type="button" disabled>Step one frame</button>
+      <label for="zoom">Show</label>
+      <select id="zoom"><option value="64">16 T-states</option><option value="160" selected>40 T-states</option><option value="480">120 T-states</option><option value="1656">2 lines</option></select>
+      <label for="back">Back</label><input type="range" id="back" min="0" max="1000" value="0">
+      <button id="btnVcd" type="button">Copy as VCD</button>
+    </div>
+    <div class="scope"><canvas id="wave" width="1100" height="430" aria-label="Waveforms of the ULA's pins"></canvas></div>
+    <p class="small" id="waveNote">The last 16,000 T-states of the ULA's pins and a few inside signals, one sample per period of its 13 MHz clock (four to a T-state). Recorded with the synchronous design; pause to read it. VCD is the format logic-analyser viewers such as GTKWave open.</p>
+  </section>
+
+  <footer>
+    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6679/ULA2C210/1 (12 January 1982) and the cell circuits ULA 2C158/2, from the Ferranti archive catalogued in 2026 by Happy Little Diodes. The netlist, the Verilog and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/zx81-ULA/ula">zx81-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">c0314e6 2026-11-14</span>.</p>
+    <p class="small"><b>Terms of use.</b> The archive's documents are for preserving material of historical interest and for non-commercial, educational and archival research only; commercial use of them or their contents, including in connection with the manufacture, marketing or sale of goods, is prohibited by Sky UK Limited. This page, the netlist and the Verilog are made from those contents and carry the same terms: strictly not for commercial use of any kind. The code is under the PolyForm Noncommercial License 1.0.0.</p>
+    <p class="small"><b>Not modelled.</b> The tape (LOAD is done by putting the program straight into RAM), a RAM pack's own address decoding (the 16K is one block on the ULA's RAM CS), and the analogue side of the pins. The Z80's timing follows the data sheet's shape with fixed delays.</p>
+  </footer>
+</div>
+
+<script>
+// ---- Z80 CPU core with machine-cycle bus logging ----
+const FS = 0x80, FZ = 0x40, F5 = 0x20, FH = 0x10, F3 = 0x08, FPV = 0x04, FN = 0x02, FC = 0x01;
+const SZ53 = new Uint8Array(256), SZ53P = new Uint8Array(256);
+for (let i = 0; i < 256; i++) {
+  SZ53[i] = (i & 0xA8) | (i ? 0 : FZ);
+  let p = i; p ^= p >> 4; p ^= p >> 2; p ^= p >> 1;
+  SZ53P[i] = SZ53[i] | ((p & 1) ? 0 : FPV);
+}
+const sgn = v => (v & 0x80) ? v - 256 : v;
+
+class Z80 {
+  constructor(bus) {
+    this.bus = bus;
+    this.log = true;
+    this.cyc = [];
+    this.nmiPending = false;
+    this.intLine = false;
+    this.intVector = 0xFF;
+    this.reset();
+  }
+  reset() {
+    this.a = 0xFF; this.f = 0xFF; this.b = this.c = this.d = this.e = this.h = this.l = 0;
+    this.a_ = this.f_ = this.b_ = this.c_ = this.d_ = this.e_ = this.h_ = this.l_ = 0;
+    this.ix = this.iy = 0xFFFF; this.sp = 0xFFFF; this.pc = 0; this.i = 0; this.r = 0;
+    this.iff1 = this.iff2 = 0; this.im = 0; this.halted = false; this.eiDelay = false;
+    this.nmiPending = false;
+  }
+  snapshot() {
+    const s = {};
+    for (const k of ['a','f','b','c','d','e','h','l','a_','f_','b_','c_','d_','e_','h_','l_','ix','iy','sp','pc','i','r','iff1','iff2','im','halted']) s[k] = this[k];
+    return s;
+  }
+  // pairs
+  get bc() { return (this.b << 8) | this.c; } set bc(v) { this.b = (v >> 8) & 0xFF; this.c = v & 0xFF; }
+  get de() { return (this.d << 8) | this.e; } set de(v) { this.d = (v >> 8) & 0xFF; this.e = v & 0xFF; }
+  get hl() { return (this.h << 8) | this.l; } set hl(v) { this.h = (v >> 8) & 0xFF; this.l = v & 0xFF; }
+  get af() { return (this.a << 8) | this.f; } set af(v) { this.a = (v >> 8) & 0xFF; this.f = v & 0xFF; }
+
+  // ---- bus cycles ----
+  fetch() {
+    // bus.fetch (optional) lets a machine change what an opcode fetch returns, e.g. the ZX80 forcing NOPs
+    const a = this.pc, v = this.bus.fetch ? this.bus.fetch(a) : this.bus.read(a);
+    if (this.log) this.cyc.push({ k: 'M1', a, d: v, rf: (this.i << 8) | this.r });
+    this.pc = (a + 1) & 0xFFFF;
+    this.r = (this.r & 0x80) | ((this.r + 1) & 0x7F);
+    return v;
+  }
+  mr(a) { a &= 0xFFFF; const v = this.bus.read(a); if (this.log) this.cyc.push({ k: 'MR', a, d: v }); return v; }
+  mw(a, v) { a &= 0xFFFF; v &= 0xFF; this.bus.write(a, v); if (this.log) this.cyc.push({ k: 'MW', a, d: v }); }
+  imm() { const v = this.mr(this.pc); this.pc = (this.pc + 1) & 0xFFFF; return v; }
+  imm16() { const lo = this.imm(); return (this.imm() << 8) | lo; }
+  idle(n) { if (this.log) this.cyc.push({ k: 'ID', n }); }
+  ioIn(p) { p &= 0xFFFF; const v = this.bus.input(p) & 0xFF; if (this.log) this.cyc.push({ k: 'IR', a: p, d: v }); return v; }
+  ioOut(p, v) { p &= 0xFFFF; v &= 0xFF; this.bus.output(p, v); if (this.log) this.cyc.push({ k: 'IW', a: p, d: v }); }
+  push(v) { this.sp = (this.sp - 1) & 0xFFFF; this.mw(this.sp, v >> 8); this.sp = (this.sp - 1) & 0xFFFF; this.mw(this.sp, v); }
+  pop() { const lo = this.mr(this.sp); this.sp = (this.sp + 1) & 0xFFFF; const hi = this.mr(this.sp); this.sp = (this.sp + 1) & 0xFFFF; return (hi << 8) | lo; }
+
+  // ---- register access with IX/IY substitution ----
+  getR(i, xy) {
+    switch (i) {
+      case 0: return this.b; case 1: return this.c; case 2: return this.d; case 3: return this.e;
+      case 4: return xy === 1 ? this.ix >> 8 : xy === 2 ? this.iy >> 8 : this.h;
+      case 5: return xy === 1 ? this.ix & 0xFF : xy === 2 ? this.iy & 0xFF : this.l;
+      case 7: return this.a;
+    }
+  }
+  setR(i, v, xy) {
+    v &= 0xFF;
+    switch (i) {
+      case 0: this.b = v; break; case 1: this.c = v; break; case 2: this.d = v; break; case 3: this.e = v; break;
+      case 4: if (xy === 1) this.ix = (this.ix & 0xFF) | (v << 8); else if (xy === 2) this.iy = (this.iy & 0xFF) | (v << 8); else this.h = v; break;
+      case 5: if (xy === 1) this.ix = (this.ix & 0xFF00) | v; else if (xy === 2) this.iy = (this.iy & 0xFF00) | v; else this.l = v; break;
+      case 7: this.a = v; break;
+    }
+  }
+  getHL(xy) { return xy === 1 ? this.ix : xy === 2 ? this.iy : this.hl; }
+  setHL(v, xy) { v &= 0xFFFF; if (xy === 1) this.ix = v; else if (xy === 2) this.iy = v; else this.hl = v; }
+  getRP(p, xy) { return p === 0 ? this.bc : p === 1 ? this.de : p === 2 ? this.getHL(xy) : this.sp; }
+  setRP(p, v, xy) { v &= 0xFFFF; if (p === 0) this.bc = v; else if (p === 1) this.de = v; else if (p === 2) this.setHL(v, xy); else this.sp = v; }
+  getRP2(p, xy) { return p === 3 ? this.af : this.getRP(p, xy); }
+  setRP2(p, v, xy) { if (p === 3) this.af = v & 0xFFFF; else this.setRP(p, v, xy); }
+  idxAddr(xy) {
+    if (!xy) return this.hl;
+    const d = sgn(this.imm()); this.idle(5);
+    return ((xy === 1 ? this.ix : this.iy) + d) & 0xFFFF;
+  }
+  cond(y) {
+    const f = this.f;
+    switch (y) {
+      case 0: return !(f & FZ); case 1: return !!(f & FZ); case 2: return !(f & FC); case 3: return !!(f & FC);
+      case 4: return !(f & FPV); case 5: return !!(f & FPV); case 6: return !(f & FS); case 7: return !!(f & FS);
+    }
+  }
+
+  // ---- ALU ----
+  add8(v, cy) {
+    const a = this.a, r = a + v + cy, r8 = r & 0xFF;
+    this.f = SZ53[r8] | ((a ^ v ^ r) & FH) | ((~(a ^ v) & (a ^ r) & 0x80) ? FPV : 0) | ((r >> 8) & FC);
+    this.a = r8;
+  }
+  sub8(v, cy, store) {
+    const a = this.a, r = a - v - cy, r8 = r & 0xFF;
+    const f = (r8 & 0x80) | (r8 ? 0 : FZ) | FN | ((a ^ v ^ r) & FH) | (((a ^ v) & (a ^ r) & 0x80) ? FPV : 0) | ((r & 0x100) ? FC : 0);
+    if (store) { this.f = f | (r8 & 0x28); this.a = r8; } else this.f = f | (v & 0x28);
+  }
+  alu(op, v) {
+    switch (op) {
+      case 0: this.add8(v, 0); break;
+      case 1: this.add8(v, this.f & FC); break;
+      case 2: this.sub8(v, 0, true); break;
+      case 3: this.sub8(v, this.f & FC, true); break;
+      case 4: this.a &= v; this.f = SZ53P[this.a] | FH; break;
+      case 5: this.a ^= v; this.f = SZ53P[this.a]; break;
+      case 6: this.a |= v; this.f = SZ53P[this.a]; break;
+      case 7: this.sub8(v, 0, false); break;
+    }
+  }
+  inc8(v) { const r = (v + 1) & 0xFF; this.f = (this.f & FC) | SZ53[r] | ((r & 0x0F) ? 0 : FH) | (r === 0x80 ? FPV : 0); return r; }
+  dec8(v) { const r = (v - 1) & 0xFF; this.f = (this.f & FC) | FN | SZ53[r] | ((v & 0x0F) ? 0 : FH) | (v === 0x80 ? FPV : 0); return r; }
+  rot(op, v) {
+    let r, c;
+    switch (op) {
+      case 0: c = v >> 7; r = ((v << 1) | c) & 0xFF; break;
+      case 1: c = v & 1; r = (v >> 1) | (c << 7); break;
+      case 2: c = v >> 7; r = ((v << 1) | (this.f & FC)) & 0xFF; break;
+      case 3: c = v & 1; r = (v >> 1) | ((this.f & FC) << 7); break;
+      case 4: c = v >> 7; r = (v << 1) & 0xFF; break;
+      case 5: c = v & 1; r = (v >> 1) | (v & 0x80); break;
+      case 6: c = v >> 7; r = ((v << 1) | 1) & 0xFF; break;
+      case 7: c = v & 1; r = v >> 1; break;
+    }
+    this.f = SZ53P[r] | c;
+    return r;
+  }
+  bit(y, v, src35) {
+    const t = v & (1 << y);
+    this.f = (this.f & FC) | FH | (t ? 0 : (FZ | FPV)) | (t & 0x80) | (src35 & 0x28);
+  }
+  add16(a, v) {
+    const r = a + v;
+    this.f = (this.f & (FS | FZ | FPV)) | (((a ^ v ^ r) >> 8) & FH) | ((r >> 8) & 0x28) | ((r >> 16) & FC);
+    return r & 0xFFFF;
+  }
+  adc16(v) {
+    const a = this.hl, r = a + v + (this.f & FC), r16 = r & 0xFFFF;
+    this.f = ((r16 >> 8) & 0xA8) | (r16 ? 0 : FZ) | (((a ^ v ^ r) >> 8) & FH) | ((~(a ^ v) & (a ^ r) & 0x8000) ? FPV : 0) | ((r >> 16) & FC);
+    this.hl = r16;
+  }
+  sbc16(v) {
+    const a = this.hl, r = a - v - (this.f & FC), r16 = r & 0xFFFF;
+    this.f = ((r16 >> 8) & 0xA8) | (r16 ? 0 : FZ) | (((a ^ v ^ r) >> 8) & FH) | (((a ^ v) & (a ^ r) & 0x8000) ? FPV : 0) | FN | ((r & 0x10000) ? FC : 0);
+    this.hl = r16;
+  }
+  daa() {
+    const a = this.a, f = this.f;
+    let corr = 0, c = f & FC;
+    if ((f & FH) || (a & 0x0F) > 9) corr |= 0x06;
+    if (c || a > 0x99) { corr |= 0x60; c = FC; }
+    let r, h;
+    if (f & FN) { h = ((f & FH) && (a & 0x0F) < 6) ? FH : 0; r = (a - corr) & 0xFF; }
+    else { h = ((a & 0x0F) > 9) ? FH : 0; r = (a + corr) & 0xFF; }
+    this.a = r; this.f = SZ53P[r] | h | (f & FN) | c;
+  }
+
+  // ---- one instruction (or interrupt response); returns machine-cycle log ----
+  step() {
+    this.cyc = [];
+    const blockInt = this.eiDelay; this.eiDelay = false;
+    if (this.nmiPending) {
+      this.nmiPending = false; this.halted = false;
+      this.iff1 = 0;
+      const a = this.pc, v = this.bus.read(a);
+      if (this.log) this.cyc.push({ k: 'M1', a, d: v, rf: (this.i << 8) | this.r });
+      this.r = (this.r & 0x80) | ((this.r + 1) & 0x7F);
+      this.idle(1); this.push(this.pc); this.pc = 0x0066;
+      this.lastEvent = 'NMI';
+      return this.cyc;
+    }
+    if (this.intLine && this.iff1 && !blockInt) {
+      this.halted = false; this.iff1 = this.iff2 = 0;
+      const vec = this.intVector & 0xFF;
+      if (this.log) this.cyc.push({ k: 'IA', a: this.pc, d: vec, rf: (this.i << 8) | this.r });
+      this.r = (this.r & 0x80) | ((this.r + 1) & 0x7F);
+      this.idle(1);
+      if (this.im === 2) {
+        this.push(this.pc);
+        const t = (this.i << 8) | vec;
+        const lo = this.mr(t), hi = this.mr(t + 1);
+        this.pc = (hi << 8) | lo;
+      } else if (this.im === 1) {
+        this.push(this.pc); this.pc = 0x0038;
+      } else {
+        // IM 0: supports an RST opcode placed on the data bus
+        this.push(this.pc); this.pc = ((vec & 0xC7) === 0xC7) ? (vec & 0x38) : 0x0038;
+      }
+      this.lastEvent = 'INT';
+      return this.cyc;
+    }
+    this.lastEvent = null;
+    if (this.halted) {
+      const a = this.pc, v = this.bus.read(a);
+      if (this.log) this.cyc.push({ k: 'M1', a, d: v, rf: (this.i << 8) | this.r, halt: true });
+      this.r = (this.r & 0x80) | ((this.r + 1) & 0x7F);
+      return this.cyc;
+    }
+    let op = this.fetch(), xy = 0;
+    while (op === 0xDD || op === 0xFD) { xy = op === 0xDD ? 1 : 2; op = this.fetch(); }
+    if (op === 0xCB) {
+      if (xy) {
+        const base = xy === 1 ? this.ix : this.iy;
+        const addr = (base + sgn(this.imm())) & 0xFFFF;
+        const o = this.mr(this.pc); this.pc = (this.pc + 1) & 0xFFFF; this.idle(2);
+        this.execCBIdx(o, addr);
+      } else this.execCB(this.fetch());
+    } else if (op === 0xED) this.execED(this.fetch());
+    else this.execMain(op, xy);
+    return this.cyc;
+  }
+
+  execMain(op, xy) {
+    const x = op >> 6, y = (op >> 3) & 7, z = op & 7, p = y >> 1, q = y & 1;
+    if (x === 0) {
+      switch (z) {
+        case 0:
+          if (y === 0) {}
+          else if (y === 1) { let t = this.a; this.a = this.a_; this.a_ = t; t = this.f; this.f = this.f_; this.f_ = t; }
+          else if (y === 2) { this.idle(1); const d = sgn(this.imm()); this.b = (this.b - 1) & 0xFF; if (this.b) { this.idle(5); this.pc = (this.pc + d) & 0xFFFF; } }
+          else if (y === 3) { const d = sgn(this.imm()); this.idle(5); this.pc = (this.pc + d) & 0xFFFF; }
+          else { const d = sgn(this.imm()); if (this.cond(y - 4)) { this.idle(5); this.pc = (this.pc + d) & 0xFFFF; } }
+          break;
+        case 1:
+          if (!q) this.setRP(p, this.imm16(), xy);
+          else { this.idle(7); this.setHL(this.add16(this.getHL(xy), this.getRP(p, xy)), xy); }
+          break;
+        case 2: {
+          if (!q) {
+            if (p === 0) this.mw(this.bc, this.a);
+            else if (p === 1) this.mw(this.de, this.a);
+            else if (p === 2) { const n = this.imm16(), v = this.getHL(xy); this.mw(n, v & 0xFF); this.mw(n + 1, v >> 8); }
+            else this.mw(this.imm16(), this.a);
+          } else {
+            if (p === 0) this.a = this.mr(this.bc);
+            else if (p === 1) this.a = this.mr(this.de);
+            else if (p === 2) { const n = this.imm16(); const lo = this.mr(n), hi = this.mr(n + 1); this.setHL((hi << 8) | lo, xy); }
+            else this.a = this.mr(this.imm16());
+          }
+          break;
+        }
+        case 3: this.idle(2); this.setRP(p, this.getRP(p, xy) + (q ? -1 : 1), xy); break;
+        case 4: case 5: {
+          if (y === 6) { const ad = this.idxAddr(xy); const v = this.mr(ad); this.idle(1); this.mw(ad, z === 4 ? this.inc8(v) : this.dec8(v)); }
+          else { const v = this.getR(y, xy); this.setR(y, z === 4 ? this.inc8(v) : this.dec8(v), xy); }
+          break;
+        }
+        case 6:
+          if (y === 6) {
+            if (xy) { const d = sgn(this.imm()); const n = this.imm(); this.idle(2); this.mw(((xy === 1 ? this.ix : this.iy) + d) & 0xFFFF, n); }
+            else this.mw(this.hl, this.imm());
+          } else this.setR(y, this.imm(), xy);
+          break;
+        case 7: {
+          const a = this.a, f = this.f;
+          switch (y) {
+            case 0: this.a = ((a << 1) | (a >> 7)) & 0xFF; this.f = (f & (FS | FZ | FPV)) | (this.a & 0x28) | (a >> 7); break;
+            case 1: this.a = ((a >> 1) | (a << 7)) & 0xFF; this.f = (f & (FS | FZ | FPV)) | (this.a & 0x28) | (a & 1); break;
+            case 2: this.a = ((a << 1) | (f & FC)) & 0xFF; this.f = (f & (FS | FZ | FPV)) | (this.a & 0x28) | (a >> 7); break;
+            case 3: this.a = ((a >> 1) | ((f & FC) << 7)) & 0xFF; this.f = (f & (FS | FZ | FPV)) | (this.a & 0x28) | (a & 1); break;
+            case 4: this.daa(); break;
+            case 5: this.a = a ^ 0xFF; this.f = (f & (FS | FZ | FPV | FC)) | FH | FN | (this.a & 0x28); break;
+            case 6: this.f = (f & (FS | FZ | FPV)) | FC | (a & 0x28); break;
+            case 7: this.f = (f & (FS | FZ | FPV)) | ((f & FC) ? FH : FC) | (a & 0x28); break;
+          }
+          break;
+        }
+      }
+    } else if (x === 1) {
+      if (y === 6 && z === 6) { this.halted = true; }
+      else if (y === 6) { const ad = this.idxAddr(xy); this.mw(ad, this.getR(z, 0)); }
+      else if (z === 6) { const ad = this.idxAddr(xy); this.setR(y, this.mr(ad), 0); }
+      else this.setR(y, this.getR(z, xy), xy);
+    } else if (x === 2) {
+      this.alu(y, z === 6 ? this.mr(this.idxAddr(xy)) : this.getR(z, xy));
+    } else {
+      switch (z) {
+        case 0: this.idle(1); if (this.cond(y)) this.pc = this.pop(); break;
+        case 1:
+          if (!q) this.setRP2(p, this.pop(), xy);
+          else if (p === 0) this.pc = this.pop();
+          else if (p === 1) {
+            let t;
+            t = this.b; this.b = this.b_; this.b_ = t; t = this.c; this.c = this.c_; this.c_ = t;
+            t = this.d; this.d = this.d_; this.d_ = t; t = this.e; this.e = this.e_; this.e_ = t;
+            t = this.h; this.h = this.h_; this.h_ = t; t = this.l; this.l = this.l_; this.l_ = t;
+          }
+          else if (p === 2) this.pc = this.getHL(xy);
+          else { this.idle(2); this.sp = this.getHL(xy); }
+          break;
+        case 2: { const n = this.imm16(); if (this.cond(y)) this.pc = n; break; }
+        case 3:
+          switch (y) {
+            case 0: this.pc = this.imm16(); break;
+            case 2: { const n = this.imm(); this.ioOut((this.a << 8) | n, this.a); break; }
+            case 3: { const n = this.imm(); this.a = this.ioIn((this.a << 8) | n); break; }
+            case 4: {
+              const lo = this.mr(this.sp), hi = this.mr(this.sp + 1); this.idle(1);
+              const v = this.getHL(xy); this.mw(this.sp + 1, v >> 8); this.mw(this.sp, v & 0xFF); this.idle(2);
+              this.setHL((hi << 8) | lo, xy); break;
+            }
+            case 5: { const t = this.de; this.de = this.hl; this.hl = t; break; }
+            case 6: this.iff1 = this.iff2 = 0; break;
+            case 7: this.iff1 = this.iff2 = 1; this.eiDelay = true; break;
+          }
+          break;
+        case 4: { const n = this.imm16(); if (this.cond(y)) { this.idle(1); this.push(this.pc); this.pc = n; } break; }
+        case 5:
+          if (!q) { this.idle(1); this.push(this.getRP2(p, xy)); }
+          else if (p === 0) { const n = this.imm16(); this.idle(1); this.push(this.pc); this.pc = n; }
+          break;
+        case 6: this.alu(y, this.imm()); break;
+        case 7: this.idle(1); this.push(this.pc); this.pc = y << 3; break;
+      }
+    }
+  }
+
+  execCB(op) {
+    const x = op >> 6, y = (op >> 3) & 7, z = op & 7;
+    if (z === 6) {
+      const ad = this.hl, v = this.mr(ad); this.idle(1);
+      if (x === 1) { this.bit(y, v, v); return; }
+      this.mw(ad, x === 0 ? this.rot(y, v) : x === 2 ? v & ~(1 << y) : v | (1 << y));
+      return;
+    }
+    const v = this.getR(z, 0);
+    if (x === 0) this.setR(z, this.rot(y, v), 0);
+    else if (x === 1) this.bit(y, v, v);
+    else if (x === 2) this.setR(z, v & ~(1 << y), 0);
+    else this.setR(z, v | (1 << y), 0);
+  }
+  execCBIdx(op, ad) {
+    const x = op >> 6, y = (op >> 3) & 7, z = op & 7;
+    const v = this.mr(ad); this.idle(1);
+    if (x === 1) { this.bit(y, v, ad >> 8); return; }
+    const r = x === 0 ? this.rot(y, v) : x === 2 ? v & ~(1 << y) : v | (1 << y);
+    this.mw(ad, r);
+    if (z !== 6) this.setR(z, r, 0);
+  }
+
+  execED(op) {
+    const x = op >> 6, y = (op >> 3) & 7, z = op & 7, p = y >> 1, q = y & 1;
+    if (x === 1) {
+      switch (z) {
+        case 0: { const v = this.ioIn(this.bc); this.f = (this.f & FC) | SZ53P[v]; if (y !== 6) this.setR(y, v, 0); break; }
+        case 1: this.ioOut(this.bc, y === 6 ? 0 : this.getR(y, 0)); break;
+        case 2: this.idle(7); if (!q) this.sbc16(this.getRP(p, 0)); else this.adc16(this.getRP(p, 0)); break;
+        case 3: {
+          const n = this.imm16();
+          if (!q) { const v = this.getRP(p, 0); this.mw(n, v & 0xFF); this.mw(n + 1, v >> 8); }
+          else { const lo = this.mr(n), hi = this.mr(n + 1); this.setRP(p, (hi << 8) | lo, 0); }
+          break;
+        }
+        case 4: { const v = this.a; this.a = 0; this.sub8(v, 0, true); break; }
+        case 5: this.pc = this.pop(); this.iff1 = this.iff2; break;
+        case 6: this.im = [0, 0, 1, 2, 0, 0, 1, 2][y]; break;
+        case 7:
+          switch (y) {
+            case 0: this.idle(1); this.i = this.a; break;
+            case 1: this.idle(1); this.r = this.a; break;
+            case 2: this.idle(1); this.a = this.i; this.f = (this.f & FC) | SZ53[this.a] | (this.iff2 ? FPV : 0); break;
+            case 3: this.idle(1); this.a = this.r; this.f = (this.f & FC) | SZ53[this.a] | (this.iff2 ? FPV : 0); break;
+            case 4: { const v = this.mr(this.hl); this.idle(4); this.mw(this.hl, ((this.a << 4) | (v >> 4)) & 0xFF); this.a = (this.a & 0xF0) | (v & 0x0F); this.f = (this.f & FC) | SZ53P[this.a]; break; }
+            case 5: { const v = this.mr(this.hl); this.idle(4); this.mw(this.hl, ((v << 4) | (this.a & 0x0F)) & 0xFF); this.a = (this.a & 0xF0) | (v >> 4); this.f = (this.f & FC) | SZ53P[this.a]; break; }
+          }
+          break;
+      }
+    } else if (x === 2 && z <= 3 && y >= 4) {
+      const inc = (y & 1) ? -1 : 1, rep = y >= 6;
+      if (z === 0) { // LDI/LDD/LDIR/LDDR
+        const v = this.mr(this.hl); this.mw(this.de, v); this.idle(2);
+        this.hl = this.hl + inc; this.de = this.de + inc; this.bc = this.bc - 1;
+        const n = (v + this.a) & 0xFF;
+        this.f = (this.f & (FS | FZ | FC)) | (this.bc ? FPV : 0) | (n & F3) | ((n & 0x02) ? F5 : 0);
+        if (rep && this.bc) { this.idle(5); this.pc = (this.pc - 2) & 0xFFFF; }
+      } else if (z === 1) { // CPI/CPD/CPIR/CPDR
+        const v = this.mr(this.hl); this.idle(5);
+        const r = (this.a - v) & 0xFF, h = (this.a ^ v ^ r) & FH;
+        this.hl = this.hl + inc; this.bc = this.bc - 1;
+        const n = (r - (h ? 1 : 0)) & 0xFF;
+        this.f = (this.f & FC) | FN | (r & 0x80) | (r ? 0 : FZ) | h | (this.bc ? FPV : 0) | (n & F3) | ((n & 0x02) ? F5 : 0);
+        if (rep && this.bc && r) { this.idle(5); this.pc = (this.pc - 2) & 0xFFFF; }
+      } else if (z === 2) { // INI/IND/INIR/INDR
+        this.idle(1); const v = this.ioIn(this.bc); this.mw(this.hl, v);
+        this.b = (this.b - 1) & 0xFF; this.hl = this.hl + inc;
+        this.f = (SZ53[this.b] & ~FPV) | FN | (this.f & FC);
+        if (rep && this.b) { this.idle(5); this.pc = (this.pc - 2) & 0xFFFF; }
+      } else { // OUTI/OUTD/OTIR/OTDR
+        this.idle(1); const v = this.mr(this.hl); this.b = (this.b - 1) & 0xFF;
+        this.ioOut(this.bc, v); this.hl = this.hl + inc;
+        this.f = (SZ53[this.b] & ~FPV) | FN | (this.f & FC);
+        if (rep && this.b) { this.idle(5); this.pc = (this.pc - 2) & 0xFFFF; }
+      }
+    }
+    // all other ED opcodes behave as an 8-T NOP
+  }
+}
+
+// ---- Disassembler ----
+const DR = ['B', 'C', 'D', 'E', 'H', 'L', '(HL)', 'A'];
+const DRP = ['BC', 'DE', 'HL', 'SP'], DRP2 = ['BC', 'DE', 'HL', 'AF'];
+const DCC = ['NZ', 'Z', 'NC', 'C', 'PO', 'PE', 'P', 'M'];
+const DALU = ['ADD A,', 'ADC A,', 'SUB ', 'SBC A,', 'AND ', 'XOR ', 'OR ', 'CP '];
+const DROT = ['RLC', 'RRC', 'RL', 'RR', 'SLA', 'SRA', 'SLL', 'SRL'];
+const DBLK = [['LDI', 'CPI', 'INI', 'OUTI'], ['LDD', 'CPD', 'IND', 'OUTD'], ['LDIR', 'CPIR', 'INIR', 'OTIR'], ['LDDR', 'CPDR', 'INDR', 'OTDR']];
+const h2 = v => v.toString(16).toUpperCase().padStart(2, '0');
+const h4 = v => v.toString(16).toUpperCase().padStart(4, '0');
+
+// rec: optional array; when given, operands become placeholders ({n} {nn} {d} {e})
+// and every byte read is recorded with its role (used to build the assembler's table).
+function disasm(read, addr, rec) {
+  let pc = addr, kind = 'fix';
+  const rd = () => { const v = read(pc & 0xFFFF); if (rec) rec.push(kind === 'fix' ? v : kind); pc++; return v; };
+  const as = (k, f) => { kind = k; const v = f(); kind = 'fix'; return v; };
+  const n8 = () => rec ? (as('n', rd), '{n}') : h2(rd()) + 'h';
+  const n16 = () => { if (rec) { as('nl', rd); as('nh', rd); return '{nn}'; } const lo = rd(); return h4((rd() << 8) | lo) + 'h'; };
+  let op = rd(), xy = 0, text;
+  while ((op === 0xDD || op === 0xFD) && pc - addr < 4) { xy = op === 0xDD ? 1 : 2; op = rd(); }
+  const IX = ['HL', 'IX', 'IY'][xy];
+  const disp = () => { if (rec) { as('d', rd); return '(' + IX + '+{d})'; } const d = sgn(rd()); return '(' + IX + (d < 0 ? '-' : '+') + h2(Math.abs(d)) + 'h)'; };
+  const reg = (i, allowIdx) => {
+    if (i === 6) return xy ? disp() : '(HL)';
+    if (allowIdx && xy && i === 4) return IX + 'H';
+    if (allowIdx && xy && i === 5) return IX + 'L';
+    return DR[i];
+  };
+  const rp = p => p === 2 ? IX : DRP[p];
+  const x = op >> 6, y = (op >> 3) & 7, z = op & 7, p = y >> 1, q = y & 1;
+  if (op === 0xCB) {
+    let dstr = '', o;
+    if (xy) { dstr = disp(); o = rd(); } else o = rd();
+    const cx = o >> 6, cy = (o >> 3) & 7, cz = o & 7;
+    const target = xy ? dstr : DR[cz];
+    const tail = (xy && cz !== 6 && cx !== 1) ? ',' + DR[cz] : '';
+    if (cx === 0) text = DROT[cy] + ' ' + target + tail;
+    else text = ['', 'BIT', 'RES', 'SET'][cx] + ' ' + cy + ',' + target + tail;
+  } else if (op === 0xED) {
+    const o = rd(), ex = o >> 6, ey = (o >> 3) & 7, ez = o & 7, ep = ey >> 1, eq = ey & 1;
+    if (ex === 1) {
+      switch (ez) {
+        case 0: text = ey === 6 ? 'IN (C)' : 'IN ' + DR[ey] + ',(C)'; break;
+        case 1: text = ey === 6 ? 'OUT (C),0' : 'OUT (C),' + DR[ey]; break;
+        case 2: text = (eq ? 'ADC' : 'SBC') + ' HL,' + DRP[ep]; break;
+        case 3: text = eq ? 'LD ' + DRP[ep] + ',(' + n16() + ')' : 'LD (' + n16() + '),' + DRP[ep]; break;
+        case 4: text = 'NEG'; break;
+        case 5: text = ey === 1 ? 'RETI' : 'RETN'; break;
+        case 6: text = 'IM ' + [0, 0, 1, 2, 0, 0, 1, 2][ey]; break;
+        case 7: text = ['LD I,A', 'LD R,A', 'LD A,I', 'LD A,R', 'RRD', 'RLD', 'NOP', 'NOP'][ey]; break;
+      }
+    } else if (ex === 2 && ez <= 3 && ey >= 4) text = DBLK[ey - 4][ez];
+    else text = 'NOP*';
+  } else if (x === 0) {
+    switch (z) {
+      case 0: {
+        if (y === 0) text = 'NOP';
+        else if (y === 1) text = "EX AF,AF'";
+        else { const d = sgn(rec ? as('e', rd) : rd()); const t = rec ? '{e}' : h4((pc + d) & 0xFFFF) + 'h';
+          text = y === 2 ? 'DJNZ ' + t : y === 3 ? 'JR ' + t : 'JR ' + DCC[y - 4] + ',' + t; }
+        break;
+      }
+      case 1: text = q ? 'ADD ' + IX + ',' + rp(p) : 'LD ' + rp(p) + ',' + n16(); break;
+      case 2: text = [['LD (BC),A', 'LD (DE),A', null, null], ['LD A,(BC)', 'LD A,(DE)', null, null]][q][p];
+        if (!text) text = p === 2 ? (q ? 'LD ' + IX + ',(' + n16() + ')' : 'LD (' + n16() + '),' + IX) : (q ? 'LD A,(' + n16() + ')' : 'LD (' + n16() + '),A');
+        break;
+      case 3: text = (q ? 'DEC ' : 'INC ') + rp(p); break;
+      case 4: text = 'INC ' + reg(y, true); break;
+      case 5: text = 'DEC ' + reg(y, true); break;
+      case 6: { const t = reg(y, true); text = 'LD ' + t + ',' + n8(); break; }
+      case 7: text = ['RLCA', 'RRCA', 'RLA', 'RRA', 'DAA', 'CPL', 'SCF', 'CCF'][y]; break;
+    }
+  } else if (x === 1) {
+    if (y === 6 && z === 6) text = 'HALT';
+    else { const mem = y === 6 || z === 6; text = 'LD ' + reg(y, !mem) + ',' + reg(z, !mem); }
+  } else if (x === 2) text = DALU[y] + reg(z, true);
+  else {
+    switch (z) {
+      case 0: text = 'RET ' + DCC[y]; break;
+      case 1: text = !q ? 'POP ' + (p === 2 ? IX : DRP2[p]) : ['RET', 'EXX', 'JP (' + IX + ')', 'LD SP,' + IX][p]; break;
+      case 2: text = 'JP ' + DCC[y] + ',' + n16(); break;
+      case 3: text = [() => 'JP ' + n16(), null, () => 'OUT (' + n8() + '),A', () => 'IN A,(' + n8() + ')', () => 'EX (SP),' + IX, () => 'EX DE,HL', () => 'DI', () => 'EI'][y](); break;
+      case 4: text = 'CALL ' + DCC[y] + ',' + n16(); break;
+      case 5: text = !q ? 'PUSH ' + (p === 2 ? IX : DRP2[p]) : 'CALL ' + n16(); break;
+      case 6: text = DALU[y] + n8(); break;
+      case 7: text = 'RST ' + h2(y << 3) + 'h'; break;
+    }
+  }
+  return { len: pc - addr, text };
+}
+
+if (typeof module !== 'undefined') module.exports = { Z80, disasm, h2, h4 };
+</script>
+<script>
+// ---- ZX81 ULA: event-driven gate-level simulation of a netlist in ula/*.net ----
+// Every gate, flip-flop and pin buffer of the netlist becomes one element with a delay. A change on a net
+// re-evaluates the elements it feeds, and their new outputs are scheduled after their delay (inertial: a pulse
+// shorter than the delay is swallowed, as in a real gate). Time is in nanoseconds.
+//
+// Conventions (see ula/README.md):
+//   an input written ~net is inverted; dff and tff act on the rising edge of their clock input as written
+//   (so ~SCLK = the falling edge of SCLK); reset inputs are active high and asynchronous; '-' = not connected;
+//   a dlatch is transparent while its enable input (as written) is high; an output named NQ... is the inverted output;
+//   pin_oc pulls its pin low while its input is low; pin_ts drives its pin with its input while the enable is high;
+//   pin_tp is a push-pull output, pin_tpn an inverting one (the memory selects need it: ROMCSi is high for a ROM access).
+// Pins are nets too. The outside world sets pin_in/pin_io/osc nets with set(); a pin_io net reads low when the
+// outside drives it low or any of the chip's open-collector drivers pulls it (wired AND); a pin_ts net reads
+// what the chip drives while enabled, and what the outside drives (through the board's resistor) otherwise.
+
+const ULA_DELAY = { buf_ef: 3, inv: 6, nor: 7, or: 9, rtl: 25, dff: 10, tff: 10, dlatch: 8, pin: 8, out3: 8 };
+
+class UlaSim {
+  constructor(text, opts = {}) {
+    this.delay = Object.assign({}, ULA_DELAY, opts.delay || {});
+    this.v = Object.create(null);           // net -> 0/1
+    this.fan = Object.create(null);         // net -> elements reading it
+    this.els = []; this.alias = {}; this.pins = {}; this.ext = Object.create(null); this.wired = Object.create(null);
+    this.t = 0; this.q = []; this.seq = 0; this.watch = Object.create(null); this.events = 0;
+    for (const raw of text.split('\n')) {
+      const line = raw.replace(/#.*/, '').trim(); if (!line) continue;
+      const f = line.split(/\s+/), at = f.findIndex(x => x[0] === '@'), w = at < 0 ? f : f.slice(0, at);
+      const [id, type] = w; const tail = at < 0 ? '' : f.slice(at).join(' ');
+      if (id === 'alias') { this.alias[type] = w[2]; continue; }
+      const dm = /delay=([\d.]+)/.exec(tail);
+      let outs, ins;
+      if (type === 'tff') { outs = w.slice(2, 4); ins = w.slice(4); } else { outs = [w[2]]; ins = w.slice(3); }
+      this.els.push({ id, type, outs, ins, d: dm ? +dm[1] : null, grid: at < 0 ? '' : f[at].slice(1) });
+    }
+    const R = n => this.alias[n] || n;
+    for (const e of this.els) {
+      e.outs = e.outs.map(R);
+      e.inv = e.ins.map(n => n[0] === '~'); e.ins = e.ins.map(n => R(n.replace(/^~/, '')));
+      if (e.d === null) e.d = this.delay[/^nor/.test(e.type) ? (e.type.endsWith('_rtl') ? 'rtl' : 'nor') : /^or/.test(e.type) ? 'or'
+        : e.type === 'inv_rtl' ? 'rtl' : /^pin_(oc|ts|tp)/.test(e.type) ? 'pin' : e.type] || this.delay.inv;
+      e.state = 0; e.pend = null;
+      if (e.type === 'pin_in' || e.type === 'pin_io' || e.type === 'osc') { this.pins[e.outs[0]] = e.ins[0]; this.ext[e.outs[0]] = 1; e.src = true; }
+      if (e.type === 'pin_oc' || e.type === 'pin_ts') (this.wired[e.outs[0]] = this.wired[e.outs[0]] || []).push(e);
+      for (const n of e.ins) if (n !== '-' && n !== 'VCC' && n !== 'GND') (this.fan[n] = this.fan[n] || []).push(e);
+    }
+    // a pin_ts net is also read by the chip (A0', A1'): what is outside counts while the chip lets go
+    for (const n in this.wired) if (!(n in this.ext)) this.ext[n] = 1;
+    this.drv = Object.create(null);          // element output value per wired driver: e.id -> 0/1/null
+    this.v.VCC = 1; this.v.GND = 0;
+    for (const e of this.els) for (const n of e.outs) if (n !== '-' && !(n in this.v)) this.v[n] = 0;
+    for (const n in this.ext) this.v[n] = this.resolve(n);
+    for (const [n, val] of Object.entries(opts.init || {})) this.v[n] = val;
+    this.settle();
+  }
+  get(n) { n = this.alias[n] || n; return this.v[n]; }
+  in(e, i) { const n = e.ins[i]; if (n === '-') return 0; const x = n === 'VCC' ? 1 : n === 'GND' ? 0 : this.v[n] | 0; return e.inv[i] ? 1 - x : x; }
+  // the value an element wants on its outputs now (flip-flops are handled in update())
+  calc(e) {
+    const t = e.type, n = e.ins.length;
+    if (t === 'buf_ef') return this.in(e, 0);
+    if (t === 'inv' || t === 'inv_rtl' || t === 'pin_tpn') return 1 - this.in(e, 0);
+    if (t === 'pin_tp') return this.in(e, 0);
+    if (/^nor/.test(t)) { for (let i = 0; i < n; i++) if (this.in(e, i)) return 0; return 1; }
+    if (/^or/.test(t)) { for (let i = 0; i < n; i++) if (this.in(e, i)) return 1; return 0; }
+    if (t === 'pin_oc') return this.in(e, 0) ? null : 0;
+    if (t === 'pin_ts') return this.in(e, 1) ? this.in(e, 0) : null;
+    if (t === 'out3') return this.in(e, 0) ? 0 : this.in(e, 1) ? 1 : 2;       // 0 sync (N.SYNC high: it is SYNCn inverted), 1 black (N.VIDEO high), 2 white
+    return null;
+  }
+  resolve(n) {                              // the level on a pin net
+    let x = n in this.ext ? this.ext[n] : 1, chip = null;
+    for (const e of this.wired[n] || []) { const d = this.drv[e.id]; if (d === null || d === undefined) continue; if (e.type === 'pin_ts') chip = chip === null ? d : chip & d; else x &= d; }
+    return chip !== null ? chip : x;
+  }
+  schedule(e, outI, val) {
+    const net = e.outs[outI]; if (net === '-') return;
+    const key = outI;
+    e.pend = e.pend || [];
+    const p = e.pend[key];
+    const cur = this.wired[net] ? this.drv[e.id] : this.v[net];
+    if (p && p.val === val) return;                         // already on its way
+    if (p) p.dead = true;                                    // inertial: the newer value wins
+    e.pend[key] = null;
+    if (val === cur) return;                                 // back to the present value: the pulse is swallowed
+    const ev = { t: this.t + e.d, s: this.seq++, e, outI, val, dead: false }; e.pend[key] = ev; this.push(ev);
+  }
+  update(e) {
+    const t = e.type;
+    if (e.src) return;
+    if (t === 'dff' || t === 'tff' || t === 'dlatch') {
+      const clk = this.in(e, t === 'tff' ? 0 : 1), rst = this.in(e, t === 'tff' ? 1 : t === 'dff' ? 2 : 99);
+      const rose = clk && !e.lastClk; e.lastClk = clk;
+      if (t === 'dlatch') { if (clk) e.state = this.in(e, 0); }
+      else if (rst) e.state = 0;
+      else if (rose) e.state = t === 'tff' ? 1 - e.state : this.in(e, 0);
+      e.outs.forEach((o, i) => { const inv = t === 'tff' ? i === 1 : /^NQ/.test(o); this.schedule(e, i, inv ? 1 - e.state : e.state); });
+      return;
+    }
+    this.schedule(e, 0, this.calc(e));
+  }
+  set(n, val) {                             // the outside drives pin net n
+    n = this.alias[n] || n; if (this.ext[n] === val) return; this.ext[n] = val; this.change(n, this.resolve(n));
+  }
+  change(n, val) {
+    if (this.v[n] === val) return; this.v[n] = val;
+    const w = this.watch[n]; if (w) w(val, this.t);
+    for (const e of this.fan[n] || []) this.update(e);
+  }
+  push(ev) { const q = this.q; q.push(ev); let i = q.length - 1; while (i) { const p = (i - 1) >> 1; if (this.lt(q[p], ev)) break; q[i] = q[p]; i = p; } q[i] = ev; }
+  lt(a, b) { return a.t < b.t || (a.t === b.t && a.s < b.s); }
+  pop() { const q = this.q, top = q[0], last = q.pop(); if (q.length) { let i = 0; for (;;) { let c = 2 * i + 1; if (c >= q.length) break; if (c + 1 < q.length && this.lt(q[c + 1], q[c])) c++; if (this.lt(last, q[c])) break; q[i] = q[c]; i = c; } q[i] = last; } return top; }
+  // run until time t (ns); fire events in order
+  runTo(t) {
+    while (this.q.length && this.q[0].t <= t) {
+      const ev = this.pop(); if (ev.dead) continue; this.t = ev.t; this.events++;
+      const e = ev.e; e.pend[ev.outI] = null; const net = e.outs[ev.outI];
+      if (this.wired[net]) { this.drv[e.id] = ev.val; this.change(net, this.resolve(net)); }
+      else this.change(net, ev.val);
+    }
+    this.t = t;
+  }
+  settle(limit = 2000) { for (const e of this.els) this.update(e); this.runTo(this.t + limit); }
+}
+
+if (typeof module !== 'undefined') module.exports = { UlaSim, ULA_DELAY };
+</script>
+<script>
+// ---- A ZX81 whose ULA is the real logic: the Z80 core on the board's wiring, the ULA in charge ----
+// Nothing of the ULA is modelled here. The Z80's bus cycles are put on the ULA's pins as waveforms, T-state by
+// T-state, timed from the clock the ULA itself puts out; and everything the Z80 and the TV get comes back from the
+// ULA's pins: the byte on the data lines (so the NOPs), NMI, the memory selects, the font address, sync and video.
+// The ULA is one of the engines of this folder: the netlist in sim.js (UlaSim) or the synchronous Verilog (SyncUla
+// in v2js.js). Both are driven the same way: set(pin, level), get(pin), runTo(ns), watch[pin].
+//
+// The board (Sinclair's circuit diagram), as far as the ULA is concerned:
+//   A0-A8 reach the memory through 1K resistors, on the ULA's side of them (A0'-A8'); D0-D7 reach it through 470
+//     ohms, the ULA on the Z80's side. So what the ULA drives wins on its side.
+//   The ROM drives the data lines whenever ROM CS is low; the RAM whenever RAM CS is low and WR is high.
+//   INT is A6. WAIT is low while NMI and HALT are both low (so a halted Z80 takes the NMI as its pulse ends).
+//   CLK is the ULA's clock output through TR2, inverted.
+// Z80 timing is the data sheet's shape with fixed delays (addr, ctl); memory answers after acc.
+// Simplifications: the RAM is one block of 1K to 16K on RAM CS (a RAM pack decodes for itself); there is no tape.
+
+const ZX81ULA_KEYS = [
+  ['Shift', 'Z', 'X', 'C', 'V'], ['A', 'S', 'D', 'F', 'G'], ['Q', 'W', 'E', 'R', 'T'], ['1', '2', '3', '4', '5'],
+  ['0', '9', '8', '7', '6'], ['P', 'O', 'I', 'U', 'Y'], ['NewLine', 'L', 'K', 'J', 'H'], ['Space', '.', 'M', 'N', 'B']
+];
+
+class Zx81Ula {
+  // Z80: the CPU class of src/z80core.js; engine: the ULA; rom: the 8K ROM image (not kept in the repository)
+  constructor(Z80, engine, rom, opts = {}) {
+    this.u = engine; this.rom = rom; this.ram = new Uint8Array(0x4000); this.ramSize = opts.ramSize || 0x4000;
+    this.D = Object.assign({ addr: 40, ctl: 30, acc: 150 }, opts.delays || {});
+    this.OSC = 1000 / 6.5; this.P2 = 2 * this.OSC;
+    this.oscT = 0; this.osc = 0; this.q = [];      // testbench queue: [time, fn], kept sorted
+    this.keys = new Uint8Array(8);
+    this.cpuA = 0; this.zD = -1;                    // the Z80's address; the byte it drives on the data lines (-1: none)
+    this.mem = 0xFF;                                // what the memory drives (FFh: nothing)
+    // the TV: one sample per dot; a short sync ends a line, a long one a frame
+    this.W = 414; this.H = 312; this.fb = new Uint8Array(this.W * this.H); this.frame = new Uint8Array(this.W * this.H);
+    this.x = 0; this.y = 0; this.syncLen = 0; this.frames = 0; this.onFrame = null;
+    this.nmiAt = null; this.r1 = null; this.waits = 0; this.nmis = 0; this.ints = 0;
+    const u = this.u;
+    u.watch['N.PHI'] = (v, t) => { if (v === 0 && this.r1 === null) this.r1 = t; };
+    u.watch['N.NMI'] = (v, t) => { if (v === 0) this.nmiAt = t; };
+    u.watch['ROM.N.CS'] = u.watch['RAM.N.CS'] = () => this.memLater();
+    for (const p of ['nMREQ', 'nM1', 'nRD', 'nWR', 'nIORQ', 'nHALT']) u.set(p, 1);
+    this.adv(3000); if (this.r1 === null) throw new Error('the ULA puts out no clock');
+    this.T = Math.floor((this.u.t - this.r1) / this.P2) + 3;       // the T-state the next cycle starts in (CLK rises at rise(T))
+    this.cpu = new Z80(this); this.done = 0; this.lastA = 0xFFFF; this.tape = null;
+  }
+  rise(k) { return this.r1 + (k - 1) * this.P2; }
+  fall(k) { return this.rise(k) + this.OSC; }
+  at(t, f) { const q = this.q; let i = q.length; while (i && q[i - 1][0] > t) i--; q.splice(i, 0, [t, f]); }
+  // run the oscillator, the queued bus edges and the TV up to time t
+  adv(t) {
+    const u = this.u, q = this.q;
+    for (;;) {
+      const no = this.oscT + this.OSC / 2, nq = q.length ? q[0][0] : Infinity;
+      if (nq <= no && nq <= t) { u.runTo(nq); q.shift()[1](); continue; }
+      if (no <= t) { u.runTo(no); this.oscT = no; this.osc ^= 1; if (this.osc) this.dot(); u.set('OSC', this.osc); continue; }
+      u.runTo(t); return;
+    }
+  }
+  dot() {                                           // just before the dot clock: the dot now on the TV/TAPE pin
+    const v = this.u.get('TV/TAPE');
+    if (v === 0) { this.syncLen++; return; }
+    if (this.syncLen) {
+      if (this.syncLen > 200) { this.frame.set(this.fb); this.fb.fill(0); this.y = 0; this.frames++; if (this.onFrame) this.onFrame(this.frame); }
+      else if (++this.y >= this.H) this.y = 0;      // no vertical sync: the picture rolls
+      this.x = 0; this.syncLen = 0;
+    }
+    if (this.x < this.W) this.fb[this.y * this.W + this.x++] = v;      // 1 black, 2 white
+  }
+  // ---- the pins ----
+  setA(a) { const u = this.u; this.cpuA = a; for (let n = 0; n < 9; n++) u.set(`A${n}'`, a >> n & 1); u.set('nA14', a >> 14 & 1); u.set('nA15', a >> 15 & 1); this.memLater(); }
+  aLow() { let v = 0; for (let n = 0; n < 9; n++) v |= this.u.get(`A${n}'`) << n; return v; }
+  dBus() { let v = 0; for (let n = 0; n < 8; n++) v |= this.u.get('nD' + n) << n; return v; }      // the Z80's side of the data lines
+  drive() { const v = this.zD >= 0 ? this.zD : this.mem; for (let n = 0; n < 8; n++) this.u.set('nD' + n, v >> n & 1); }
+  memAddr() { return (this.cpuA & 0xFE00) | this.aLow(); }
+  memLater() { this.at(this.u.t + this.D.acc, () => this.memNow()); }
+  memNow() {
+    const u = this.u, a = this.memAddr();
+    this.mem = u.get('ROM.N.CS') === 0 ? this.rom[a & 0x1FFF] : u.get('RAM.N.CS') === 0 && u.get('nWR') ? this.ram[a & (this.ramSize - 1)] : 0xFF;
+    this.drive();
+  }
+  ctl(p, v) { this.u.set(p, v); }
+  // WAIT, as the Z80 samples it on the falling edge of T2 (and of each wait state): stretch the cycle while it is low
+  waitAt(s, k) { for (;;) { this.adv(this.fall(s + k - 1) - 2); if (this.u.get('N.NMI') === 0 && this.u.get('nHALT') === 0) { s++; this.waits++; } else return s; } }
+  // ---- the Z80's machine cycles; each runs to its end and leaves T at the next cycle's first T-state ----
+  m1(a, halt, rf) {
+    let s = this.T; const D = this.D;
+    this.at(this.rise(s) + D.addr, () => { this.setA(a); this.ctl('nM1', 0); this.ctl('nHALT', halt ? 0 : 1); });
+    this.at(this.fall(s) + D.ctl, () => { this.ctl('nMREQ', 0); this.ctl('nRD', 0); });
+    s = this.waitAt(s, 2);
+    this.adv(this.rise(s + 2) - 2); const d = this.dBus();          // T3: the Z80 takes the opcode
+    this.at(this.rise(s + 2) + D.ctl, () => { this.ctl('nMREQ', 1); this.ctl('nRD', 1); this.ctl('nM1', 1); });
+    this.at(this.rise(s + 2) + D.addr, () => this.setA(rf));
+    this.at(this.fall(s + 2) + D.ctl, () => this.ctl('nMREQ', 0));
+    this.at(this.fall(s + 3) + D.ctl, () => this.ctl('nMREQ', 1));
+    this.T = s + 4; this.adv(this.rise(this.T)); this.lastA = rf; return d;
+  }
+  intack(a, rf) {
+    const s = this.T, D = this.D; this.ints++;
+    this.at(this.rise(s) + D.addr, () => { this.setA(a); this.ctl('nM1', 0); this.ctl('nHALT', 1); });
+    this.at(this.fall(s + 2) + D.ctl, () => this.ctl('nIORQ', 0));
+    this.at(this.rise(s + 4) + D.ctl, () => { this.ctl('nIORQ', 1); this.ctl('nM1', 1); });
+    this.at(this.rise(s + 4) + D.addr, () => this.setA(rf));
+    this.at(this.fall(s + 4) + D.ctl, () => this.ctl('nMREQ', 0));
+    this.at(this.fall(s + 5) + D.ctl, () => this.ctl('nMREQ', 1));
+    this.T = s + 6; this.adv(this.rise(this.T)); this.lastA = rf;
+  }
+  mrd(a) {
+    let s = this.T; const D = this.D;
+    this.at(this.rise(s) + D.addr, () => this.setA(a));
+    this.at(this.fall(s) + D.ctl, () => { this.ctl('nMREQ', 0); this.ctl('nRD', 0); });
+    s = this.waitAt(s, 2);
+    this.adv(this.fall(s + 2) - 2); const d = this.dBus();
+    this.at(this.fall(s + 2) + D.ctl, () => { this.ctl('nMREQ', 1); this.ctl('nRD', 1); });
+    this.T = s + 3; this.adv(this.rise(this.T)); this.lastA = a; return d;
+  }
+  mwr(a, v) {
+    let s = this.T; const D = this.D;
+    this.at(this.rise(s) + D.addr, () => this.setA(a));
+    this.at(this.fall(s) + D.ctl, () => { this.ctl('nMREQ', 0); this.zD = v; this.drive(); });
+    this.at(this.fall(s + 1) + D.ctl, () => { this.ctl('nWR', 0); this.memLater(); });
+    s = this.waitAt(s, 2);
+    this.adv(this.fall(s + 2) - 2);                                // WR about to rise: the RAM, if selected, takes the byte
+    if (this.u.get('RAM.N.CS') === 0 && this.u.get('nWR') === 0) this.ram[this.memAddr() & (this.ramSize - 1)] = this.dBus();
+    this.at(this.fall(s + 2) + D.ctl, () => { this.ctl('nMREQ', 1); this.ctl('nWR', 1); this.zD = -1; this.drive(); this.memLater(); });
+    this.T = s + 3; this.adv(this.rise(this.T)); this.lastA = a;
+  }
+  io(a, v) {                                        // v undefined: a read
+    const s = this.T, D = this.D, rd = v === undefined;
+    let kb = 0x1F; for (let r = 0; r < 8; r++) if (!(a & (0x100 << r))) kb &= ~this.keys[r] & 0x1F;
+    this.at(this.rise(s) + D.addr, () => { this.setA(a); for (let n = 0; n < 5; n++) this.u.set('nKB' + n, kb >> n & 1); if (!rd) { this.zD = v; this.drive(); } });
+    this.at(this.rise(s + 1) + D.ctl, () => { this.ctl('nIORQ', 0); this.ctl(rd ? 'nRD' : 'nWR', 0); });
+    this.adv(this.fall(s + 3) - 2); const d = this.dBus();
+    this.at(this.fall(s + 3) + D.ctl, () => { this.ctl('nIORQ', 1); this.ctl('nRD', 1); this.ctl('nWR', 1); this.zD = -1; this.drive(); });
+    this.T = s + 4; this.adv(this.rise(this.T)); this.lastA = a; return d;
+  }
+  // cycles the core logged without calling the bus: idle T-states and the interrupt acknowledge
+  flush() {
+    const c = this.cpu.cyc;
+    for (; this.done < c.length; this.done++) { const x = c[this.done]; if (x.k === 'ID') { this.T += x.n; this.adv(this.rise(this.T)); } else if (x.k === 'IA') this.intack(x.a, x.rf); }
+  }
+  // ---- the bus as src/z80core.js calls it ----
+  rfsh() { return this.cpu.i << 8 | this.cpu.r; }
+  fetch(a) { this.flush(); const d = this.m1(a, false, this.rfsh()); this.done++; return d; }
+  read(a) {
+    this.flush();
+    // the core reads the opcode of an NMI response and of a halted Z80's cycles with read(): they are M1 cycles
+    const d = this.cpu.cyc.length === 0 ? this.m1(a, this.cpu.halted, this.rfsh()) : this.mrd(a);
+    this.done++; return d;
+  }
+  write(a, v) { this.flush(); this.mwr(a, v); this.done++; }
+  input(p) { this.flush(); const d = this.io(p); this.done++; return d; }
+  output(p, v) { this.flush(); this.io(p, v); this.done++; }
+  // one instruction. NMI: its falling edge, if it came before the last T-state began. INT: A6, as that T-state begins.
+  step() {
+    const cpu = this.cpu;
+    // LOAD: the tape is not modelled; the ROM's byte reader (034Ch) is replaced, as in zx81fast.js
+    if (cpu.pc === 0x034C && this.tape && !cpu.halted && this.rom[0x34C] === 0x0E && this.rom[0x207] === 0x21) {
+      this.loadP(this.tape); this.tape = null; cpu.sp = (cpu.sp + 2) & 0xFFFF; cpu.pc = 0x0207;
+    }
+    if (this.nmiAt !== null && this.nmiAt <= this.rise(this.T - 1)) { cpu.nmiPending = true; this.nmiAt = null; this.nmis++; }
+    cpu.intLine = !(this.lastA & 0x40);
+    this.done = 0; cpu.step(); this.flush();
+  }
+  run(tStates) { const end = this.T + tStates; while (this.T < end) this.step(); }
+  key(name, down) { for (let r = 0; r < 8; r++) { const b = ZX81ULA_KEYS[r].indexOf(name); if (b >= 0) { this.keys[r] = down ? this.keys[r] | 1 << b : this.keys[r] & ~(1 << b); return true; } } return false; }
+  // a .p file is RAM from 4009h up to E_LINE (which it holds at 4014h)
+  loadP(b) { const n = Math.min(b.length, (b[0x0B] | b[0x0C] << 8) - 0x4009, this.ramSize - 9); this.ram.set(b.subarray(0, n), 9); }
+}
+if (typeof module !== 'undefined') module.exports = { Zx81Ula, ZX81ULA_KEYS };
+</script>
+<script>
+// ---- The closed-loop ZX81 on the synchronous ULA, clock edge by clock edge ----
+// The same machine as ula/zx81ula.js, with the same rule (nothing of the ULA is modelled: the Z80 and the TV get
+// everything from the ULA's pins), but made for speed and for one engine only: the synchronous design, as translate()
+// or fromYosys() in ula/v2js.js gives it. There is no event queue. Time moves in periods of the design's 13 MHz clock,
+// four to a T-state, and each period is: the wires settle, the Z80 or the TV reads what it needs, the clock edge,
+// then whatever the Z80 changes after that edge. The Z80's data-sheet delays (30-40 ns) are shorter than one period,
+// so "just after the edge" is where its outputs change; the memory answers two periods (154 ns) after it is selected.
+// Edges are numbered within a machine cycle: T1 starts at edge 0, falls at 2; T2 starts at 4; and so on.
+// The board is as in zx81ula.js: A0'-A8' and the data lines through resistors with the ULA winning on its side,
+// INT on A6, WAIT low while NMI and HALT are both low, the ROM on ROM CS, the RAM (one block) on RAM CS.
+
+const ZX81FAST_KEYS = [
+  ['Shift', 'Z', 'X', 'C', 'V'], ['A', 'S', 'D', 'F', 'G'], ['Q', 'W', 'E', 'R', 'T'], ['1', '2', '3', '4', '5'],
+  ['0', '9', '8', '7', '6'], ['P', 'O', 'I', 'U', 'Y'], ['NewLine', 'L', 'K', 'J', 'H'], ['Space', '.', 'M', 'N', 'B']
+];
+
+class Zx81Fast {
+  // Z80: the CPU class of src/z80core.js; core: the ULA from translate() or fromYosys(); rom: the 8K ROM image
+  constructor(Z80, core, rom, opts = {}) {
+    this.M = core; this.rom = rom; this.ram = new Uint8Array(0x4000); this.ramSize = opts.ramSize || 0x4000;
+    const s = this.s = core.state();
+    Object.assign(s, { kbd_n: 0x1F, usa_uk: 1, tape_in: 1, mreq_n: 1, m1_n: 1, rd_n: 1, wr_n: 1, iorq_n: 1, halt_n: 1, a15: 0, a14: 0, d_in: 0xFF });
+    this.keys = new Uint8Array(8);
+    this.cpuA = 0; this.zD = -1;                  // the Z80's address; the byte it drives on the data lines (-1: none)
+    this.mem = 0xFF; this.memQ = 0xFF;            // the memory's output now, and what it will be one period on
+    this.W = 414; this.H = 312; this.fb = new Uint8Array(this.W * this.H); this.frame = new Uint8Array(this.W * this.H);
+    this.x = 0; this.y = 0; this.syncLen = 0; this.frames = 0; this.onFrame = null;
+    this.n = 0;                                   // clock edges so far
+    this.nmiEdge = -1; this.nmiWas = 0; this.waits = 0; this.nmis = 0; this.ints = 0; this.T = 0;
+    this.rec = null; this.cpu = new Z80(this); this.done = 0; this.lastA = 0xFFFF; this.tape = null;   // tape: a .p file waiting for LOAD
+    do this.go(1); while (this.get('ph') !== 0);  // line the first T-state up with the ULA's clock
+  }
+  get(n) { this.settle(); return this.s[n]; }
+  // the wires, from the pins as they stand; the ULA reads its own pins, so what it pulls low it reads low
+  settle() {
+    const s = this.s, M = this.M, ext = this.zD >= 0 ? this.zD : this.mem;
+    s.d_in = ext & ~s.d_pull & 0xFF; s.a0_in = s.a_oe ? s.a_out & 1 : this.cpuA & 1; s.a1_in = s.a_oe ? s.a_out >> 1 & 1 : this.cpuA >> 1 & 1;
+    M.comb(s);
+    const d = ext & ~s.d_pull & 0xFF, a0 = s.a_oe ? s.a_out & 1 : this.cpuA & 1, a1 = s.a_oe ? s.a_out >> 1 & 1 : this.cpuA >> 1 & 1;
+    if (d !== s.d_in || a0 !== s.a0_in || a1 !== s.a1_in) { s.d_in = d; s.a0_in = a0; s.a1_in = a1; M.comb(s); }
+  }
+  // k clock periods. Each: settle; the memory sees its selects; the TV takes a dot; NMI is noticed; then the edge.
+  go(k) {
+    const s = this.s, M = this.M, rom = this.rom, ram = this.ram;
+    for (; k > 0; k--) {
+      this.settle();
+      const a = (this.cpuA & 0xFE00) | (s.a_oe ? s.a_out : this.cpuA & 0x1FF);
+      const want = !s.rom_cs_n ? rom[a & 0x1FFF] : !s.ram_cs_n && s.wr_n ? ram[a & (this.ramSize - 1)] : 0xFF;
+      if (s.ph & 1) this.dot(s.sync ? 0 : s.black ? 1 : 2);        // the next edge is a dot clock
+      if (s.nmi_pull && !this.nmiWas) this.nmiEdge = this.n; this.nmiWas = s.nmi_pull;
+      if (this.rec) this.rec(s, this);                          // a recorder, if one is fitted (the page's logic analyser)
+      M.edge(s); this.n++;
+      this.mem = this.memQ; this.memQ = want;
+    }
+  }
+  dot(v) {                                        // the level on TV/TAPE for one dot: 0 sync, 1 black, 2 white
+    if (v === 0) { this.syncLen++; return; }
+    if (this.syncLen) {
+      if (this.syncLen > 200) { this.frame.set(this.fb); this.fb.fill(0); this.y = 0; this.frames++; if (this.onFrame) this.onFrame(this.frame); }
+      else if (++this.y >= this.H) this.y = 0;    // no vertical sync: the picture rolls
+      this.x = 0; this.syncLen = 0;
+    }
+    if (this.x < this.W) this.fb[this.y * this.W + this.x++] = v;
+  }
+  setA(a) { this.cpuA = a; this.s.a14 = a >> 14 & 1; this.s.a15 = a >> 15 & 1; }
+  dBus() { this.settle(); return this.s.d_in; }  // the data lines on the Z80's side
+  // WAIT, sampled just before the falling edge of T2 (edge 6) and of each wait state; called just after edge 2
+  waitT2() { for (let k = 3; ; k = 4) { this.go(k); this.settle(); if (this.s.nmi_pull && !this.s.halt_n) { this.waits++; this.T++; } else return; } }
+  // ---- the Z80's machine cycles: each starts just after the edge that begins its T1 and ends the same way ----
+  m1(a, halt, rf) {
+    const s = this.s;
+    this.setA(a); s.m1_n = 0; s.halt_n = halt ? 0 : 1; this.go(2);
+    s.mreq_n = 0; s.rd_n = 0; this.waitT2();                    // just after edge 5
+    this.go(2); const d = this.dBus();                          // just before edge 8, T3: the Z80 takes the opcode
+    this.go(1); s.mreq_n = 1; s.rd_n = 1; s.m1_n = 1; this.setA(rf);
+    this.go(2); s.mreq_n = 0;                                   // refresh
+    this.go(4); s.mreq_n = 1;
+    this.go(2); this.T += 4; this.lastA = rf; return d;
+  }
+  intack(a, rf) {
+    const s = this.s; this.ints++;
+    this.setA(a); s.m1_n = 0; s.halt_n = 1; this.go(10);
+    s.iorq_n = 0; this.go(6);
+    s.iorq_n = 1; s.m1_n = 1; this.setA(rf); this.go(2);
+    s.mreq_n = 0; this.go(4);
+    s.mreq_n = 1; this.go(2); this.T += 6; this.lastA = rf;
+  }
+  mrd(a) {
+    const s = this.s;
+    this.setA(a); this.go(2);
+    s.mreq_n = 0; s.rd_n = 0; this.waitT2();
+    this.go(4); const d = this.dBus();                          // just before edge 10, the fall of T3
+    this.go(1); s.mreq_n = 1; s.rd_n = 1;
+    this.go(2); this.T += 3; this.lastA = a; return d;
+  }
+  mwr(a, v) {
+    const s = this.s;
+    this.setA(a); this.go(2);
+    s.mreq_n = 0; this.zD = v; this.go(4);
+    s.wr_n = 0; this.go(3); this.settle();                      // just before edge 10: WR about to rise
+    if (!s.ram_cs_n) this.ram[((this.cpuA & 0xFE00) | (s.a_oe ? s.a_out : this.cpuA & 0x1FF)) & (this.ramSize - 1)] = s.d_in;
+    this.go(1); s.mreq_n = 1; s.wr_n = 1; this.zD = -1;
+    this.go(2); this.T += 3; this.lastA = a;
+  }
+  io(a, v) {                                      // v undefined: a read
+    const s = this.s, rd = v === undefined;
+    let kb = 0x1F; for (let r = 0; r < 8; r++) if (!(a & (0x100 << r))) kb &= ~this.keys[r] & 0x1F;
+    this.setA(a); s.kbd_n = kb; if (!rd) this.zD = v; this.go(4);
+    s.iorq_n = 0; if (rd) s.rd_n = 0; else s.wr_n = 0;
+    this.go(9); const d = this.dBus();                          // just before edge 14, the fall of T3 (after TW)
+    this.go(1); s.iorq_n = 1; s.rd_n = 1; s.wr_n = 1; this.zD = -1;
+    this.go(2); this.T += 4; this.lastA = a; return d;
+  }
+  // cycles the core logged without calling the bus: idle T-states and the interrupt acknowledge
+  flush() {
+    const c = this.cpu.cyc;
+    for (; this.done < c.length; this.done++) { const x = c[this.done]; if (x.k === 'ID') { this.go(4 * x.n); this.T += x.n; } else if (x.k === 'IA') this.intack(x.a, x.rf); }
+  }
+  // ---- the bus as src/z80core.js calls it ----
+  rfsh() { return this.cpu.i << 8 | this.cpu.r; }
+  fetch(a) { this.flush(); const d = this.m1(a, false, this.rfsh()); this.done++; return d; }
+  read(a) {       // with nothing logged yet this is the opcode read of an NMI response or of a halted Z80: an M1 cycle
+    this.flush(); const d = this.cpu.cyc.length === 0 ? this.m1(a, this.cpu.halted, this.rfsh()) : this.mrd(a); this.done++; return d;
+  }
+  write(a, v) { this.flush(); this.mwr(a, v); this.done++; }
+  input(p) { this.flush(); const d = this.io(p); this.done++; return d; }
+  output(p, v) { this.flush(); this.io(p, v); this.done++; }
+  // one instruction. NMI: its falling edge, if it came before the last T-state began. INT: A6, as that T-state begins.
+  step() {
+    const cpu = this.cpu;
+    // LOAD: the tape itself is not modelled. As in the hybrid emulator, the ROM's byte reader (034Ch) is replaced:
+    // the waiting .p file goes into RAM from 4009h and the ROM carries on at 0207h, which puts SLOW mode back
+    if (cpu.pc === 0x034C && this.tape && !cpu.halted && this.rom[0x34C] === 0x0E && this.rom[0x207] === 0x21) {
+      this.loadP(this.tape); this.tape = null; cpu.sp = (cpu.sp + 2) & 0xFFFF; cpu.pc = 0x0207;
+    }
+    if (this.nmiEdge >= 0 && this.nmiEdge <= this.n - 4) { cpu.nmiPending = true; this.nmiEdge = -1; this.nmis++; }
+    cpu.intLine = !(this.lastA & 0x40);
+    this.done = 0; cpu.step(); this.flush();
+  }
+  run(tStates) { const end = this.T + tStates; while (this.T < end) this.step(); }
+  key(name, down) { for (let r = 0; r < 8; r++) { const b = ZX81FAST_KEYS[r].indexOf(name); if (b >= 0) { this.keys[r] = down ? this.keys[r] | 1 << b : this.keys[r] & ~(1 << b); return true; } } return false; }
+  // a .p file is RAM from 4009h up to E_LINE (which it holds at 4014h)
+  loadP(b) { const n = Math.min(b.length, (b[0x0B] | b[0x0C] << 8) - 0x4009, this.ramSize - 9); this.ram.set(b.subarray(0, n), 9); }
+}
+if (typeof module !== 'undefined') module.exports = { Zx81Fast, ZX81FAST_KEYS };
+</script>
+<script>
+// the synchronous design, translated from ula/2c210_sync.v when this page was built (ula/build_page.js), and the netlist
+const ULA_CORE = {
+  width: {"clk":1,"d_in":8,"d_pull":8,"kbd_n":5,"usa_uk":1,"tape_in":1,"mreq_n":1,"m1_n":1,"rd_n":1,"wr_n":1,"iorq_n":1,"halt_n":1,"a15":1,"a14":1,"a1_in":1,"a0_in":1,"a_out":9,"a_oe":1,"phi_n":1,"nmi_pull":1,"rom_cs_n":1,"ram_cs_n":1,"sync":1,"black":1,"ph":2,"code":6,"q17":1,"d7l":1,"q32":1,"sr":8,"cnt":8,"nmi_on":1,"fs":1,"row":3,"sync_d":1,"q20":1,"mreq_d":1,"m1":1,"mreq":1,"chr":1,"window":1,"nop":1,"aena":1,"load":1,"intack":1,"line_sync":1,"iowr":1,"outfe":1,"outfd":1,"infe":1,"keys":5,"ramacc":1,"romacc":1,"romsel":1},
+  kind: {"clk":"input","d_in":"input","d_pull":"output","kbd_n":"input","usa_uk":"input","tape_in":"input","mreq_n":"input","m1_n":"input","rd_n":"input","wr_n":"input","iorq_n":"input","halt_n":"input","a15":"input","a14":"input","a1_in":"input","a0_in":"input","a_out":"output","a_oe":"output","phi_n":"output","nmi_pull":"output","rom_cs_n":"output","ram_cs_n":"output","sync":"output","black":"output","ph":"reg","code":"reg","q17":"reg","d7l":"reg","q32":"reg","sr":"reg","cnt":"reg","nmi_on":"reg","fs":"reg","row":"reg","sync_d":"reg","q20":"reg","mreq_d":"reg","m1":"wire","mreq":"wire","chr":"wire","window":"wire","nop":"wire","aena":"wire","load":"wire","intack":"wire","line_sync":"wire","iowr":"wire","outfe":"wire","outfd":"wire","infe":"wire","keys":"wire","ramacc":"wire","romacc":"wire","romsel":"wire"},
+  regs: ["ph","code","q17","d7l","q32","sr","cnt","nmi_on","fs","row","sync_d","q20","mreq_d"],
+  init: {"ph":0,"code":0,"q17":0,"d7l":0,"q32":0,"sr":255,"cnt":0,"nmi_on":0,"fs":0,"row":0,"sync_d":0,"q20":0,"mreq_d":1},
+  state() { return { clk: 0, d_in: 0, d_pull: 0, kbd_n: 0, usa_uk: 0, tape_in: 0, mreq_n: 0, m1_n: 0, rd_n: 0, wr_n: 0, iorq_n: 0, halt_n: 0, a15: 0, a14: 0, a1_in: 0, a0_in: 0, a_out: 0, a_oe: 0, phi_n: 0, nmi_pull: 0, rom_cs_n: 0, ram_cs_n: 0, sync: 0, black: 0, ph: 0, code: 0, q17: 0, d7l: 0, q32: 0, sr: 255, cnt: 0, nmi_on: 0, fs: 0, row: 0, sync_d: 0, q20: 0, mreq_d: 1, m1: 0, mreq: 0, chr: 0, window: 0, nop: 0, aena: 0, load: 0, intack: 0, line_sync: 0, iowr: 0, outfe: 0, outfd: 0, infe: 0, keys: 0, ramacc: 0, romacc: 0, romsel: 0 }; },
+  comb(s) {
+s.m1 = ( ! s.m1_n) & 1;
+s.mreq = ( ! s.mreq_n) & 1;
+s.phi_n = (((s.ph >>> 1) & 1)) & 1;
+s.aena = (s.q17 && s.m1_n) & 1;
+s.a_out = ( ( s.code << 3 )  | s.row) & 511;
+s.load = ( ( s.ph === 3 )  && s.mreq_n) & 1;
+s.line_sync = ( ( ((s.cnt >>> 4) & 15) === 1 ) ) & 1;
+s.iowr = ( ! s.wr_n &&  ! s.iorq_n) & 1;
+s.infe = ( ! s.rd_n &&  ! s.iorq_n &&  ! s.a0_in) & 1;
+s.keys = ( ~ s.kbd_n) & 31;
+s.chr = ( ! ((s.d_in >>> 6) & 1) && s.mreq && s.a15 && s.halt_n) & 1;
+s.window = (s.m1 &&  ( s.ph === 2 ) ) & 1;
+s.a_oe = (s.aena) & 1;
+s.intack = (s.m1 &&  ! s.iorq_n) & 1;
+s.outfe = (s.iowr &&  ! s.a0_in) & 1;
+s.outfd = (s.iowr &&  ! s.a1_in) & 1;
+s.nmi_pull = (s.line_sync && s.nmi_on) & 1;
+s.sync = (s.line_sync || s.fs) & 1;
+s.black = (s.line_sync ||  !  ( ((s.sr >>> 7) & 1) ^ s.q32 ) ) & 1;
+s.ramacc = (s.mreq && s.a14) & 1;
+s.romacc = (s.mreq &&  ! s.a14) & 1;
+s.nop = (s.m1 && s.chr &&  ! s.window) & 1;
+s.romsel = (s.romacc || s.q20 ||  ( s.aena && s.mreq ) ) & 1;
+s.ram_cs_n = ( ! s.ramacc) & 1;
+s.d_pull = ( ( s.nop ? 191 : 0 )  |  ( s.infe ?  (  ( s.tape_in << 7 )  |  (  ! s.usa_uk << 6 )  | s.keys )  : 0 ) ) & 255;
+s.rom_cs_n = ( !  ( s.romsel &&  ! s.ramacc ) ) & 1;
+  },
+  edge(s) {
+let n_ph = s.ph, n_code = s.code, n_q17 = s.q17, n_d7l = s.d7l, n_q32 = s.q32, n_sr = s.sr, n_cnt = s.cnt, n_nmi_on = s.nmi_on, n_fs = s.fs, n_row = s.row, n_sync_d = s.sync_d, n_q20 = s.q20, n_mreq_d = s.mreq_d;
+n_ph = (s.ph + 1) & 3;
+if (s.window) {n_code = (((s.d_in >>> 0) & 63)) & 63;n_q17 = (s.chr) & 1;n_d7l = (((s.d_in >>> 7) & 1)) & 1;}
+if (s.ph === 1) {n_sr = ( ( s.sr << 1 )  | 1) & 255;}if (s.ph === 3) {if (s.load && s.q17) {n_sr = ( (  ( s.sr << 1 )  | 1 )  &  ~ s.d_in) & 255;} else {n_sr = ( ( s.sr << 1 )  | 1) & 255;}}if (s.load) {n_q32 = (s.q17 && s.d7l) & 1;}
+if (s.intack) {n_cnt = (0) & 255;} else {if (s.ph === 1) {if (s.cnt === 206) {n_cnt = (0) & 255;} else {n_cnt = (s.cnt + 1) & 255;}}}
+if (s.outfd) {n_nmi_on = (0) & 1;} else {if (s.outfe) {n_nmi_on = (1) & 1;}}if (s.iowr || s.nmi_on) {n_fs = (0) & 1;} else {if (s.infe) {n_fs = (1) & 1;}}
+n_sync_d = (s.sync) & 1;if (s.fs) {n_row = (0) & 7;} else {if (s.sync &&  ! s.sync_d) {n_row = (s.row + 1) & 7;}}
+n_mreq_d = (s.mreq_n) & 1;if (s.m1) {n_q20 = (0) & 1;} else {if (s.mreq && s.mreq_d) {n_q20 = (s.aena) & 1;}}
+s.ph = n_ph; s.code = n_code; s.q17 = n_q17; s.d7l = n_d7l; s.q32 = n_q32; s.sr = n_sr; s.cnt = n_cnt; s.nmi_on = n_nmi_on; s.fs = n_fs; s.row = n_row; s.sync_d = n_sync_d; s.q20 = n_q20; s.mreq_d = n_mreq_d;
+  }
+};
+const ULA_NET = "# ZX81 ULA 2C210, gate-level netlist transcribed from Ferranti drawing LD6679/ULA2C210/1 issue 1 (12/01/82).\n# Started from the 2C184 transcription (ula/2c184.net): the two drawings share the grid and most of the logic.\n# Every line still has to be checked against the 2C210 drawing; lines checked carry 'ok210'.\n# Format: see README.md. Grid squares are row then column, as printed on the drawing's edges.\n\n# ---- power ----\nVCC     pin_in   VCC            PN40   @1A  ok210\nGND     pin_in   GND            PN34   @37A  ok210\n\n# ---- data pins D0-D7: 16K pull-up, then an emitter-follower input buffer ----\n# The pin node itself (nDn) is also driven by the keyboard and port outputs (open collector, rows 12-19).\npD0     pin_io   nD0            PN32   @3B   pullup=16k  ok210\npD1     pin_io   nD1            PN30   @4B   pullup=16k  ok210\npD2     pin_io   nD2            PN28   @5B   pullup=16k  ok210\npD3     pin_io   nD3            PN26   @6B   pullup=16k  ok210\npD4     pin_io   nD4            PN24   @7B   pullup=16k  ok210\npD5     pin_io   nD5            PN23   @8B   pullup=16k  ok210\npD6     pin_io   nD6            PN21   @9B   pullup=16k  ok210\npD7     pin_io   nD7            PN19   @10B  pullup=16k  ok210\nbD0     buf_ef   D0             nD0    @3N  ok210\nbD1     buf_ef   D1             nD1    @4N  ok210\nbD2     buf_ef   D2             nD2    @5N  ok210\nbD3     buf_ef   D3             nD3    @6N  ok210\nbD4     buf_ef   D4             nD4    @7N  ok210\nbD5     buf_ef   D5             nD5    @8N  ok210\nbD6     buf_ef   D6             nD6    @9N  ok210\nbD7     buf_ef   D7             nD7    @10N  ok210\n\n# ---- other input pins (16K pull-up, emitter-follower buffer) ----\npKB0    pin_in   nKB0           PN33   @12B  pullup=16k  ok210\npKB1    pin_in   nKB1           PN31   @13B  pullup=16k  ok210\npKB2    pin_in   nKB2           PN29   @14B  pullup=16k  ok210\npKB3    pin_in   nKB3           PN27   @15B  pullup=16k  ok210\npKB4    pin_in   nKB4           PN25   @16B  pullup=16k  ok210\npUSA    pin_in   nUSA           PN22   @17B  pullup=16k  ok210\npTAPE   pin_in   nTAPE          PN20   @18B  series=400R clamp=diode-to-GND divider=5k-to-VS  ok210\npOSC    osc      OSC            PN35   @21B  ceramic resonator  ok210\npMREQ   pin_in   nMREQ          PN9    @23B  pullup=16k  ok210\npM1     pin_in   nM1            PN10   @24B  pullup=16k  ok210\npA15    pin_in   nA15           PN18   @26B  pullup=16k  ok210\npHALT   pin_in   nHALT          PN17   @27B  pullup=16k  ok210\npA14    pin_in   nA14           PN11   @29B  pullup=16k  ok210\npWR     pin_in   nWR            PN8    @32B  pullup=16k  ok210\npIORQ   pin_in   nIORQ          PN7    @34B  pullup=16k  ok210\npRD     pin_in   nRD            PN6    @36B  pullup=16k  ok210\nbKB0    buf_ef   KB0            nKB0   @12F  note=(3VBE)  ok210\nbKB1    buf_ef   KB1            nKB1   @13F  note=(3VBE)  ok210\nbKB2    buf_ef   KB2            nKB2   @14F  note=(3VBE)  ok210\nbKB3    buf_ef   KB3            nKB3   @15F  note=(3VBE)  ok210\nbKB4    buf_ef   KB4            nKB4   @16F  note=(3VBE)  ok210\nbUSA    buf_ef   USA            nUSA   @17G  ok210\niTAPE   inv      TAPE           nTAPE  @18G  inverter drawn with output circle  ok210\nbMREQ   buf_ef   N.MREQ         nMREQ  @23F  ok210\nbM1     buf_ef   N.M1           nM1    @24F  ok210\nbA15    buf_ef   A15            nA15   @26F  ok210\nbHALT   buf_ef   N.HALT         nHALT  @27F  ok210\nbA14    buf_ef   A14            nA14   @29F  ok210\nbWR     buf_ef   N.WR           nWR    @32F  ok210\nbIORQ   buf_ef   N.IORQ         nIORQ  @34F  ok210\nbRD     buf_ef   N.RD           nRD    @36F  ok210\n\n# ---- output pins ----\n# PN14 N.Ø (clock to the Z80, row 2), PN15 N.NMI (row 5, open collector with 5K to VCC), PN16 TV/TAPE (row 10,\n# 3-level output from N.SYNC and N.VIDEO), PN36-39 and PN1-2 A3'-A8' (rows 12-17), PN5/4/3 A0'-A2' (rows 21-23),\n# PN12 RAM N.CS and PN13 ROM N.CS (rows 30-32, RTL stages \"see cct diagram\").\n\n# ---- port read and the NOP: open-collector drivers onto the data pins (rows 12-19, columns K-Y) ----\n# EN = \"not reading the port\" (high: the drivers let go), from the R/2 inverter at 20K. FORCE = pull the data low\n# (the NOP fed to the Z80 for a character), vertical at column W. Checked: row 12 drives D0 ... row 19 drives D7.\nkb0a    nor2     n_12R          KB0 EN        @12R  ok210\nkb0b    nor2     n_12V          n_12R FORCE   @12V  ok210\nkb0c    pin_oc   nD0            n_12V         @12Y   drives D0 low when n_12V is low  ok210\nkb1a    nor2     n_13R          KB1 EN        @13R  ok210\nkb1b    nor2     n_13V          n_13R FORCE   @13V  ok210\nkb1c    pin_oc   nD1            n_13V         @13Y  ok210\nkb2a    nor2     n_14R          KB2 EN        @14R  ok210\nkb2b    nor2     n_14V          n_14R FORCE   @14V  ok210\nkb2c    pin_oc   nD2            n_14V         @14Y  ok210\nkb3a    nor2     n_15R          KB3 EN        @15R  ok210\nkb3b    nor2     n_15V          n_15R FORCE   @15V  ok210\nkb3c    pin_oc   nD3            n_15V         @15Y  ok210\nkb4a    nor2     n_16R          KB4 EN        @16R  ok210\nkb4b    nor2     n_16V          n_16R FORCE   @16V  ok210\nkb4c    pin_oc   nD4            n_16V         @16Y  ok210\nd5a     inv      n_17V          FORCE         @17V   D5 has no input: it reads high (pull-up), and is pulled low for the NOP  ok210\nd5c     pin_oc   nD5            n_17V         @17Y  ok210\nusaa    nor2     n_17R          USA EN        @17R  ok210\nusab    inv      n_18V          n_17R         @18V   D6 is not forced for the NOP (a character byte has D6 low already)  ok210\nusac    pin_oc   nD6            n_18V         @18Y  ok210\ntapa    nor2     n_18R          TAPE EN       @18R  ok210\ntapb    nor2     n_19V          n_18R FORCE   @19V  ok210\ntapc    pin_oc   nD7            n_19V         @19Y  ok210\nen      inv      EN             INFE          @20U   ok210; R/2; INFE comes up column L from the fsr gate's input (row 37.8) to row 20.4\n\n# ---- dot shift register Q1-Q8 (rows 3-10, columns T-AL) ----\n# Inverters A-H take D0-D7. Each stage's reset is NOR(~Dn, S/L, D6L): with S/L and D6L low, a 1 in the ROM byte\n# clears that stage. Stages shift on the falling edge of SCLK (the clock pins carry a bubble), Q1 shifting in a 1.\niA      inv      nA             D0            @6T  ok210\niB      inv      nB             D1            @6V  ok210\niC      inv      nC             D2            @6X  ok210\niD      inv      nD             D3            @6Z  ok210\niE      inv      nE             D4            @6AB  ok210\niF      inv      nF             D5            @6AD  ok210\niG      inv      nG             D6            @6AF  ok210\niH      inv      nH             D7            @6AH  ok210\nrA      nor3     R1             nA S/L D6L    @8T  ok210\nrB      nor3     R2             nB S/L D6L    @8V  ok210\nrC      nor3     R3             nC S/L D6L    @8X  ok210\nrD      nor3     R4             nD S/L D6L    @8Z  ok210\nrE      nor3     R5             nE S/L D6L    @8AB  ok210\nrF      nor3     R6             nF S/L D6L    @8AD  ok210\nrG      nor3     R7             nG S/L D6L    @8AF  ok210\nrH      nor3     R8             nH S/L D6L    @8AH  ok210\nQ1      dff      Q1             VCC ~SCLK R1  @10T  D tied to '1'  ok210\nQ2      dff      Q2             Q1  ~SCLK R2  @10V  ok210\nQ3      dff      Q3             Q2  ~SCLK R3  @10X  ok210\nQ4      dff      Q4             Q3  ~SCLK R4  @10Z  ok210\nQ5      dff      Q5             Q4  ~SCLK R5  @10AB  ok210\nQ6      dff      Q6             Q5  ~SCLK R6  @10AD  ok210\nQ7      dff      Q7             Q6  ~SCLK R7  @10AF  ok210\nQ8      dff      Q8             Q7  ~SCLK R8  @10AH  ok210\n\n# ---- character latch NQ11-NQ18 (rows 13-16, columns U-AK): D-type latches, inverted outputs ----\n# Inputs checked: NQ11 D0, NQ12 D1, NQ13 D2, NQ14 D3, NQ15 D4, NQ16 D5. Latch clock LCLK is driven by two R/3\n# inverters in parallel (rows 18-19, columns AE and AG) from LCLKn.\nlck1    inv      LCLK           LCLKn         @18AE  R/3  ok210\nlck2    inv      LCLK           LCLKn         @18AG  R/3 (in parallel with lck1)  ok210\nNQ11    dlatch   NQ11           D0 ~LCLK      @14U   output inverted  ok210\nNQ12    dlatch   NQ12           D1 ~LCLK      @14X  ok210\nNQ13    dlatch   NQ13           D2 ~LCLK      @14AA  ok210\nNQ14    dlatch   NQ14           D3 ~LCLK      @14AD  ok210\nNQ15    dlatch   NQ15           D4 ~LCLK      @14AG?  ok210\nNQ16    dlatch   NQ16           D5 ~LCLK      @14AJ?  ok210\nQ17     dlatch   Q17            CHAR ~LCLK    @14AL  ok210; true output; D: the row 13.8 line, down column R to the CHAR line at row 19.4 (so Q17 holds 'this fetch was a character', not D6 itself)\nd6l     inv      D6L            Q17           @12AN  ok210; R/3; low after a character fetch; its output also runs up column AN to the shift register's D6L line\nNQ18    dlatch   NQ18           D7 ~LCLK      @14AN  ok210; D from the row 11.4 line (D7)\n# video (rows 12-15, columns AL-AT), 2C210 as drawn: Q32 holds the inverse-video bit; four NORs make VID = XNOR(Q8, Q32)\nq32d    nor2     n_q32d         D6L NQ18      @13AM  ok210\nQ32     dff      Q32            n_q32d ~S/L -     @13AP  ok210; clocked by S/L (column AJ): it takes the inverse bit when the byte is loaded; no reset drawn\nvx      nor2     VX             Q8 Q32        @13AR  ok210; SV = Q8 (Q8's output runs right to column AM and down)\nvy      nor2     VY             Q8 VX         @12AU  ok210\nvz      nor2     VZ             VX Q32        @14AU  ok210\nvid     nor2     VID            VY VZ         @13AX  ok210; R/2. VID = XNOR(Q8, Q32)\n\n# ---- line counter Q21-Q28 (rows 4-6, columns AN-BB): ripple toggle stages, each clocked on the falling edge of\n# the previous stage's true output; all reset together by CRES (row 6.5). Inverted outputs marked n.\nQ21     tff      Q21 Q21n       ~CCLK CRES    @5AN   ok210; CCLK: the clock (column AK) delayed by four inverters\nQ22     tff      Q22 Q22n       ~Q21 CRES     @5AQ  ok210\nQ23     tff      Q23 Q23n       ~Q22 CRES     @5AS  ok210\nQ24     tff      Q24 Q24n       ~Q23 CRES     @5AV  ok210\nQ25     tff      Q25 Q25n       ~Q24 CRES     @5AX  ok210\nQ26     tff      Q26 Q26n       ~Q25 CRES     @5AZ  ok210\nQ27     tff      Q27 Q27n       ~Q26 CRES     @5BB  ok210\nQ28     tff      Q28 Q28n       ~Q27 CRES     @5BD  ok210\n# count 207 = Q28 Q27 Q24 Q23 Q22 Q21 high, Q26 Q25 low: the 8-input NOR goes high and resets the counter,\n# so a line is 207 counts (checked against the known 207 T-state line).\nc207    nor8     T207           Q28n Q27n Q26 Q25 Q21n Q22n Q23n Q24n   @8BB  ok210\n# CRES: see crn (row 11): count 207 or INTACK\nLS      nor4     LINE-SYNC      Q25n Q26 Q27 Q28   @3BE   high for counts 16-31: 16 counts of horizontal sync  ok210\n\n# ---- NMI, sync and clock outputs (rows 2-10, columns BE-BJ) ----\nnm1     inv      n_5BG          LINE-SYNC     @5BG  ok210\nnm2     nor2     n_5BI          n_5BG NMIOFF  @5BI   NMIOFF from the NMI latch (nl2)  ok210\nnm3     inv      n_5BL          n_5BI         @5BL  ok210\nnm4     pin_oc   N.NMI          n_5BL         @5BN   PN15, 5K pull-up to VCC on chip  ok210\nfs1     nor2     SYNCn          LINE-SYNC FRAME-SYNC   @8BG  ok210\nfs2     inv      N.SYNC         SYNCn         @8BJ   R/2  ok210\ntv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BL   PN16, '3 level output'; circuit on ULA 2C158/2: N.SYNC high pulls the output to 0 V; otherwise N.VIDEO high gives the lower level (black, about 2.8 V), low the higher (white, about 4.3 V); 200 ohms in series  ok210\nck1     inv      n_2BH          CLKSRC        @2BH   R/2; CLKSRC = Q19, up column AK  ok210\nck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output  ok210; the cell does not invert (circuit 'PIN phi-bar' on ULA 2C158/2: input transistor, phase splitter, totem pole), so N.PHI = NOT Q19 and the Z80's CLK (through TR2, an inverter) = Q19: the latch windows fall after CLK falls in T1 and T2, and FORCE covers the T3 rise when the Z80 takes the NOP\n\n# ---- clock: oscillator, Q19, the counter clock (rows 17-25, columns N-AL) ----\noscb    inv      OSCn           OSC           @21E   inverter after the oscillator cell and a cross-under  ok210\nQ19     tff      Q19 Q19n       ~OSCn -       @21R   ok210; R/2 cell; clocked from the oscillator line; no reset drawn; Q19 = 3.25 MHz\n# CLKSRC (the line that goes up column AK to row 2 and right to the N.PHI output) is Q19's true output (row 21). ok210\nalias   CLKSRC   Q19\ncc1     inv      n_cc1          Q19           @9AL   four inverters in series delay Q19 into the counter clock  ok210\ncc2     inv      n_cc2          n_cc1         @9AN  ok210\ncc3     inv      n_cc3          n_cc2         @8AN  ok210\ncc4     inv      CCLK           n_cc3         @8AL  ok210\ncr      inv      CRES           CRESn         @11AT  R/3  ok210\ncrn     nor2     CRESn          T207 INTACK   @11AW  ok210; drawn pointing left; INTACK comes up column AV from row 27.3: the line counter restarts at count 207 and at every interrupt acknowledge\n\n# ---- delay chains (rows 17-24) ----\n# Chain A (row 17): R/? inverter output up at 17N, then three NOR2 gates with both inputs tied (inverters).\n# Chain B (row 21-22): from Q19n, NOR2 gates with both inputs tied, five or more in series.\n# Chain C (row 24): NOR2 gates with both inputs tied, from the row 24 vertical at column R.\n# LCLKn = NOR4(chain A out, col W vertical from row 13, the row 18 line from column O, Q19)   @18X   R/3\ndA0     inv      DA0            OSCn          @18N   ok210; input from the column N vertical down to the oscillator line (row 21)\nsck     inv      SCLK           DA0           @16N   ok210; R/3; output up column N to row 13.5, right, up column W to the shift register clocks (row 11.3): the dots shift at 6.5 MHz\ndA1     nor2     DA1            DA0 DA0       @17P  ok210\ndA2     nor2     DA2            DA1 DA1       @17S  ok210\ndA3     nor2     DA3            DA2 DA2       @17U  ok210\nlckn    nor4     LCLKn          DA1 DA3 N.M1 Q19   @18V   ok210; R/3; DA1 via row 16.3; N.M1 via column O and row 18.3\ni19     inv      n_i19          CHAR          @19T   ok210; CHAR comes up column O to row 19.4\nlk2     nor3     FORCE          LCLKn N.M1 n_i19   @18AE  ok210; R/3, 2C210 only; LK2 on the drawing: high when LCLKn is low in an M1 character fetch; down to row 19.8, left, and up column I as FORCE\ndB1     nor2     DB1            Q19n Q19n     @21U  ok210\ndB2     nor2     DB2            DB1 DB1       @21X  ok210\ndB3     nor2     DB3            DB2 DB2       @21AA  ok210\ndB4     nor2     DB4            DB3 DB3       @21AC  ok210\ndB5     nor2     DB5            DB4 DB4       @21AE  ok210\ndC1     nor2     DC1            N.MREQ N.MREQ @24V  ok210\ndC2     nor2     DC2            DC1 DC1       @24AC  ok210\ndC3     nor2     DC3            DC2 DC2       @24AE  ok210\nd21     nor3     n_22AJ         Q19n DB5 DC3  @22AD  ok210; R/2; Q19n along row 21.7 from Q19 and down column AB\nd21b    inv      S/L            n_22AJ        @22AE  ok210; R/3; this is S/L: right along row 22.3, up column AJ to the shift register (and Q32's clock)\naen1    nor2     AENa           D6L M1        @24AI  ok210; D6L from d6l's output via row 13.6, column AJ, row 16.2 and down column AG (it crosses the S/L line at row 22.3 without a dot); M1 via row 28.6 and column AD; AENa also runs left along row 25.9 to Q20's D input. So the ULA drives A0'-A8' from the end of a character's M1 to the next M1\naen2    inv      n_aen2         AENa          @24AM  ok210\naen3    inv      AENin          n_aen2        @24AO  ok210; R/2; up column AU to the address enable (row 18)\n\n# ---- address outputs (rows 12-24, columns BD-BJ) ----\n# A3'-A8': the latch's inverted outputs are inverted again and driven through tri-state buffers. The buffers' enables\n# (active low) share AEN, made by an RTL inverter with a 1.8K pull-up (row 18) from AENin (the long row 18 line).\naen     inv_rtl  AEN            AENin         @18BC  ok210; RTL, 1.8K pull-up\noa3     inv      n_oa3          NQ11          @12BC  ok210\noa4     inv      n_oa4          NQ12          @13BC  ok210\noa5     inv      n_oa5          NQ13          @14BC  ok210\noa6     inv      n_oa6          NQ14          @15BC  ok210\noa7     inv      n_oa7          NQ15          @16BC  ok210\noa8     inv      n_oa8          NQ16          @17BC  ok210\npa3     pin_ts   A3'            n_oa3 ~AEN    @12BH  PN36  ok210\npa4     pin_ts   A4'            n_oa4 ~AEN    @13BH  PN37  ok210\npa5     pin_ts   A5'            n_oa5 ~AEN    @14BH  PN38  ok210\npa6     pin_ts   A6'            n_oa6 ~AEN    @15BH  PN39  ok210\npa7     pin_ts   A7'            n_oa7 ~AEN    @16BH  PN1  ok210\npa8     pin_ts   A8'            n_oa8 ~AEN    @17BH  PN2  ok210\n# row counter Q29, Q30, NQ31 (rows 19-23, columns BB-BD): ripple toggles, reset together by RRES (column BA)\nQ29     tff      Q29 Q29n       ~SYNCn FRAME-SYNC  @19BB  ok210; reset: FRAME-SYNC, via column BA; clock: SYNCn (fs1's output), down column BB, so the row counter steps as each sync pulse starts\nQ30     tff      Q30 Q30n       ~Q29 FRAME-SYNC     @21BB  ok210\nNQ31    tff      - NQ31         ~Q30 FRAME-SYNC     @23BB  only the inverted output is drawn  ok210\noa0     inv      n_oa0          Q29n          @20BE  ok210\noa1     inv      n_oa1          Q30n          @21BE  ok210\noa2     inv      n_oa2          NQ31          @22BE  ok210\npa0     pin_ts   A0'            n_oa0 ~AEN    @20BH  PN5, also read back (below)  ok210\npa1     pin_ts   A1'            n_oa1 ~AEN    @21BH  PN4, also read back  ok210\npa2     pin_ts   A2'            n_oa2 ~AEN    @22BH  PN3  ok210\n# A0' and A1' are read back into the chip for the port decode\nba0     buf_ef   A0in           A0'           @25BF  ok210\nba1     buf_ef   A1in           A1'           @26BF  ok210\n\n# ---- character fetch decode (row 26, column J), 2C210 as drawn ----\na15i    inv      A15n           A15           @26H   ok210\nhlti    inv      HALTn          N.HALT        @27H   ok210\nchr     nor4     CHAR           D6 N.MREQ A15n HALTn   @26J   ok210; R/2; high for a memory read from A15 high with D6 low while not halted; top input is D6, via column M and the row 13.0 line\n# ---- memory request logic (rows 23-30, columns Q-X), traced on the 2C210 ----\n# N.MREQ runs down column R/S: into chain C (row 24), the two select NORs and Q20's clock. N.M1 turns down column R to\n# the inverter at row 26.5, whose output M1 resets Q20 and runs right along row 28.6, up column AD to row 24.4 (aen1).\nm1i     inv      M1             N.M1          @26U   ok210\na14i    inv      A14n           A14           @29Q   ok210\nromacc  nor2     ROMACC         N.MREQ A14    @27T   ok210; high for a memory cycle with A14 low\nramacc  nor2     RAMACC         N.MREQ A14n   @29T   ok210; high for a memory cycle with A14 high; runs right along row 29 to the RAM select\nQ20     dff      Q20            AENa ~N.MREQ M1   @27X   ok210; clocked as MREQ goes low; reset by M1; D is AENa (row 25.9, from aen1): set when the ULA drives the address\nromln   nor2     ROMLINE        Q20 ROMACC    @30W   ok210; runs right along row 30 to the ROM select\nrmin    inv      RAMSELn        RAMACC        @30AJ  ok210\n\n# ---- I/O decode and vertical sync (rows 30-37, columns E-Z) ----\n# N.WR turns up at column H to row 30.6, N.IORQ at column I to row 31.0, N.RD at column J to row 31.4.\niowr    nor2     IOWR           N.WR N.IORQ   @33K   ok210; high for any I/O write: clears vertical sync\nintack  nor2     INTACK         N.IORQ N.M1   @35K   ok210; high during the interrupt acknowledge (IORQ and M1 both low); runs right to row 35.4, column AK, and up\nfsl     nor3     FRAME-SYNC     NMION IOWR FSL   @33N   ok210; R/2; held off while the NMI is on, cleared by any OUT\nfsr     nor2     FSL            FRAME-SYNC INFE  @36N   ok210; cross-coupled with fsl: IN with A0 low starts vertical sync\n\n# ---- 2C210 only: blanking (rows 1-2, columns AU-BB) ----\nbl1     inv      n_bl1          Q25           @1AU   ok210\nbl2     inv      n_bl2          n_bl1         @1AW   ok210\nbl3     inv      Q25nd          n_bl2         @1BA   ok210; Q25 inverted and delayed by three gates\nblank   nor4     BLANK          Q25nd Q26 Q27 Q28   @1BD   ok210; LINE-SYNC with its start delayed by the three inverters\nvb      nor2     n_vb           BLANK VID     @10BA  ok210; VID from vid (row 13.2, right and up)\nvbi     inv      N.VIDEO        n_vb          @10BC  ok210; R/2. The 2C210 blanks the picture during line sync\n# ---- differences from the 2C184 seen so far (to be transcribed in full) ----\n# 1. Rows 1-2, columns AT-BA: a new chain of three inverters fed from Q25 (vertical at column AU) into a NOR at\n#    row 1, column BA; it feeds the LINE-SYNC / NMI area. The 2C184 has nothing here.\n# 2. Rows 9-10, columns AZ-BB: N.VIDEO now comes from a NOR2 (one input from the row 13 video NOR, R/2, the other from\n#    above) through an R/2 inverter, where the 2C184 goes more directly: the 2C210 gates the picture with a second signal\n#    (probably blanking during sync).\n\n# ---- port decode and the NMI on/off latch (rows 33-37, columns AR-AX) ----\n# Bus from the left (rows 30.8-32.5): N.WR, N.IORQ, N.RD, INFE (driven from here, runs left), NMION (driven from here,\n# runs left). A0in and A1in come down columns AO and AP from the read-back buffers (rows 25-26).\ninfe    nor3     INFE           N.RD N.IORQ A0in   @34AS  ok210; IN with A0 low: keyboard and tape read, starts vertical sync\noutfd   nor3     OUTFD          A1in N.IORQ N.WR   @35AS  ok210; OUT with A1 low: NMI off\noutfe   nor3     OUTFE          A0in N.IORQ N.WR   @37AS  ok210; OUT with A0 low: NMI on\nnl1     nor2     NMION          OUTFD NMIOFF  @35AW  ok210; cross-coupled\nnl2     nor2     NMIOFF         NMION OUTFE   @37AW  ok210; runs right to column BC and up to the NMI gate (nm2)\n\n# ---- memory select outputs (rows 30-32, columns BE-BJ): \"see cct diagram\" (RTL stages and totem-pole outputs) ----\nrmi     inv_rtl  RAMCSi         RAMSELn       @30BF  ok210; RTL\nrmo     pin_tpn  RAM.N.CS       RAMCSi        @30BI  ok210; PN12; the stage after the input transistor inverts (pin_tpn): confirmed by the cell circuit 'PINS ROMCS, RAMCS' on ULA 2C158/2, where the whole cell, input transistor included, does not invert. That circuit also shows the RAM cell holding the ROM cell off through 6K, which is the RAMCSi input of 'rom'\nrom     nor2_rtl ROMCSi         ROMLINE RAMCSi   @31BF  ok210; RTL. ROM N.CS = ROMLINE or RAMACC: the ROM is selected for A14 low, or while Q20 is set, unless the RAM is\nromo    pin_tpn  ROM.N.CS       ROMCSi        @31BI  ok210; PN13; the stage after the input transistor inverts (pin_tpn): confirmed by the cell circuit 'PINS ROMCS, RAMCS' on ULA 2C158/2, where the whole cell, input transistor included, does not invert. That circuit also shows the RAM cell holding the ROM cell off through 6K, which is the RAMCSi input of 'rom'\n";
+</script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id), KEYS = ZX81FAST_KEYS, T_HZ = 3.25e6, FRAME_T = 65000;
+  let rom = null, m = null, running = false, engine = 'fast', progName = '', startWall = 0, ranT = 0, speed = 0;
+  const pc = { checks: 0, bad: 0, last: null, origin: null, prev: '' };
+  const say = (t, cls) => { $('msg').textContent = t; $('msg').className = 'msg' + (cls ? ' ' + cls : ''); };
+
+  // ---- the recorder: one sample per clock period, in a ring ----
+  const RN = 1 << 16, r0 = new Uint32Array(RN), r1 = new Uint32Array(RN); let rp = 0, rcount = 0;
+  const rec = (s, mm) => {
+    const a = s.a_oe ? s.a_out : mm.cpuA & 0x1FF, wait = s.nmi_pull && !s.halt_n ? 0 : 1;
+    r0[rp] = s.phi_n | s.m1_n << 1 | s.mreq_n << 2 | s.rd_n << 3 | s.wr_n << 4 | s.iorq_n << 5 | s.halt_n << 6 | (1 - s.nmi_pull) << 7 | wait << 8 | s.rom_cs_n << 9 | s.ram_cs_n << 10 |
+      s.a_oe << 11 | s.nop << 12 | s.chr << 13 | s.window << 14 | s.load << 15 | s.sync << 16 | s.black << 17 | s.q17 << 18 | s.fs << 19 | s.nmi_on << 20;
+    r1[rp] = s.d_in | a << 8 | s.cnt << 17 | s.row << 25;
+    rp = (rp + 1) & (RN - 1); if (rcount < RN) rcount++;
+  };
+  const SIG = [['CLK (Z80)', 0, 1], ['M1', 1], ['MREQ', 2], ['RD', 3], ['WR', 4], ['IORQ', 5], ['HALT', 6], ['NMI', 7], ['WAIT', 8], ['ROM CS', 9], ['RAM CS', 10],
+    ['A0\'-A8\' driven', 11], ['NOP forced', 12], ['character', 13], ['latch open', 14], ['shift load', 15], ['sync', 16], ['black', 17], ['frame sync', 19], ['NMI on', 20]];
+  const BUS = [['D0-D7', v => (v & 0xFF).toString(16).toUpperCase().padStart(2, '0'), v => v & 0xFF], ['A0\'-A8\'', v => (v >> 8 & 0x1FF).toString(16).toUpperCase().padStart(3, '0'), v => v >> 8 & 0x1FF],
+    ['line count', v => String(v >> 17 & 0xFF), v => v >> 17 & 0xFF], ['row', v => String(v >> 25 & 7), v => v >> 25 & 7]];
+
+  function build() {
+    engine = $('engine').value;
+    if (engine === 'fast') { m = new Zx81Fast(Z80, ULA_CORE, rom, { ramSize: 0x4000 }); m.rec = rec; }
+    else m = new Zx81Ula(Z80, new UlaSim(ULA_NET, { init: { NMION: 0, NMIOFF: 1, 'FRAME-SYNC': 0, FSL: 1 } }), rom, { ramSize: 0x4000 });
+    m.T0 = m.T; ranT = 0; rp = 0; rcount = 0; Object.assign(pc, { checks: 0, bad: 0, last: null, origin: null, prev: '', frames: -1 }); typing = []; shiftLatch = false;
+    $('engNote').textContent = engine === 'fast' ? 'One 13 MHz clock, as it would run in an FPGA. Fast enough to use at full speed.' : 'Every gate and flip-flop of the 2C210 with its delay. Expect about one hundredth of full speed: the ROM takes minutes to reach the cursor. The logic analyser does not record in this mode.';
+    for (const b of ['btnRun', 'btnReset', 'btnStepI', 'btnStepF']) $(b).disabled = false;
+  }
+  function setRunning(on) { running = on; $('btnRun').textContent = on ? 'Pause' : 'Run'; if (on) { last = performance.now(); requestAnimationFrame(loop); } else { draw(); drawWave(); meters(); } }
+
+  // ---- typing: real keys, the key grid, and text typed for you ----
+  let typing = [], shiftLatch = false, held = new Set();
+  const press = (name, down) => { if (m) m.key(name, down); const b = document.querySelector(`#kbd button[data-k="${name}"]`); if (b) b.classList.toggle('down', down); };
+  const keyName = e => e.key === 'Enter' ? 'NewLine' : e.key === 'Shift' ? 'Shift' : e.key === ' ' ? 'Space' : e.key === '.' ? '.' : /^[a-z0-9]$/i.test(e.key) ? e.key.toUpperCase() : e.key === 'Backspace' ? 'Rubout' : null;
+  $('tv').addEventListener('keydown', e => { const k = keyName(e); if (!k) return; e.preventDefault(); if (k === 'Rubout') { press('Shift', true); press('0', true); } else press(k, true); });
+  $('tv').addEventListener('keyup', e => { const k = keyName(e); if (!k) return; e.preventDefault(); if (k === 'Rubout') { press('0', false); press('Shift', false); } else press(k, false); });
+  $('tv').addEventListener('blur', () => { for (const r of KEYS) for (const k of r) press(k, false); });
+  { const order = [3, 4, 2, 5, 1, 6, 0, 7], kb = $('kbd');           // the keyboard's rows: 1-5 6-0, Q-T Y-P, A-G H-NewLine, Shift-V B-Space
+    for (let row = 0; row < 4; row++) { const L = KEYS[order[row * 2]], Rr = KEYS[order[row * 2 + 1]].slice().reverse();
+      for (const k of [...L, ...Rr]) { const b = document.createElement('button'); b.type = 'button'; b.dataset.k = k; b.textContent = k === 'NewLine' ? 'NL' : k === 'Shift' ? 'SHF' : k === 'Space' ? 'SPC' : k;
+        b.title = k === 'NewLine' ? 'NEW LINE' : k === 'Shift' ? 'SHIFT (latches for one key)' : k === 'Space' ? 'SPACE (BREAK)' : k;
+        b.addEventListener('pointerdown', e => { e.preventDefault(); if (k === 'Shift') { shiftLatch = !shiftLatch; press('Shift', shiftLatch); return; } press(k, true); held.add(k); });
+        const up = () => { if (!held.has(k)) return; held.delete(k); setTimeout(() => { press(k, false); if (shiftLatch) { shiftLatch = false; press('Shift', false); } }, 90); };
+        b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); kb.appendChild(b); } } }
+  // typed for you: [keys held together, frames]
+  const typeKeys = seq => { for (const ks of seq) { typing.push({ ks, n: 6 }); typing.push({ ks: [], n: 6 }); } };
+  function typist() { if (!typing.length) return; const t = typing[0]; if (!t.on) { t.on = true; for (const k of t.ks) press(k, true); } if (--t.n <= 0) { for (const k of t.ks) press(k, false); typing.shift(); } }
+
+  // ---- the run loop: no faster than a real ZX81, no more than 14 ms of work per screen refresh ----
+  let last = 0, seenFrames = 0, pcT = 0, owed = 0;
+  function loop(now) {
+    if (!running) return;
+    const dt = Math.min(100, now - last); last = now; owed = Math.min(owed + dt * T_HZ / 1000, 4 * FRAME_T);
+    const t0 = performance.now(), T0 = m.T, chunk = engine === 'fast' ? 6500 : 400;
+    try { while (owed > 0 && performance.now() - t0 < 14) { const b = m.T; m.run(chunk); owed -= m.T - b; if (m.frames !== seenFrames) { seenFrames = m.frames; typist(); } } }
+    catch (e) { say('The machine stopped: ' + e.message, 'err'); setRunning(false); return; }
+    if (performance.now() - t0 >= 14) owed = Math.min(owed, FRAME_T);         // it cannot keep up: do not let the debt grow
+    ranT += m.T - T0; speed = speed * 0.9 + 0.1 * ((m.T - T0) / T_HZ) / (dt / 1000);
+    draw(); if ((pcT += dt) > 500) { pcT = 0; pictureCheck(); meters(); }
+    requestAnimationFrame(loop);
+  }
+
+  // ---- the picture: finished lines of the frame being drawn over the last whole frame ----
+  const tv = $('tv').getContext('2d'), img = tv.createImageData(414, 312);
+  function draw() {
+    if (!m) return; const d = img.data, W = m.W, H = m.H, y0 = m.y;
+    for (let y = 0, i = 0; y < H; y++) { const src = y < y0 ? m.fb : m.frame; for (let x = 0; x < W; x++, i += 4) { const v = src[y * W + x], c = v === 1 ? 16 : v === 2 ? 236 : 128; d[i] = d[i + 1] = d[i + 2] = c; d[i + 3] = 255; } }
+    tv.putImageData(img, 0, 0);
+  }
+  function meters() {
+    if (!m) return; const t = ranT / T_HZ;
+    $('mSpeed').textContent = running ? (speed * 100).toFixed(speed < 0.1 ? 1 : 0) + '% of a ZX81' : 'paused';
+    $('mTime').textContent = t.toFixed(1) + ' s'; $('mFrames').textContent = m.frames; $('mNmi').textContent = m.nmis; $('mInt').textContent = m.ints; $('mWait').textContent = m.waits;
+    $('mPc').textContent = m.cpu.pc.toString(16).toUpperCase().padStart(4, '0') + 'h';
+  }
+
+  // ---- picture check: read the dots back as characters ----
+  function displayFile() {
+    const r = a => m.ram[(a - 0x4000) & 0x3FFF], df = r(0x400C) | r(0x400D) << 8; if (df < 0x407D || df > 0x7FFF || r(df) !== 0x76) return null;
+    const cells = new Uint8Array(24 * 32); let p = df + 1;
+    for (let row = 0; row < 24; row++) { let col = 0; for (; col < 33; col++) { const v = r(p++); if (v === 0x76) break; if (col < 32) cells[row * 32 + col] = v; if (v & 0x40) return null; } if (col === 33) return null; }
+    return cells;
+  }
+  function matchAt(cells, x0, y0, stopAt) {
+    const f = m.frame, W = m.W; let bad = 0;
+    for (let i = 0; i < 768; i++) { const v = cells[i], inv = v & 0x80 ? 0xFF : 0, cx = x0 + (i & 31) * 8, cy = y0 + (i >> 5) * 8; let ok = true;
+      for (let l = 0; l < 8 && ok; l++) { const bits = rom[0x1E00 + (v & 0x3F) * 8 + l] ^ inv, o = (cy + l) * W + cx; for (let b = 0; b < 8; b++) if ((f[o + b] === 1) !== !!(bits & (0x80 >> b))) { ok = false; break; } }
+      if (!ok && ++bad > stopAt) return bad; }
+    return bad;
+  }
+  function pictureCheck() {
+    if (!m || !m.frames) return; const cells = displayFile(), pill = $('pcPill'), txt = $('pcText');
+    if (m.frames === pc.frames) { pill.className = 'pill idle'; pill.textContent = 'no picture'; txt.textContent = 'No frame sync since the last check (FAST mode, LOAD or SAVE): the picture shown is an old one.'; pc.prev = ''; return; }
+    pc.frames = m.frames;
+    if (!cells) { pill.className = 'pill idle'; pill.textContent = 'not applicable'; txt.textContent = 'No ordinary display file just now.'; return; }
+    const sig = cells.join(); if (sig !== pc.prev) { pc.prev = sig; return; }          // only a screen that has stood still for two checks
+    if (!cells.some(v => v)) { pill.className = 'pill idle'; pill.textContent = 'blank screen'; txt.textContent = 'Nothing on the screen to compare.'; return; }
+    let bad = pc.origin ? matchAt(cells, pc.origin[0], pc.origin[1], 768) : 769;
+    if (!pc.origin || bad > 384) { let best = [0, 0, 769]; for (let y = 30; y < 90; y++) for (let x = 40; x < 130; x++) { const b = matchAt(cells, x, y, best[2]); if (b < best[2]) best = [x, y, b]; } if (best[2] < bad) { bad = best[2]; pc.origin = [best[0], best[1]]; } }
+    pc.checks++; if (bad) pc.bad++; pc.last = bad;
+    pill.className = 'pill ' + (bad ? 'bad' : 'ok'); pill.textContent = bad ? `${bad} of 768 differ` : '768 of 768 match';
+    txt.textContent = `${pc.checks} checks, ${pc.bad} with differences.` + (pc.origin ? ` Picture starts ${pc.origin[0]} dots after line sync, ${pc.origin[1]} lines after frame sync.` : '');
+  }
+
+  // ---- logic analyser ----
+  const wv = $('wave'), wc = wv.getContext('2d');
+  function drawWave() {
+    const css = getComputedStyle(document.documentElement), col = n => css.getPropertyValue(n).trim();
+    const W = wv.width, H = wv.height, LBL = 120, n = Math.min(+$('zoom').value, rcount), rowH = 16;
+    wc.fillStyle = col('--panel'); wc.fillRect(0, 0, W, H); wc.font = '11px JetBrains Mono, monospace'; wc.textBaseline = 'middle';
+    if (!n) { wc.fillStyle = col('--muted'); wc.fillText(engine === 'fast' ? 'Nothing recorded yet. Run the machine, then pause.' : 'The logic analyser records with the synchronous design.', 12, 20); return; }
+    const maxBack = Math.max(0, rcount - n), back = Math.round(maxBack * +$('back').value / 1000), end = (rp - back + RN) & (RN - 1), start = (end - n + RN) & (RN - 1), dx = (W - LBL - 6) / n;
+    const at = i => (start + i) & (RN - 1);
+    // T-state grid: a T-state starts where the Z80's clock rises (phi_n falls)
+    wc.strokeStyle = col('--grid'); wc.beginPath(); for (let i = 1; i < n; i++) if ((r0[at(i - 1)] & 1) && !(r0[at(i)] & 1)) { const x = LBL + i * dx; wc.moveTo(x, 0); wc.lineTo(x, H); } wc.stroke();
+    let y = 4;
+    for (const [name, bit, invert] of SIG) {
+      wc.fillStyle = col('--muted'); wc.fillText(name, 4, y + rowH / 2);
+      wc.strokeStyle = col('--trace'); wc.beginPath();
+      for (let i = 0; i < n; i++) { let v = r0[at(i)] >> bit & 1; if (invert) v ^= 1; const yy = y + (v ? 3 : rowH - 3), x = LBL + i * dx; if (i === 0) wc.moveTo(x, yy); else wc.lineTo(x, yy); wc.lineTo(x + dx, yy); }
+      wc.stroke(); y += rowH;
+    }
+    for (const [name, fmt, val] of BUS) {
+      wc.fillStyle = col('--muted'); wc.fillText(name, 4, y + rowH / 2); wc.strokeStyle = col('--trace2'); wc.fillStyle = col('--ink');
+      let from = 0; for (let i = 1; i <= n; i++) if (i === n || val(r1[at(i)]) !== val(r1[at(from)])) { const x0 = LBL + from * dx, x1 = LBL + i * dx; wc.strokeRect(x0 + .5, y + 2.5, x1 - x0 - 1, rowH - 5); const t = fmt(r1[at(from)]); if (x1 - x0 > t.length * 7 + 4) wc.fillText(t, x0 + 3, y + rowH / 2); from = i; }
+      y += rowH + 2;
+    }
+  }
+  function vcd() {
+    const n = Math.min(rcount, 16000 * 4), start = (rp - n + RN) & (RN - 1), ids = '!"#$%&\'()*+,-./0123456789:;<=>?@AB'; let out = '$timescale 1ns $end\n$scope module zx81_ula $end\n', k = 0; const idS = [], idB = [];
+    for (const [name] of SIG) { idS.push(ids[k]); out += `$var wire 1 ${ids[k++]} ${name.replace(/[^A-Za-z0-9]+/g, '_')} $end\n`; }
+    const bw = [8, 9, 8, 3]; BUS.forEach(([name], i) => { idB.push(ids[k]); out += `$var wire ${bw[i]} ${ids[k++]} ${name.replace(/[^A-Za-z0-9]+/g, '_')} $end\n`; });
+    out += '$upscope $end\n$enddefinitions $end\n'; let p0 = -1, p1 = -1;
+    for (let i = 0; i < n; i++) { const a = (start + i) & (RN - 1), v0 = r0[a], v1 = r1[a]; if (v0 === p0 && v1 === p1) continue; out += `#${Math.round(i * 76.923)}\n`;
+      SIG.forEach(([, bit, inv], j) => { const b = v0 >> bit & 1 ^ (inv ? 1 : 0), pb = p0 < 0 ? -1 : p0 >> bit & 1 ^ (inv ? 1 : 0); if (b !== pb) out += b + idS[j] + '\n'; });
+      BUS.forEach(([, , val], j) => { const b = val(v1); if (p1 < 0 || b !== val(p1)) out += 'b' + b.toString(2) + ' ' + idB[j] + '\n'; }); p0 = v0; p1 = v1; }
+    return out;
+  }
+
+  // ---- report ----
+  function crc32(b) { let c, crc = -1; for (let i = 0; i < b.length; i++) { c = (crc ^ b[i]) & 0xFF; for (let k = 0; k < 8; k++) c = c & 1 ? c >>> 1 ^ 0xEDB88320 : c >>> 1; crc = crc >>> 8 ^ c; } return ((crc ^ -1) >>> 0).toString(16).toUpperCase().padStart(8, '0'); }
+  function report() {
+    if (!m) return 'No machine yet: load a ROM first.';
+    return ['ZX81 ULA Test Bench report', 'Design version: ' + $('ver').textContent, 'Logic: ' + (engine === 'fast' ? 'synchronous design (2c210_sync.v)' : 'gate-level netlist (2c210.net)'),
+      'ROM: ' + rom.length + ' bytes, CRC32 ' + crc32(rom), 'Program: ' + (progName || 'none'), 'ZX81 time run: ' + (ranT / T_HZ).toFixed(1) + ' s' + (speed ? ', at ' + (speed * 100).toFixed(0) + '% of full speed' : ''),
+      `Frames ${m.frames}, NMIs ${m.nmis}, interrupts ${m.ints}, wait states ${m.waits}, PC ${m.cpu.pc.toString(16).toUpperCase()}h`,
+      'Picture check: ' + (pc.checks ? `${pc.checks} checks, ${pc.bad} with differences; last: ${pc.last ? pc.last + ' of 768 characters differ' : 'all 768 match'}` + (pc.origin ? `; picture starts ${pc.origin[0]} dots after line sync, ${pc.origin[1]} lines after frame sync` : '') : 'no checks yet'),
+      'Browser: ' + navigator.userAgent, '', 'What I saw (describe what a real ZX81 does differently):', ''].join('\n');
+  }
+  const copy = (text, btn) => { const done = () => { const t = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = t; }, 1200); };
+    try { navigator.clipboard.writeText(text).then(done, () => { $('report').value = text; $('report').select(); }); } catch (e) { $('report').value = text; $('report').select(); } };
+
+  // ---- controls ----
+  const b64 = { enc: u => btoa(String.fromCharCode(...u)), dec: s => Uint8Array.from(atob(s), c => c.charCodeAt(0)) };
+  function gotRom(u, name, remember) {
+    if (u.length !== 8192) { say(`${name || 'That file'} is ${u.length} bytes; a ZX81 ROM is 8192.`, 'err'); return; }
+    rom = u; if (remember) try { localStorage.setItem('zx81rom', b64.enc(u)); } catch (e) {}
+    build(); say(`ROM loaded (CRC32 ${crc32(u)}). Running: the cursor appears after about 3 seconds of ZX81 time.`, 'ok'); setRunning(true);
+  }
+  $('romFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) f.arrayBuffer().then(b => gotRom(new Uint8Array(b), f.name, true)); e.target.value = ''; });
+  $('pFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (!m) { say('Load the ROM first.', 'err'); return; }
+    f.arrayBuffer().then(b => { const u = new Uint8Array(b), need = (u[0x0B] | u[0x0C] << 8) - 0x4000; if (u.length < 0x74 || need < 0x7D || need - 9 > u.length) { say(`${f.name} does not look like a ZX81 .p file.`, 'err'); return; }
+      if (need > 0x4000) { say(`${f.name} needs more than the 16K this bench has.`, 'err'); return; }
+      m.tape = u; progName = f.name + ' (' + u.length + ' bytes, CRC32 ' + crc32(u) + ')'; typeKeys([['J'], ['Shift', 'P'], ['Shift', 'P'], ['NewLine']]); say(`${f.name} is in the tape player; typing LOAD "" (at the K cursor). Then type RUN.`, 'ok'); if (!running) setRunning(true); $('tv').focus(); }); });
+  $('btnRun').onclick = () => { setRunning(!running); $('tv').focus(); };
+  $('btnReset').onclick = () => { build(); say('Reset. The ROM starts again from power-on.'); if (!running) setRunning(true); };
+  $('engine').onchange = () => { if (rom) { build(); say('Logic changed; the machine starts again from power-on.'); if (!running) setRunning(true); } };
+  const stepBy = f => { if (!m) return; if (running) setRunning(false); try { f(); } catch (e) { say('The machine stopped: ' + e.message, 'err'); } ranT = m.T - m.T0; draw(); drawWave(); meters(); };
+  $('btnStepI').onclick = () => stepBy(() => m.step());
+  $('btnStepF').onclick = () => stepBy(() => { const f = m.frames, lim = m.T + 4 * FRAME_T; while (m.frames === f && m.T < lim) m.step(); pictureCheck(); pictureCheck(); });
+  $('zoom').onchange = drawWave; $('back').oninput = drawWave;
+  $('btnVcd').onclick = () => copy(rcount ? vcd() : 'nothing recorded', $('btnVcd'));
+  $('btnReport').onclick = () => { $('report').value = report(); };
+  $('btnCopy').onclick = () => { if (!$('report').value) $('report').value = report(); copy($('report').value, $('btnCopy')); };
+  drawWave();
+  try { const s = localStorage.getItem('zx81rom'); if (s) gotRom(b64.dec(s), 'the saved ROM', false); } catch (e) {}
+})();
+</script>
+</body>
+</html>

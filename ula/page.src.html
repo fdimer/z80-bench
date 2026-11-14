@@ -1,0 +1,309 @@
+<title>ZX81 ULA Test Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* layout: a bench. Left, the TV and what you do to the machine; right, the instruments; below, the logic analyser. */
+:root {
+  --bg: #f3f5f2; --panel: #ffffff; --ink: #1b2420; --muted: #5d6b64; --line: #d3dad5;
+  --accent: #0b6e4f; --accent-ink: #ffffff; --ok: #1d7a46; --warn: #a65f00; --bad: #b3261e;
+  --trace: #0b6e4f; --trace2: #8a4b00; --grid: #e4e9e5; --tv: #c9cdc8;
+  --f-head: "Space Grotesk", "Segoe UI", system-ui, sans-serif; --f-body: Inter, "Segoe UI", system-ui, sans-serif; --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121715; --panel: #1b221f; --ink: #e6ece8; --muted: #9aa8a0; --line: #303a35;
+  --accent: #4fc79a; --accent-ink: #06231a; --ok: #6ad18f; --warn: #e3a54a; --bad: #f08a80;
+  --trace: #4fc79a; --trace2: #e3a54a; --grid: #26302b; --tv: #3a423e; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121715; --panel: #1b221f; --ink: #e6ece8; --muted: #9aa8a0; --line: #303a35;
+  --accent: #4fc79a; --accent-ink: #06231a; --ok: #6ad18f; --warn: #e3a54a; --bad: #f08a80;
+  --trace: #4fc79a; --trace2: #e3a54a; --grid: #26302b; --tv: #3a423e; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 20px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 18px; }
+h1 { font: 600 26px/1.15 var(--f-head); margin: 0; text-wrap: balance; }
+h2 { font: 600 13px/1.2 var(--f-head); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+p { margin: 0; } .lede { color: var(--muted); max-width: 68ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, select, .filebtn { font: 500 14px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 6px 11px; cursor: pointer; }
+button:hover, .filebtn:hover, select:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible, .filebtn:focus-within, canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.tvbox { background: var(--tv); border-radius: 4px; padding: 10px; }
+#tv { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #808080; aspect-ratio: 414 / 312; max-width: 100%; }
+.msg { font-size: 14px; color: var(--muted); } .msg.err { color: var(--bad); } .msg.ok { color: var(--ok); }
+dl.meters { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-variant-numeric: tabular-nums; }
+dl.meters dt { color: var(--muted); } dl.meters dd { margin: 0; font-family: var(--f-mono); font-size: 13.5px; text-align: right; overflow-wrap: anywhere; }
+.pill { display: inline-block; font: 600 12px var(--f-mono); padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); } .pill.idle { color: var(--muted); }
+.kbd { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.kbd button { padding: 7px 0; font: 600 12.5px var(--f-mono); min-width: 0; overflow: hidden; }
+.kbd button.down { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.scope { overflow-x: auto; } #wave { display: block; }
+.small { font-size: 13px; color: var(--muted); max-width: 80ch; }
+textarea { width: 100%; box-sizing: border-box; font: 12.5px/1.45 var(--f-mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; min-height: 150px; }
+a { color: var(--accent); }
+footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>ZX81 ULA Test Bench</h1>
+    <p class="lede">A ZX81 whose ULA is the real logic, not a model of its behaviour: the Ferranti 2C210 transcribed gate for gate from its logic diagram, or the single-clock design made from it for an FPGA. The Z80 and the picture get everything from the ULA's pins. Load the ROM, run programs, and report anything a real ZX81 would not do.</p>
+  </header>
+
+  <div class="bench">
+    <section class="panel" aria-label="The machine">
+      <div class="row">
+        <label class="filebtn" for="romFile">Load ROM…<input type="file" id="romFile"></label>
+        <label class="filebtn" for="pFile">Load program (.p)…<input type="file" id="pFile" accept=".p,.P,.81"></label>
+        <button id="btnRun" class="primary" type="button" disabled>Run</button>
+        <button id="btnReset" type="button" disabled>Reset</button>
+      </div>
+      <p class="msg" id="msg">Choose a ZX81 ROM image (8K, 8192 bytes). The ROM is Sinclair's and is not part of this page; it stays in your browser.</p>
+      <div class="tvbox"><canvas id="tv" width="414" height="312" tabindex="0" aria-label="ZX81 picture. Click here and type."></canvas></div>
+      <div class="kbd" id="kbd" aria-label="ZX81 keyboard"></div>
+      <p class="small">Click the picture and type, or use the keys. SHIFT on the key row latches for one key. Backspace is SHIFT+0 (RUBOUT). To load a program, choose a .p file: the page then types LOAD "" for you.</p>
+    </section>
+
+    <section class="panel" aria-label="Instruments">
+      <h2>ULA</h2>
+      <div class="row">
+        <label for="engine">Logic</label>
+        <select id="engine">
+          <option value="fast">Synchronous design (the FPGA Verilog)</option>
+          <option value="net">Gate-level netlist (2C210, slow)</option>
+        </select>
+      </div>
+      <p class="small" id="engNote"></p>
+      <dl class="meters">
+        <dt>Speed</dt><dd id="mSpeed">–</dd>
+        <dt>ZX81 time run</dt><dd id="mTime">–</dd>
+        <dt>Frames (vertical syncs)</dt><dd id="mFrames">–</dd>
+        <dt>NMIs taken</dt><dd id="mNmi">–</dd>
+        <dt>Interrupts</dt><dd id="mInt">–</dd>
+        <dt>Wait states</dt><dd id="mWait">–</dd>
+        <dt>Program counter</dt><dd id="mPc">–</dd>
+      </dl>
+      <h2>Picture check</h2>
+      <p><span class="pill idle" id="pcPill">waiting</span> <span id="pcText" class="small"></span></p>
+      <p class="small">Every half second the dots on the ULA's TV pin are read back as characters and compared with the display file in RAM, using the ROM's own font. It only applies to ordinary character screens, and a screen that is being redrawn can differ for a moment.</p>
+      <h2>Report</h2>
+      <div class="row"><button id="btnReport" type="button">Write report</button><button id="btnCopy" type="button">Copy</button></div>
+      <textarea id="report" readonly aria-label="Test report" placeholder="A summary of this run, to paste into an issue or an email."></textarea>
+    </section>
+  </div>
+
+  <section class="panel" aria-label="Logic analyser">
+    <div class="row">
+      <h2>Logic analyser</h2>
+      <button id="btnStepI" type="button" disabled>Step one instruction</button>
+      <button id="btnStepF" type="button" disabled>Step one frame</button>
+      <label for="zoom">Show</label>
+      <select id="zoom"><option value="64">16 T-states</option><option value="160" selected>40 T-states</option><option value="480">120 T-states</option><option value="1656">2 lines</option></select>
+      <label for="back">Back</label><input type="range" id="back" min="0" max="1000" value="0">
+      <button id="btnVcd" type="button">Copy as VCD</button>
+    </div>
+    <div class="scope"><canvas id="wave" width="1100" height="430" aria-label="Waveforms of the ULA's pins"></canvas></div>
+    <p class="small" id="waveNote">The last 16,000 T-states of the ULA's pins and a few inside signals, one sample per period of its 13 MHz clock (four to a T-state). Recorded with the synchronous design; pause to read it. VCD is the format logic-analyser viewers such as GTKWave open.</p>
+  </section>
+
+  <footer>
+    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6679/ULA2C210/1 (12 January 1982) and the cell circuits ULA 2C158/2, from the Ferranti archive catalogued in 2026 by Happy Little Diodes. The netlist, the Verilog and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/zx81-ULA/ula">zx81-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">__VERSION__</span>.</p>
+    <p class="small"><b>Terms of use.</b> The archive's documents are for preserving material of historical interest and for non-commercial, educational and archival research only; commercial use of them or their contents, including in connection with the manufacture, marketing or sale of goods, is prohibited by Sky UK Limited. This page, the netlist and the Verilog are made from those contents and carry the same terms: strictly not for commercial use of any kind. The code is under the PolyForm Noncommercial License 1.0.0.</p>
+    <p class="small"><b>Not modelled.</b> The tape (LOAD is done by putting the program straight into RAM), a RAM pack's own address decoding (the 16K is one block on the ULA's RAM CS), and the analogue side of the pins. The Z80's timing follows the data sheet's shape with fixed delays.</p>
+  </footer>
+</div>
+
+<script>/*INCLUDE:../src/z80core.js*/</script>
+<script>/*INCLUDE:sim.js*/</script>
+<script>/*INCLUDE:zx81ula.js*/</script>
+<script>/*INCLUDE:zx81fast.js*/</script>
+<script>
+// the synchronous design, translated from ula/2c210_sync.v when this page was built (ula/build_page.js), and the netlist
+/*CORE*/
+const ULA_NET = /*NET*/;
+</script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id), KEYS = ZX81FAST_KEYS, T_HZ = 3.25e6, FRAME_T = 65000;
+  let rom = null, m = null, running = false, engine = 'fast', progName = '', startWall = 0, ranT = 0, speed = 0;
+  const pc = { checks: 0, bad: 0, last: null, origin: null, prev: '' };
+  const say = (t, cls) => { $('msg').textContent = t; $('msg').className = 'msg' + (cls ? ' ' + cls : ''); };
+
+  // ---- the recorder: one sample per clock period, in a ring ----
+  const RN = 1 << 16, r0 = new Uint32Array(RN), r1 = new Uint32Array(RN); let rp = 0, rcount = 0;
+  const rec = (s, mm) => {
+    const a = s.a_oe ? s.a_out : mm.cpuA & 0x1FF, wait = s.nmi_pull && !s.halt_n ? 0 : 1;
+    r0[rp] = s.phi_n | s.m1_n << 1 | s.mreq_n << 2 | s.rd_n << 3 | s.wr_n << 4 | s.iorq_n << 5 | s.halt_n << 6 | (1 - s.nmi_pull) << 7 | wait << 8 | s.rom_cs_n << 9 | s.ram_cs_n << 10 |
+      s.a_oe << 11 | s.nop << 12 | s.chr << 13 | s.window << 14 | s.load << 15 | s.sync << 16 | s.black << 17 | s.q17 << 18 | s.fs << 19 | s.nmi_on << 20;
+    r1[rp] = s.d_in | a << 8 | s.cnt << 17 | s.row << 25;
+    rp = (rp + 1) & (RN - 1); if (rcount < RN) rcount++;
+  };
+  const SIG = [['CLK (Z80)', 0, 1], ['M1', 1], ['MREQ', 2], ['RD', 3], ['WR', 4], ['IORQ', 5], ['HALT', 6], ['NMI', 7], ['WAIT', 8], ['ROM CS', 9], ['RAM CS', 10],
+    ['A0\'-A8\' driven', 11], ['NOP forced', 12], ['character', 13], ['latch open', 14], ['shift load', 15], ['sync', 16], ['black', 17], ['frame sync', 19], ['NMI on', 20]];
+  const BUS = [['D0-D7', v => (v & 0xFF).toString(16).toUpperCase().padStart(2, '0'), v => v & 0xFF], ['A0\'-A8\'', v => (v >> 8 & 0x1FF).toString(16).toUpperCase().padStart(3, '0'), v => v >> 8 & 0x1FF],
+    ['line count', v => String(v >> 17 & 0xFF), v => v >> 17 & 0xFF], ['row', v => String(v >> 25 & 7), v => v >> 25 & 7]];
+
+  function build() {
+    engine = $('engine').value;
+    if (engine === 'fast') { m = new Zx81Fast(Z80, ULA_CORE, rom, { ramSize: 0x4000 }); m.rec = rec; }
+    else m = new Zx81Ula(Z80, new UlaSim(ULA_NET, { init: { NMION: 0, NMIOFF: 1, 'FRAME-SYNC': 0, FSL: 1 } }), rom, { ramSize: 0x4000 });
+    m.T0 = m.T; ranT = 0; rp = 0; rcount = 0; Object.assign(pc, { checks: 0, bad: 0, last: null, origin: null, prev: '', frames: -1 }); typing = []; shiftLatch = false;
+    $('engNote').textContent = engine === 'fast' ? 'One 13 MHz clock, as it would run in an FPGA. Fast enough to use at full speed.' : 'Every gate and flip-flop of the 2C210 with its delay. Expect about one hundredth of full speed: the ROM takes minutes to reach the cursor. The logic analyser does not record in this mode.';
+    for (const b of ['btnRun', 'btnReset', 'btnStepI', 'btnStepF']) $(b).disabled = false;
+  }
+  function setRunning(on) { running = on; $('btnRun').textContent = on ? 'Pause' : 'Run'; if (on) { last = performance.now(); requestAnimationFrame(loop); } else { draw(); drawWave(); meters(); } }
+
+  // ---- typing: real keys, the key grid, and text typed for you ----
+  let typing = [], shiftLatch = false, held = new Set();
+  const press = (name, down) => { if (m) m.key(name, down); const b = document.querySelector(`#kbd button[data-k="${name}"]`); if (b) b.classList.toggle('down', down); };
+  const keyName = e => e.key === 'Enter' ? 'NewLine' : e.key === 'Shift' ? 'Shift' : e.key === ' ' ? 'Space' : e.key === '.' ? '.' : /^[a-z0-9]$/i.test(e.key) ? e.key.toUpperCase() : e.key === 'Backspace' ? 'Rubout' : null;
+  $('tv').addEventListener('keydown', e => { const k = keyName(e); if (!k) return; e.preventDefault(); if (k === 'Rubout') { press('Shift', true); press('0', true); } else press(k, true); });
+  $('tv').addEventListener('keyup', e => { const k = keyName(e); if (!k) return; e.preventDefault(); if (k === 'Rubout') { press('0', false); press('Shift', false); } else press(k, false); });
+  $('tv').addEventListener('blur', () => { for (const r of KEYS) for (const k of r) press(k, false); });
+  { const order = [3, 4, 2, 5, 1, 6, 0, 7], kb = $('kbd');           // the keyboard's rows: 1-5 6-0, Q-T Y-P, A-G H-NewLine, Shift-V B-Space
+    for (let row = 0; row < 4; row++) { const L = KEYS[order[row * 2]], Rr = KEYS[order[row * 2 + 1]].slice().reverse();
+      for (const k of [...L, ...Rr]) { const b = document.createElement('button'); b.type = 'button'; b.dataset.k = k; b.textContent = k === 'NewLine' ? 'NL' : k === 'Shift' ? 'SHF' : k === 'Space' ? 'SPC' : k;
+        b.title = k === 'NewLine' ? 'NEW LINE' : k === 'Shift' ? 'SHIFT (latches for one key)' : k === 'Space' ? 'SPACE (BREAK)' : k;
+        b.addEventListener('pointerdown', e => { e.preventDefault(); if (k === 'Shift') { shiftLatch = !shiftLatch; press('Shift', shiftLatch); return; } press(k, true); held.add(k); });
+        const up = () => { if (!held.has(k)) return; held.delete(k); setTimeout(() => { press(k, false); if (shiftLatch) { shiftLatch = false; press('Shift', false); } }, 90); };
+        b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); kb.appendChild(b); } } }
+  // typed for you: [keys held together, frames]
+  const typeKeys = seq => { for (const ks of seq) { typing.push({ ks, n: 6 }); typing.push({ ks: [], n: 6 }); } };
+  function typist() { if (!typing.length) return; const t = typing[0]; if (!t.on) { t.on = true; for (const k of t.ks) press(k, true); } if (--t.n <= 0) { for (const k of t.ks) press(k, false); typing.shift(); } }
+
+  // ---- the run loop: no faster than a real ZX81, no more than 14 ms of work per screen refresh ----
+  let last = 0, seenFrames = 0, pcT = 0, owed = 0;
+  function loop(now) {
+    if (!running) return;
+    const dt = Math.min(100, now - last); last = now; owed = Math.min(owed + dt * T_HZ / 1000, 4 * FRAME_T);
+    const t0 = performance.now(), T0 = m.T, chunk = engine === 'fast' ? 6500 : 400;
+    try { while (owed > 0 && performance.now() - t0 < 14) { const b = m.T; m.run(chunk); owed -= m.T - b; if (m.frames !== seenFrames) { seenFrames = m.frames; typist(); } } }
+    catch (e) { say('The machine stopped: ' + e.message, 'err'); setRunning(false); return; }
+    if (performance.now() - t0 >= 14) owed = Math.min(owed, FRAME_T);         // it cannot keep up: do not let the debt grow
+    ranT += m.T - T0; speed = speed * 0.9 + 0.1 * ((m.T - T0) / T_HZ) / (dt / 1000);
+    draw(); if ((pcT += dt) > 500) { pcT = 0; pictureCheck(); meters(); }
+    requestAnimationFrame(loop);
+  }
+
+  // ---- the picture: finished lines of the frame being drawn over the last whole frame ----
+  const tv = $('tv').getContext('2d'), img = tv.createImageData(414, 312);
+  function draw() {
+    if (!m) return; const d = img.data, W = m.W, H = m.H, y0 = m.y;
+    for (let y = 0, i = 0; y < H; y++) { const src = y < y0 ? m.fb : m.frame; for (let x = 0; x < W; x++, i += 4) { const v = src[y * W + x], c = v === 1 ? 16 : v === 2 ? 236 : 128; d[i] = d[i + 1] = d[i + 2] = c; d[i + 3] = 255; } }
+    tv.putImageData(img, 0, 0);
+  }
+  function meters() {
+    if (!m) return; const t = ranT / T_HZ;
+    $('mSpeed').textContent = running ? (speed * 100).toFixed(speed < 0.1 ? 1 : 0) + '% of a ZX81' : 'paused';
+    $('mTime').textContent = t.toFixed(1) + ' s'; $('mFrames').textContent = m.frames; $('mNmi').textContent = m.nmis; $('mInt').textContent = m.ints; $('mWait').textContent = m.waits;
+    $('mPc').textContent = m.cpu.pc.toString(16).toUpperCase().padStart(4, '0') + 'h';
+  }
+
+  // ---- picture check: read the dots back as characters ----
+  function displayFile() {
+    const r = a => m.ram[(a - 0x4000) & 0x3FFF], df = r(0x400C) | r(0x400D) << 8; if (df < 0x407D || df > 0x7FFF || r(df) !== 0x76) return null;
+    const cells = new Uint8Array(24 * 32); let p = df + 1;
+    for (let row = 0; row < 24; row++) { let col = 0; for (; col < 33; col++) { const v = r(p++); if (v === 0x76) break; if (col < 32) cells[row * 32 + col] = v; if (v & 0x40) return null; } if (col === 33) return null; }
+    return cells;
+  }
+  function matchAt(cells, x0, y0, stopAt) {
+    const f = m.frame, W = m.W; let bad = 0;
+    for (let i = 0; i < 768; i++) { const v = cells[i], inv = v & 0x80 ? 0xFF : 0, cx = x0 + (i & 31) * 8, cy = y0 + (i >> 5) * 8; let ok = true;
+      for (let l = 0; l < 8 && ok; l++) { const bits = rom[0x1E00 + (v & 0x3F) * 8 + l] ^ inv, o = (cy + l) * W + cx; for (let b = 0; b < 8; b++) if ((f[o + b] === 1) !== !!(bits & (0x80 >> b))) { ok = false; break; } }
+      if (!ok && ++bad > stopAt) return bad; }
+    return bad;
+  }
+  function pictureCheck() {
+    if (!m || !m.frames) return; const cells = displayFile(), pill = $('pcPill'), txt = $('pcText');
+    if (m.frames === pc.frames) { pill.className = 'pill idle'; pill.textContent = 'no picture'; txt.textContent = 'No frame sync since the last check (FAST mode, LOAD or SAVE): the picture shown is an old one.'; pc.prev = ''; return; }
+    pc.frames = m.frames;
+    if (!cells) { pill.className = 'pill idle'; pill.textContent = 'not applicable'; txt.textContent = 'No ordinary display file just now.'; return; }
+    const sig = cells.join(); if (sig !== pc.prev) { pc.prev = sig; return; }          // only a screen that has stood still for two checks
+    if (!cells.some(v => v)) { pill.className = 'pill idle'; pill.textContent = 'blank screen'; txt.textContent = 'Nothing on the screen to compare.'; return; }
+    let bad = pc.origin ? matchAt(cells, pc.origin[0], pc.origin[1], 768) : 769;
+    if (!pc.origin || bad > 384) { let best = [0, 0, 769]; for (let y = 30; y < 90; y++) for (let x = 40; x < 130; x++) { const b = matchAt(cells, x, y, best[2]); if (b < best[2]) best = [x, y, b]; } if (best[2] < bad) { bad = best[2]; pc.origin = [best[0], best[1]]; } }
+    pc.checks++; if (bad) pc.bad++; pc.last = bad;
+    pill.className = 'pill ' + (bad ? 'bad' : 'ok'); pill.textContent = bad ? `${bad} of 768 differ` : '768 of 768 match';
+    txt.textContent = `${pc.checks} checks, ${pc.bad} with differences.` + (pc.origin ? ` Picture starts ${pc.origin[0]} dots after line sync, ${pc.origin[1]} lines after frame sync.` : '');
+  }
+
+  // ---- logic analyser ----
+  const wv = $('wave'), wc = wv.getContext('2d');
+  function drawWave() {
+    const css = getComputedStyle(document.documentElement), col = n => css.getPropertyValue(n).trim();
+    const W = wv.width, H = wv.height, LBL = 120, n = Math.min(+$('zoom').value, rcount), rowH = 16;
+    wc.fillStyle = col('--panel'); wc.fillRect(0, 0, W, H); wc.font = '11px JetBrains Mono, monospace'; wc.textBaseline = 'middle';
+    if (!n) { wc.fillStyle = col('--muted'); wc.fillText(engine === 'fast' ? 'Nothing recorded yet. Run the machine, then pause.' : 'The logic analyser records with the synchronous design.', 12, 20); return; }
+    const maxBack = Math.max(0, rcount - n), back = Math.round(maxBack * +$('back').value / 1000), end = (rp - back + RN) & (RN - 1), start = (end - n + RN) & (RN - 1), dx = (W - LBL - 6) / n;
+    const at = i => (start + i) & (RN - 1);
+    // T-state grid: a T-state starts where the Z80's clock rises (phi_n falls)
+    wc.strokeStyle = col('--grid'); wc.beginPath(); for (let i = 1; i < n; i++) if ((r0[at(i - 1)] & 1) && !(r0[at(i)] & 1)) { const x = LBL + i * dx; wc.moveTo(x, 0); wc.lineTo(x, H); } wc.stroke();
+    let y = 4;
+    for (const [name, bit, invert] of SIG) {
+      wc.fillStyle = col('--muted'); wc.fillText(name, 4, y + rowH / 2);
+      wc.strokeStyle = col('--trace'); wc.beginPath();
+      for (let i = 0; i < n; i++) { let v = r0[at(i)] >> bit & 1; if (invert) v ^= 1; const yy = y + (v ? 3 : rowH - 3), x = LBL + i * dx; if (i === 0) wc.moveTo(x, yy); else wc.lineTo(x, yy); wc.lineTo(x + dx, yy); }
+      wc.stroke(); y += rowH;
+    }
+    for (const [name, fmt, val] of BUS) {
+      wc.fillStyle = col('--muted'); wc.fillText(name, 4, y + rowH / 2); wc.strokeStyle = col('--trace2'); wc.fillStyle = col('--ink');
+      let from = 0; for (let i = 1; i <= n; i++) if (i === n || val(r1[at(i)]) !== val(r1[at(from)])) { const x0 = LBL + from * dx, x1 = LBL + i * dx; wc.strokeRect(x0 + .5, y + 2.5, x1 - x0 - 1, rowH - 5); const t = fmt(r1[at(from)]); if (x1 - x0 > t.length * 7 + 4) wc.fillText(t, x0 + 3, y + rowH / 2); from = i; }
+      y += rowH + 2;
+    }
+  }
+  function vcd() {
+    const n = Math.min(rcount, 16000 * 4), start = (rp - n + RN) & (RN - 1), ids = '!"#$%&\'()*+,-./0123456789:;<=>?@AB'; let out = '$timescale 1ns $end\n$scope module zx81_ula $end\n', k = 0; const idS = [], idB = [];
+    for (const [name] of SIG) { idS.push(ids[k]); out += `$var wire 1 ${ids[k++]} ${name.replace(/[^A-Za-z0-9]+/g, '_')} $end\n`; }
+    const bw = [8, 9, 8, 3]; BUS.forEach(([name], i) => { idB.push(ids[k]); out += `$var wire ${bw[i]} ${ids[k++]} ${name.replace(/[^A-Za-z0-9]+/g, '_')} $end\n`; });
+    out += '$upscope $end\n$enddefinitions $end\n'; let p0 = -1, p1 = -1;
+    for (let i = 0; i < n; i++) { const a = (start + i) & (RN - 1), v0 = r0[a], v1 = r1[a]; if (v0 === p0 && v1 === p1) continue; out += `#${Math.round(i * 76.923)}\n`;
+      SIG.forEach(([, bit, inv], j) => { const b = v0 >> bit & 1 ^ (inv ? 1 : 0), pb = p0 < 0 ? -1 : p0 >> bit & 1 ^ (inv ? 1 : 0); if (b !== pb) out += b + idS[j] + '\n'; });
+      BUS.forEach(([, , val], j) => { const b = val(v1); if (p1 < 0 || b !== val(p1)) out += 'b' + b.toString(2) + ' ' + idB[j] + '\n'; }); p0 = v0; p1 = v1; }
+    return out;
+  }
+
+  // ---- report ----
+  function crc32(b) { let c, crc = -1; for (let i = 0; i < b.length; i++) { c = (crc ^ b[i]) & 0xFF; for (let k = 0; k < 8; k++) c = c & 1 ? c >>> 1 ^ 0xEDB88320 : c >>> 1; crc = crc >>> 8 ^ c; } return ((crc ^ -1) >>> 0).toString(16).toUpperCase().padStart(8, '0'); }
+  function report() {
+    if (!m) return 'No machine yet: load a ROM first.';
+    return ['ZX81 ULA Test Bench report', 'Design version: ' + $('ver').textContent, 'Logic: ' + (engine === 'fast' ? 'synchronous design (2c210_sync.v)' : 'gate-level netlist (2c210.net)'),
+      'ROM: ' + rom.length + ' bytes, CRC32 ' + crc32(rom), 'Program: ' + (progName || 'none'), 'ZX81 time run: ' + (ranT / T_HZ).toFixed(1) + ' s' + (speed ? ', at ' + (speed * 100).toFixed(0) + '% of full speed' : ''),
+      `Frames ${m.frames}, NMIs ${m.nmis}, interrupts ${m.ints}, wait states ${m.waits}, PC ${m.cpu.pc.toString(16).toUpperCase()}h`,
+      'Picture check: ' + (pc.checks ? `${pc.checks} checks, ${pc.bad} with differences; last: ${pc.last ? pc.last + ' of 768 characters differ' : 'all 768 match'}` + (pc.origin ? `; picture starts ${pc.origin[0]} dots after line sync, ${pc.origin[1]} lines after frame sync` : '') : 'no checks yet'),
+      'Browser: ' + navigator.userAgent, '', 'What I saw (describe what a real ZX81 does differently):', ''].join('\n');
+  }
+  const copy = (text, btn) => { const done = () => { const t = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = t; }, 1200); };
+    try { navigator.clipboard.writeText(text).then(done, () => { $('report').value = text; $('report').select(); }); } catch (e) { $('report').value = text; $('report').select(); } };
+
+  // ---- controls ----
+  const b64 = { enc: u => btoa(String.fromCharCode(...u)), dec: s => Uint8Array.from(atob(s), c => c.charCodeAt(0)) };
+  function gotRom(u, name, remember) {
+    if (u.length !== 8192) { say(`${name || 'That file'} is ${u.length} bytes; a ZX81 ROM is 8192.`, 'err'); return; }
+    rom = u; if (remember) try { localStorage.setItem('zx81rom', b64.enc(u)); } catch (e) {}
+    build(); say(`ROM loaded (CRC32 ${crc32(u)}). Running: the cursor appears after about 3 seconds of ZX81 time` + (engine === 'net' ? ', which the gate-level netlist takes some minutes to reach.' : '.'), 'ok'); setRunning(true);
+  }
+  $('romFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) f.arrayBuffer().then(b => gotRom(new Uint8Array(b), f.name, true)); e.target.value = ''; });
+  $('pFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (!m) { say('Load the ROM first.', 'err'); return; }
+    f.arrayBuffer().then(b => { const u = new Uint8Array(b), need = (u[0x0B] | u[0x0C] << 8) - 0x4000; if (u.length < 0x74 || need < 0x7D || need - 9 > u.length) { say(`${f.name} does not look like a ZX81 .p file.`, 'err'); return; }
+      if (need > 0x4000) { say(`${f.name} needs more than the 16K this bench has.`, 'err'); return; }
+      m.tape = u; progName = f.name + ' (' + u.length + ' bytes, CRC32 ' + crc32(u) + ')'; typeKeys([['J'], ['Shift', 'P'], ['Shift', 'P'], ['NewLine']]); say(`${f.name} is in the tape player; typing LOAD "" (at the K cursor). Then type RUN.`, 'ok'); if (!running) setRunning(true); $('tv').focus(); }); });
+  $('btnRun').onclick = () => { setRunning(!running); $('tv').focus(); };
+  $('btnReset').onclick = () => { build(); say('Reset. The ROM starts again from power-on.'); if (!running) setRunning(true); };
+  $('engine').onchange = () => { if (rom) { build(); say('Logic changed; the machine starts again from power-on.'); if (!running) setRunning(true); } };
+  const stepBy = f => { if (!m) return; if (running) setRunning(false); try { f(); } catch (e) { say('The machine stopped: ' + e.message, 'err'); } ranT = m.T - m.T0; draw(); drawWave(); meters(); };
+  $('btnStepI').onclick = () => stepBy(() => m.step());
+  $('btnStepF').onclick = () => stepBy(() => { const f = m.frames, lim = m.T + 4 * FRAME_T; while (m.frames === f && m.T < lim) m.step(); pc.frames = -1; pictureCheck(); pc.frames = -1; pictureCheck(); });
+  $('zoom').onchange = drawWave; $('back').oninput = drawWave;
+  $('btnVcd').onclick = () => copy(rcount ? vcd() : 'nothing recorded', $('btnVcd'));
+  $('btnReport').onclick = () => { $('report').value = report(); };
+  $('btnCopy').onclick = () => { if (!$('report').value) $('report').value = report(); copy($('report').value, $('btnCopy')); };
+  drawWave();
+  try { const s = localStorage.getItem('zx81rom'); if (s) gotRom(b64.dec(s), 'the saved ROM', false); } catch (e) {}
+})();
+</script>

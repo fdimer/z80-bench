@@ -74,13 +74,20 @@ function translate(text, modName) {
     while (left.length) { const ready = left.filter(x => deps(x).every(d => done.has(d))); if (!ready.length) throw new Error('combinational loop among: ' + left.map(x => x[0]).join(' ')); for (const x of ready) { out.push(x); done.add(x[0]); } left = left.filter(x => !done.has(x[0])); }
     assigns.length = 0; assigns.push(...out); }
   const regs = Object.keys(kind).filter(n => kind[n] === 'reg');
+  const stateSrc = `return { ${Object.keys(width).map(n => `${n}: ${kind[n] === 'reg' ? init[n] || 0 : 0}`).join(', ')} };`;
+  const combSrc = assigns.map(([n, e]) => `s.${n} = (${e}) & ${mask(n)};`).join('\n');
+  const edgeSrc = `let ${regs.map(n => `n_${n} = s.${n}`).join(', ')};\n${always.join('\n')}\n${regs.map(n => `s.${n} = n_${n};`).join(' ')}`;
   return {
     width, kind, regs, init,
+    // a state object with every name, made from one literal so the engine keeps it in its fast form
+    state: new Function(stateSrc),
     inputs: Object.keys(kind).filter(n => kind[n] === 'input'), outputs: Object.keys(kind).filter(n => kind[n] === 'output'),
     // settle the wires from the inputs and regs, in one pass (they are in dependency order)
-    comb: new Function('s', assigns.map(([n, e]) => `s.${n} = (${e}) & ${mask(n)};`).join('\n')),
+    comb: new Function('s', combSrc),
     // one rising edge of clk: every reg's next value from the present values, then all at once (non-blocking)
-    edge: new Function('s', `let ${regs.map(n => `n_${n} = s.${n}`).join(', ')};\n${always.join('\n')}\n${regs.map(n => `s.${n} = n_${n};`).join(' ')}`)
+    edge: new Function('s', edgeSrc),
+    // the same three functions as source text, for a page built ahead of time (ula/build_page.js)
+    src: { state: stateSrc, comb: combSrc, edge: edgeSrc }
   };
 }
 
@@ -112,15 +119,13 @@ function fromYosys(json, modName) {
     for (const [n, v] of named) s[n] = v.bits.reduce((a, b, i) => a | val(b) << i, 0);
   };
   const edge = s => { comb(s); const d = ffs.map(c => val(c.connections.D[0])); ffs.forEach((c, i) => { bit[c.connections.Q[0]] = d[i]; }); };
-  return { width, kind, regs: [], init, comb, edge, cells: gates.length, ffs: ffs.length };
+  return { width, kind, regs: [], init, comb, edge, cells: gates.length, ffs: ffs.length, state: new Function(`return { ${Object.keys(width).map(n => n + ': 0').join(', ')} };`) };
 }
 
 // the testbench's names for the pins and for the few inside nets it looks at
 class SyncUla {
   constructor(text) {      // Verilog text, or a module already made by fromYosys()
-    const M = this.M = typeof text === 'string' ? translate(text, 'ula2c210_core') : text, s = this.s = {};
-    for (const n in M.width) s[n] = 0;
-    for (const n of M.regs) s[n] = M.init[n] || 0;
+    const M = this.M = typeof text === 'string' ? translate(text, 'ula2c210_core') : text, s = this.s = M.state();
     this.ext = { d: 0xFF, a: 0x1FF }; this.t = 0; this.events = 0; this.wk = []; this.watch = new Proxy({}, { set: (o, k, f) => { o[k] = f; this.wk = Object.keys(o); return true; } }); this.last = {};
     Object.assign(s, { kbd_n: 0x1F, usa_uk: 1, tape_in: 1, mreq_n: 1, m1_n: 1, rd_n: 1, wr_n: 1, iorq_n: 1, halt_n: 1, a15: 0, a14: 0 });
     this.dirty = true; this.settle();

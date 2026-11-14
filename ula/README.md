@@ -56,7 +56,9 @@ comparison.
 | `ula/2c210_sync.v` | The synchronous design for an FPGA or CPLD: one 13 MHz clock. `ula2c210_core` is the logic; `ula2c210_sync` wraps it with the chip's pins |
 | `ula/v2js.js` | Runs `ula2c210_core` in the testbench by translating its (deliberately small) subset of Verilog to JavaScript |
 | `ula/zx81ula.js` | **The closed loop**: a ZX81 in which nothing of the ULA is modelled. The Z80 core's bus cycles go onto the ULA's pins T-state by T-state, timed from the ULA's own clock, and the opcode the Z80 reads, NMI, WAIT, the memory selects, the font address and the picture all come back from the ULA's pins. Works with either engine |
-| `ula/run81.js` | Runs it from the command line: `ZX81_ROM=/path/to/rom [KEYS="2.4:1 2.7:P"] [PGM=picture.pgm] node ula/run81.js [seconds] [sync \| net]` |
+| `ula/zx81fast.js` | The same closed loop made for speed, for the synchronous design only: no event queue, time moves one period of the 13 MHz clock at a time. Runs faster than a real ZX81 |
+| `ula/run81.js` | Runs either from the command line: `ZX81_ROM=/path/to/rom [P=program.p] [KEYS="3.2:J 3.5:Shift:0.25 3.55:P"] [PGM=picture.pgm] [TEXT=1] node ula/run81.js [seconds] [fast \| sync \| net]` |
+| `ula/page.src.html`, `ula/build_page.js` | The test bench page and the script that builds it into one file, `ula/zx81-ula.html` (**generated**): ROM and .p loading, both ULAs, a picture check, a logic analyser with VCD, and a report to copy |
 
 ## Netlist format
 
@@ -109,8 +111,14 @@ Up to the first NMI (213,000 instructions) the Z80 runs instruction for instruct
 that the two differ only in where the NMIs fall. Over the first 0.75 s the netlist and the synchronous design give the
 same frames, NMIs, interrupts, wait states and program counter.
 
-Speed, in this general-purpose harness: the synchronous design runs about 22 times slower than a real ZX81, the
-netlist about 90 times. Not modelled yet: the tape, and a RAM pack's own decoding (the RAM is one block on RAM CS).
+Speed: in the general-purpose harness the synchronous design runs about 9 times slower than a real ZX81 and the
+netlist about 90 times. In its own loop (`zx81fast.js`) the synchronous design runs about 1.7 times faster than a
+real ZX81 in Node, and at full speed in a browser. With it, .p programs load and run, and their screens are the same
+as in the hybrid emulator. Not modelled: the tape signal (LOAD puts the program straight into RAM), and a RAM pack's
+own decoding (the RAM is one block on RAM CS).
+
+The page's picture check reads the dots on the TV/TAPE pin back as characters, with the ROM's font, and compares them
+with the display file in RAM: 768 of 768 on the screens tried.
 
 ## Verilog
 
