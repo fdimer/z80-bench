@@ -59,6 +59,8 @@ comparison.
 | `ula/zx81ula.js` | **The closed loop**: a ZX81 in which nothing of the ULA is modelled. The Z80 core's bus cycles go onto the ULA's pins T-state by T-state, timed from the ULA's own clock, and the opcode the Z80 reads, NMI, WAIT, the memory selects, the font address and the picture all come back from the ULA's pins. Works with either engine |
 | `ula/zx81fast.js` | The same closed loop made for speed, for the synchronous design only: no event queue, time moves one period of the 13 MHz clock at a time. Runs faster than a real ZX81 |
 | `ula/run81.js` | Runs either from the command line: `ZX81_ROM=/path/to/rom [P=program.p] [KEYS="3.2:J 3.5:Shift:0.25 3.55:P"] [PGM=picture.pgm] [TEXT=1] node ula/run81.js [seconds] [fast \| sync \| net]` |
+| `ula/draw_2c210.js` | Draws the 2C210 logic diagram from the netlist: each element in the grid square the original gives it, net cross-reference sheets, notes. See Redrawn drawings |
+| `ula/draw_2c158.js` | Redraws the cell circuits of drawing ULA 2C158/2 (the latch, flip-flops and pin circuits the 2C210 is built from), every part where the original draws it |
 | `ula/page.src.html`, `ula/build_page.js` | The test bench page and the script that builds it into one file, `ula/zx81-ula.html` (**generated**): ROM and .p loading, both ULAs, a picture check, a logic analyser with VCD, and a report to copy |
 
 ## Netlist format
@@ -73,7 +75,9 @@ Types: `pin_in`, `pin_out`, `pin_oc` (open collector), `buf_ef` (emitter-followe
 inputs (a circle on the drawing); flip-flops act on the rising edge of the clock input as written; resets are active high;
 `-` = not connected.
 Nets are named after the drawing where it names them (S/L, D6L, LINE-SYNC, FRAME-SYNC, Q1..Q31, NQ11..NQ18);
-other nets are named after the grid square of the gate that drives them, so `n_23T` is driven by the gate in row 23, column T.
+other nets are named after the grid square first given to the gate that drives them (`n_12V`, for example). The grid squares
+were all re-read from the scan when the drawing below was made, and some moved, so a generated name no longer always
+matches its gate's square: the cross-reference sheets of the redrawn diagram list every net's driver and loads.
 
 ## Status
 
@@ -125,6 +129,22 @@ down or up changes the line count for a few frames; that timing is the ROM's.
 
 The page's picture check reads the dots on the TV/TAPE pin back as characters, with the ROM's font, and compares them
 with the display file in RAM: 768 of 768 on the screens tried.
+
+## Redrawn drawings
+
+Typeset versions of the two Ferranti drawings, for reading and printing; the same terms apply to them as to the scans.
+
+    node ula/draw_2c210.js out && rsvg-convert -f pdf -o 2c210-logic.pdf out/2c210-1-logic.svg out/2c210-2-notes.svg out/2c210-3-xref.svg out/2c210-4-xref.svg
+    node ula/draw_2c158.js out && rsvg-convert -f pdf -o 2c158-cells.pdf out/2c158-cells.svg
+
+- **2C210 logic** (LD6679/ULA2C210/1), A0, drawn from `2c210.net`, so it shows exactly what is simulated. Each element
+  sits in the grid square where the original draws it (all 216 re-read from the scan; 135 of the netlist's squares were
+  corrected, the logic unchanged), pointing the way the original points it. Long wires are not redrawn: an input carries
+  the name of its net, and wires are drawn only between neighbours in a row. Sheets 3 and 4 list each net's driver and
+  loads with their squares. Gate power marks (R/2, R/3) as on the original.
+- **Cell circuits** (ULA 2C158/2, issue 4), A1: the data latch, the D and T flip-flops with reset (with the input the
+  shift register's D-types leave out, dashed), the ceramic oscillator and every pin circuit, with all component values.
+  Each part is placed where it is on the original (transcribed from a 150 dpi rendering of the scan).
 
 ## Gate delays
 

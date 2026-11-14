@@ -1,7 +1,9 @@
 # ZX81 ULA 2C210, gate-level netlist transcribed from Ferranti drawing LD6679/ULA2C210/1 issue 1 (12/01/82).
 # Started from the 2C184 transcription (ula/2c184.net): the two drawings share the grid and most of the logic.
 # Every line still has to be checked against the 2C210 drawing; lines checked carry 'ok210'.
-# Format: see README.md. Grid squares are row then column, as printed on the drawing's edges.
+# Format: see README.md. Grid squares are row then column, as printed on the drawing's edges: the column whose edge
+# tick is nearest the symbol's centre, and the row nearest it (all re-read from the scan when ula/draw_2c210.js was
+# written, so the redrawn sheet lines up with the original).
 
 # ---- power ----
 # Gate power, pwr=: R (single current source), R/2 (double) or R/3 (treble), as marked on the drawing. Every mark was
@@ -47,54 +49,54 @@ pA14    pin_in   nA14           PN11   @29B  pullup=16k  ok210
 pWR     pin_in   nWR            PN8    @32B  pullup=16k  ok210
 pIORQ   pin_in   nIORQ          PN7    @34B  pullup=16k  ok210
 pRD     pin_in   nRD            PN6    @36B  pullup=16k  ok210
-bKB0    buf_ef   KB0            nKB0   @12F  note=(3VBE)  ok210
-bKB1    buf_ef   KB1            nKB1   @13F  note=(3VBE)  ok210
-bKB2    buf_ef   KB2            nKB2   @14F  note=(3VBE)  ok210
-bKB3    buf_ef   KB3            nKB3   @15F  note=(3VBE)  ok210
-bKB4    buf_ef   KB4            nKB4   @16F  note=(3VBE)  ok210
-bUSA    buf_ef   USA            nUSA   @17G  ok210
-iTAPE   inv      TAPE           nTAPE  @18G pwr=R  inverter drawn with output circle  ok210
-bMREQ   buf_ef   N.MREQ         nMREQ  @23F  ok210
-bM1     buf_ef   N.M1           nM1    @24F  ok210
-bA15    buf_ef   A15            nA15   @26F  ok210
-bHALT   buf_ef   N.HALT         nHALT  @27F  ok210
-bA14    buf_ef   A14            nA14   @29F  ok210
-bWR     buf_ef   N.WR           nWR    @32F  ok210
-bIORQ   buf_ef   N.IORQ         nIORQ  @34F  ok210
-bRD     buf_ef   N.RD           nRD    @36F  ok210
+bKB0    buf_ef   KB0            nKB0   @12D  note=(3VBE)  ok210
+bKB1    buf_ef   KB1            nKB1   @13D  note=(3VBE)  ok210
+bKB2    buf_ef   KB2            nKB2   @14D  note=(3VBE)  ok210
+bKB3    buf_ef   KB3            nKB3   @15D  note=(3VBE)  ok210
+bKB4    buf_ef   KB4            nKB4   @16D  note=(3VBE)  ok210
+bUSA    buf_ef   USA            nUSA   @17E  ok210
+iTAPE   inv      TAPE           nTAPE  @18E pwr=R  inverter drawn with output circle  ok210
+bMREQ   buf_ef   N.MREQ         nMREQ  @23D  ok210
+bM1     buf_ef   N.M1           nM1    @24D  ok210
+bA15    buf_ef   A15            nA15   @26D  ok210
+bHALT   buf_ef   N.HALT         nHALT  @27D  ok210
+bA14    buf_ef   A14            nA14   @29D  ok210
+bWR     buf_ef   N.WR           nWR    @32D  ok210
+bIORQ   buf_ef   N.IORQ         nIORQ  @34D  ok210
+bRD     buf_ef   N.RD           nRD    @36D  ok210
 
 # ---- output pins ----
 # PN14 N.Ø (clock to the Z80, row 2), PN15 N.NMI (row 5, open collector with 5K to VCC), PN16 TV/TAPE (row 10,
 # 3-level output from N.SYNC and N.VIDEO), PN36-39 and PN1-2 A3'-A8' (rows 12-17), PN5/4/3 A0'-A2' (rows 21-23),
 # PN12 RAM N.CS and PN13 ROM N.CS (rows 30-32, RTL stages "see cct diagram").
 
-# ---- port read and the NOP: open-collector drivers onto the data pins (rows 12-19, columns K-Y) ----
+# ---- port read and the NOP: open-collector drivers onto the data pins (rows 12-19, columns G-K) ----
 # EN = "not reading the port" (high: the drivers let go), from the R/2 inverter at 20K. FORCE = pull the data low
 # (the NOP fed to the Z80 for a character), vertical at column W. Checked: row 12 drives D0 ... row 19 drives D7.
-kb0a    nor2     n_12R          KB0 EN        @12R pwr=R  ok210
-kb0b    nor2     n_12V          n_12R FORCE   @12V pwr=R/2  ok210
-kb0c    pin_oc   nD0            n_12V         @12Y   drives D0 low when n_12V is low  ok210
-kb1a    nor2     n_13R          KB1 EN        @13R pwr=R  ok210
-kb1b    nor2     n_13V          n_13R FORCE   @13V pwr=R/2  ok210
-kb1c    pin_oc   nD1            n_13V         @13Y  ok210
-kb2a    nor2     n_14R          KB2 EN        @14R pwr=R  ok210
-kb2b    nor2     n_14V          n_14R FORCE   @14V pwr=R/2  ok210
-kb2c    pin_oc   nD2            n_14V         @14Y  ok210
-kb3a    nor2     n_15R          KB3 EN        @15R pwr=R  ok210
-kb3b    nor2     n_15V          n_15R FORCE   @15V pwr=R/2  ok210
-kb3c    pin_oc   nD3            n_15V         @15Y  ok210
-kb4a    nor2     n_16R          KB4 EN        @16R pwr=R  ok210
-kb4b    nor2     n_16V          n_16R FORCE   @16V pwr=R/2  ok210
-kb4c    pin_oc   nD4            n_16V         @16Y  ok210
-d5a     inv      n_17V          FORCE         @17V pwr=R/2   D5 has no input: it reads high (pull-up), and is pulled low for the NOP  ok210
-d5c     pin_oc   nD5            n_17V         @17Y  ok210
-usaa    nor2     n_17R          USA EN        @17R pwr=R  ok210
-usab    inv      n_18V          n_17R         @18V pwr=R/2   D6 is not forced for the NOP (a character byte has D6 low already)  ok210
-usac    pin_oc   nD6            n_18V         @18Y  ok210
-tapa    nor2     n_18R          TAPE EN       @18R pwr=R  ok210
-tapb    nor2     n_19V          n_18R FORCE   @19V pwr=R/2  ok210
-tapc    pin_oc   nD7            n_19V         @19Y  ok210
-en      inv      EN             INFE          @20U pwr=R/2   ok210; R/2; INFE comes up column L from the fsr gate's input (row 37.8) to row 20.4
+kb0a    nor2     n_12R          KB0 EN        @12G pwr=R  ok210
+kb0b    nor2     n_12V          n_12R FORCE   @12I pwr=R/2  ok210
+kb0c    pin_oc   nD0            n_12V         @12K   drives D0 low when n_12V is low  ok210
+kb1a    nor2     n_13R          KB1 EN        @13G pwr=R  ok210
+kb1b    nor2     n_13V          n_13R FORCE   @13I pwr=R/2  ok210
+kb1c    pin_oc   nD1            n_13V         @13K  ok210
+kb2a    nor2     n_14R          KB2 EN        @14G pwr=R  ok210
+kb2b    nor2     n_14V          n_14R FORCE   @14I pwr=R/2  ok210
+kb2c    pin_oc   nD2            n_14V         @14K  ok210
+kb3a    nor2     n_15R          KB3 EN        @15G pwr=R  ok210
+kb3b    nor2     n_15V          n_15R FORCE   @15I pwr=R/2  ok210
+kb3c    pin_oc   nD3            n_15V         @15K  ok210
+kb4a    nor2     n_16R          KB4 EN        @16G pwr=R  ok210
+kb4b    nor2     n_16V          n_16R FORCE   @16I pwr=R/2  ok210
+kb4c    pin_oc   nD4            n_16V         @16K  ok210
+d5a     inv      n_17V          FORCE         @17I pwr=R/2   D5 has no input: it reads high (pull-up), and is pulled low for the NOP  ok210
+d5c     pin_oc   nD5            n_17V         @17K  ok210
+usaa    nor2     n_17R          USA EN        @17G pwr=R  ok210
+usab    inv      n_18V          n_17R         @18I pwr=R/2   D6 is not forced for the NOP (a character byte has D6 low already)  ok210
+usac    pin_oc   nD6            n_18V         @18K  ok210
+tapa    nor2     n_18R          TAPE EN       @18G pwr=R  ok210
+tapb    nor2     n_19V          n_18R FORCE   @19I pwr=R/2  ok210
+tapc    pin_oc   nD7            n_19V         @19K  ok210
+en      inv      EN             INFE          @20F pwr=R/2   ok210; R/2; INFE comes up column L from the fsr gate's input (row 37.8) to row 20.4
 
 # ---- dot shift register Q1-Q8 (rows 3-10, columns T-AL) ----
 # Inverters A-H take D0-D7. Each stage's reset is NOR(~Dn, S/L, D6L): with S/L and D6L low, a 1 in the ROM byte
@@ -124,66 +126,66 @@ Q6      dff      Q6             Q5  ~SCLK R6  @10AD pwr=R  ok210
 Q7      dff      Q7             Q6  ~SCLK R7  @10AF pwr=R  ok210
 Q8      dff      Q8             Q7  ~SCLK R8  @10AH pwr=R  ok210
 
-# ---- character latch NQ11-NQ18 (rows 13-16, columns U-AK): D-type latches, inverted outputs ----
+# ---- character latch NQ11-NQ18 (row 14, columns T-AH): D-type latches, inverted outputs ----
 # Inputs checked: NQ11 D0, NQ12 D1, NQ13 D2, NQ14 D3, NQ15 D4, NQ16 D5. Latch clock LCLK is driven by two R/3
 # inverters in parallel (rows 18-19, columns AE and AG) from LCLKn.
-lck1    inv      LCLK           LCLKn         @18AE pwr=R/3  R/3  ok210
-lck2    inv      LCLK           LCLKn         @18AG pwr=R/3  R/3 (in parallel with lck1)  ok210
-NQ11    dlatch   NQ11           D0 ~LCLK      @14U pwr=R   output inverted  ok210
-NQ12    dlatch   NQ12           D1 ~LCLK      @14X pwr=R  ok210
-NQ13    dlatch   NQ13           D2 ~LCLK      @14AA pwr=R  ok210
-NQ14    dlatch   NQ14           D3 ~LCLK      @14AD pwr=R  ok210
-NQ15    dlatch   NQ15           D4 ~LCLK      @14AG pwr=R?  ok210
-NQ16    dlatch   NQ16           D5 ~LCLK      @14AJ pwr=R?  ok210
-Q17     dlatch   Q17            CHAR ~LCLK    @14AL pwr=R  ok210; true output; D: the row 13.8 line, down column R to the CHAR line at row 19.4 (so Q17 holds 'this fetch was a character', not D6 itself)
-d6l     inv      D6L            Q17           @12AN pwr=R/3  ok210; R/3; low after a character fetch; its output also runs up column AN to the shift register's D6L line
-NQ18    dlatch   NQ18           D7 ~LCLK      @14AN pwr=R  ok210; D from the row 11.4 line (D7)
+lck1    inv      LCLK           LCLKn         @17X  pwr=R/3  R/3  ok210
+lck2    inv      LCLK           LCLKn         @17Z  pwr=R/3  R/3 (in parallel with lck1)  ok210
+NQ11    dlatch   NQ11           D0 ~LCLK      @14T pwr=R   output inverted  ok210
+NQ12    dlatch   NQ12           D1 ~LCLK      @14V pwr=R  ok210
+NQ13    dlatch   NQ13           D2 ~LCLK      @14X  pwr=R  ok210
+NQ14    dlatch   NQ14           D3 ~LCLK      @14Z  pwr=R  ok210
+NQ15    dlatch   NQ15           D4 ~LCLK      @14AB pwr=R?  ok210
+NQ16    dlatch   NQ16           D5 ~LCLK      @14AD pwr=R?  ok210
+Q17     dlatch   Q17            CHAR ~LCLK    @14AF pwr=R  ok210; true output; D: the row 13.8 line, down column R to the CHAR line at row 19.4 (so Q17 holds 'this fetch was a character', not D6 itself)
+d6l     inv      D6L            Q17           @12AH pwr=R/3  ok210; R/3; low after a character fetch; its output also runs up column AN to the shift register's D6L line
+NQ18    dlatch   NQ18           D7 ~LCLK      @14AH pwr=R  ok210; D from the row 11.4 line (D7)
 # video (rows 12-15, columns AL-AT), 2C210 as drawn: Q32 holds the inverse-video bit; four NORs make VID = XNOR(Q8, Q32)
-q32d    nor2     n_q32d         D6L NQ18      @13AM pwr=R  ok210
-Q32     dff      Q32            n_q32d ~S/L -     @13AP pwr=R  ok210; clocked by S/L (column AJ): it takes the inverse bit when the byte is loaded; no reset drawn
-vx      nor2     VX             Q8 Q32        @13AR pwr=R  ok210; SV = Q8 (Q8's output runs right to column AM and down)
-vy      nor2     VY             Q8 VX         @12AU pwr=R  ok210
-vz      nor2     VZ             VX Q32        @14AU pwr=R  ok210
-vid     nor2     VID            VY VZ         @13AX pwr=R/2  ok210; R/2. VID = XNOR(Q8, Q32)
+q32d    nor2     n_q32d         D6L NQ18      @13AL pwr=R  ok210
+Q32     dff      Q32            n_q32d ~S/L -     @13AN pwr=R  ok210; clocked by S/L (column AJ): it takes the inverse bit when the byte is loaded; no reset drawn
+vx      nor2     VX             Q8 Q32        @13AP pwr=R  ok210; SV = Q8 (Q8's output runs right to column AM and down)
+vy      nor2     VY             Q8 VX         @12AR pwr=R  ok210
+vz      nor2     VZ             VX Q32        @14AR pwr=R  ok210
+vid     nor2     VID            VY VZ         @13AT pwr=R/2  ok210; R/2. VID = XNOR(Q8, Q32)
 
-# ---- line counter Q21-Q28 (rows 4-6, columns AN-BB): ripple toggle stages, each clocked on the falling edge of
+# ---- line counter Q21-Q28 (row 5, columns AL-AZ): ripple toggle stages, each clocked on the falling edge of
 # the previous stage's true output; all reset together by CRES (row 6.5). Inverted outputs marked n.
-Q21     tff      Q21 Q21n       ~CCLK CRES    @5AN pwr=R   ok210; CCLK: the clock (column AK) delayed by four inverters
-Q22     tff      Q22 Q22n       ~Q21 CRES     @5AQ pwr=R  ok210
-Q23     tff      Q23 Q23n       ~Q22 CRES     @5AS pwr=R  ok210
-Q24     tff      Q24 Q24n       ~Q23 CRES     @5AV pwr=R  ok210
-Q25     tff      Q25 Q25n       ~Q24 CRES     @5AX pwr=R  ok210
-Q26     tff      Q26 Q26n       ~Q25 CRES     @5AZ pwr=R  ok210
-Q27     tff      Q27 Q27n       ~Q26 CRES     @5BB pwr=R  ok210
-Q28     tff      Q28 Q28n       ~Q27 CRES     @5BD pwr=R  ok210
+Q21     tff      Q21 Q21n       ~CCLK CRES    @5AL pwr=R   ok210; CCLK: the clock (column AK) delayed by four inverters
+Q22     tff      Q22 Q22n       ~Q21 CRES     @5AN pwr=R  ok210
+Q23     tff      Q23 Q23n       ~Q22 CRES     @5AP pwr=R  ok210
+Q24     tff      Q24 Q24n       ~Q23 CRES     @5AR pwr=R  ok210
+Q25     tff      Q25 Q25n       ~Q24 CRES     @5AT pwr=R  ok210
+Q26     tff      Q26 Q26n       ~Q25 CRES     @5AV pwr=R  ok210
+Q27     tff      Q27 Q27n       ~Q26 CRES     @5AX pwr=R  ok210
+Q28     tff      Q28 Q28n       ~Q27 CRES     @5AZ pwr=R  ok210
 # count 207 = Q28 Q27 Q24 Q23 Q22 Q21 high, Q26 Q25 low: the 8-input NOR goes high and resets the counter,
 # so a line is 207 counts (checked against the known 207 T-state line).
-c207    nor8     T207           Q28n Q27n Q26 Q25 Q21n Q22n Q23n Q24n   @8BB pwr=R  ok210
+c207    nor8     T207           Q28n Q27n Q26 Q25 Q21n Q22n Q23n Q24n   @8AX pwr=R  ok210
 # CRES: see crn (row 11): count 207 or INTACK
-LS      nor4     LINE-SYNC      Q25n Q26 Q27 Q28   @3BE pwr=R   high for counts 16-31: 16 counts of horizontal sync  ok210
+LS      nor4     LINE-SYNC      Q25n Q26 Q27 Q28   @3BA pwr=R   high for counts 16-31: 16 counts of horizontal sync  ok210
 
-# ---- NMI, sync and clock outputs (rows 2-10, columns BE-BJ) ----
-nm1     inv      n_5BG          LINE-SYNC     @5BG pwr=R  ok210
-nm2     nor2     n_5BI          n_5BG NMIOFF  @5BI pwr=R   NMIOFF from the NMI latch (nl2)  ok210
-nm3     inv      n_5BL          n_5BI         @5BL pwr=R  ok210
-nm4     pin_oc   N.NMI          n_5BL         @5BN   PN15, 5K pull-up to VCC on chip  ok210
-fs1     nor2     SYNCn          LINE-SYNC FRAME-SYNC   @8BG pwr=R  ok210
-fs2     inv      N.SYNC         SYNCn         @8BJ pwr=R/2   R/2  ok210
-tv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BL   PN16, '3 level output'; circuit on ULA 2C158/2: N.SYNC high pulls the output to 0 V; otherwise N.VIDEO high gives the lower level (black, about 2.8 V), low the higher (white, about 4.3 V); 200 ohms in series  ok210
-ck1     inv      n_2BH          CLKSRC        @2BH pwr=R/2   R/2; CLKSRC = Q19, up column AK  ok210
-ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output  ok210; the cell does not invert (circuit 'PIN phi-bar' on ULA 2C158/2: input transistor, phase splitter, totem pole), so N.PHI = NOT Q19 and the Z80's CLK (through TR2, an inverter) = Q19: the latch windows fall after CLK falls in T1 and T2, and FORCE covers the T3 rise when the Z80 takes the NOP
+# ---- NMI, sync and clock outputs (rows 2-11, columns BB-BJ) ----
+nm1     inv      n_5BG          LINE-SYNC     @5BB pwr=R  ok210
+nm2     nor2     n_5BI          n_5BG NMIOFF  @5BD pwr=R   NMIOFF from the NMI latch (nl2)  ok210
+nm3     inv      n_5BL          n_5BI         @5BF pwr=R  ok210
+nm4     pin_oc   N.NMI          n_5BL         @5BH   PN15, 5K pull-up to VCC on chip  ok210
+fs1     nor2     SYNCn          LINE-SYNC FRAME-SYNC   @8BB pwr=R  ok210
+fs2     inv      N.SYNC         SYNCn         @8BD pwr=R/2   R/2  ok210
+tv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BG   PN16, '3 level output'; circuit on ULA 2C158/2: N.SYNC high pulls the output to 0 V; otherwise N.VIDEO high gives the lower level (black, about 2.8 V), low the higher (white, about 4.3 V); 200 ohms in series  ok210
+ck1     inv      n_2BH          CLKSRC        @2BD pwr=R/2   R/2; CLKSRC = Q19, up column AK  ok210
+ck2     pin_tp   N.PHI          n_2BH         @2BF   PN14, totem-pole output  ok210; the cell does not invert (circuit 'PIN phi-bar' on ULA 2C158/2: input transistor, phase splitter, totem pole), so N.PHI = NOT Q19 and the Z80's CLK (through TR2, an inverter) = Q19: the latch windows fall after CLK falls in T1 and T2, and FORCE covers the T3 rise when the Z80 takes the NOP
 
 # ---- clock: oscillator, Q19, the counter clock (rows 17-25, columns N-AL) ----
-oscb    inv      OSCn           OSC           @21E pwr=R   inverter after the oscillator cell and a cross-under  ok210
-Q19     tff      Q19 Q19n       ~OSCn -       @21R pwr=R/2   ok210; R/2 cell; clocked from the oscillator line; no reset drawn; Q19 = 3.25 MHz
+oscb    inv      OSCn           OSC           @21F pwr=R   inverter after the oscillator cell and a cross-under  ok210
+Q19     tff      Q19 Q19n       ~OSCn -       @21O pwr=R/2   ok210; R/2 cell; clocked from the oscillator line; no reset drawn; Q19 = 3.25 MHz
 # CLKSRC (the line that goes up column AK to row 2 and right to the N.PHI output) is Q19's true output (row 21). ok210
 alias   CLKSRC   Q19
-cc1     inv      n_cc1          Q19           @9AL pwr=R   four inverters in series delay Q19 into the counter clock  ok210
-cc2     inv      n_cc2          n_cc1         @9AN pwr=R  ok210
-cc3     inv      n_cc3          n_cc2         @8AN pwr=R  ok210
-cc4     inv      CCLK           n_cc3         @8AL pwr=R  ok210
-cr      inv      CRES           CRESn         @11AT pwr=R/3  R/3  ok210
-crn     nor2     CRESn          T207 INTACK   @11AW pwr=R  ok210; drawn pointing left; INTACK comes up column AV from row 27.3: the line counter restarts at count 207 and at every interrupt acknowledge
+cc1     inv      n_cc1          Q19           @9AK pwr=R   four inverters in series delay Q19 into the counter clock  ok210
+cc2     inv      n_cc2          n_cc1         @9AM pwr=R  ok210
+cc3     inv      n_cc3          n_cc2         @8AM pwr=R  ok210
+cc4     inv      CCLK           n_cc3         @8AK pwr=R  ok210
+cr      inv      CRES           CRESn         @11AS pwr=R/3  R/3  ok210
+crn     nor2     CRESn          T207 INTACK   @11AU pwr=R  ok210; drawn pointing left; INTACK comes up column AV from row 27.3: the line counter restarts at count 207 and at every interrupt acknowledge
 
 # ---- delay chains (rows 17-24) ----
 # Chain A (row 17): R/? inverter output up at 17N, then three NOR2 gates with both inputs tied (inverters).
@@ -192,42 +194,42 @@ crn     nor2     CRESn          T207 INTACK   @11AW pwr=R  ok210; drawn pointing
 # LCLKn = NOR4(chain A out, col W vertical from row 13, the row 18 line from column O, Q19)   @18X   R/3
 dA0     inv      DA0            OSCn          @18N pwr=R   ok210; input from the column N vertical down to the oscillator line (row 21)
 sck     inv      SCLK           DA0           @16N pwr=R/3   ok210; R/3; output up column N to row 13.5, right, up column W to the shift register clocks (row 11.3): the dots shift at 6.5 MHz
-dA1     nor2     DA1            DA0 DA0       @17P pwr=R  ok210
-dA2     nor2     DA2            DA1 DA1       @17S pwr=R  ok210
-dA3     nor2     DA3            DA2 DA2       @17U pwr=R  ok210
+dA1     nor2     DA1            DA0 DA0       @17O pwr=R  ok210
+dA2     nor2     DA2            DA1 DA1       @17Q pwr=R  ok210
+dA3     nor2     DA3            DA2 DA2       @17S pwr=R  ok210
 lckn    nor4     LCLKn          DA1 DA3 N.M1 Q19   @18V pwr=R/3   ok210; R/3; DA1 via row 16.3; N.M1 via column O and row 18.3
-i19     inv      n_i19          CHAR          @19T pwr=R   ok210; CHAR comes up column O to row 19.4
-lk2     nor3     FORCE          LCLKn N.M1 n_i19   @18AE pwr=R/3  ok210; R/3, 2C210 only; LK2 on the drawing: high when LCLKn is low in an M1 character fetch; down to row 19.8, left, and up column I as FORCE
-dB1     nor2     DB1            Q19n Q19n     @21U pwr=R  ok210
-dB2     nor2     DB2            DB1 DB1       @21X pwr=R  ok210
-dB3     nor2     DB3            DB2 DB2       @21AA pwr=R  ok210
-dB4     nor2     DB4            DB3 DB3       @21AC pwr=R  ok210
-dB5     nor2     DB5            DB4 DB4       @21AE pwr=R  ok210
-dC1     nor2     DC1            N.MREQ N.MREQ @24V pwr=R  ok210
-dC2     nor2     DC2            DC1 DC1       @24AC pwr=R  ok210
-dC3     nor2     DC3            DC2 DC2       @24AE pwr=R  ok210
-d21     nor3     n_22AJ         Q19n DB5 DC3  @22AD pwr=R/2  ok210; R/2; Q19n along row 21.7 from Q19 and down column AB
+i19     inv      n_i19          CHAR          @19S pwr=R   ok210; CHAR comes up column O to row 19.4
+lk2     nor3     FORCE          LCLKn N.M1 n_i19   @18AB pwr=R/3  ok210; R/3, 2C210 only; LK2 on the drawing: high when LCLKn is low in an M1 character fetch; down to row 19.8, left, and up column I as FORCE
+dB1     nor2     DB1            Q19n Q19n     @22Q pwr=R  ok210
+dB2     nor2     DB2            DB1 DB1       @22S pwr=R  ok210
+dB3     nor2     DB3            DB2 DB2       @22V  pwr=R  ok210
+dB4     nor2     DB4            DB3 DB3       @22X  pwr=R  ok210
+dB5     nor2     DB5            DB4 DB4       @22Z  pwr=R  ok210
+dC1     nor2     DC1            N.MREQ N.MREQ @25V pwr=R  ok210
+dC2     nor2     DC2            DC1 DC1       @25X  pwr=R  ok210
+dC3     nor2     DC3            DC2 DC2       @25Z  pwr=R  ok210
+d21     nor3     n_22AJ         Q19n DB5 DC3  @22AB pwr=R/2  ok210; R/2; Q19n along row 21.7 from Q19 and down column AB
 d21b    inv      S/L            n_22AJ        @22AE pwr=R/3  ok210; R/3; this is S/L: right along row 22.3, up column AJ to the shift register (and Q32's clock)
-aen1    nor2     AENa           D6L M1        @24AI pwr=R  ok210; D6L from d6l's output via row 13.6, column AJ, row 16.2 and down column AG (it crosses the S/L line at row 22.3 without a dot); M1 via row 28.6 and column AD; AENa also runs left along row 25.9 to Q20's D input. So the ULA drives A0'-A8' from the end of a character's M1 to the next M1
-aen2    inv      n_aen2         AENa          @24AM pwr=R  ok210
-aen3    inv      AENin          n_aen2        @24AO pwr=R/2  ok210; R/2; up column AU to the address enable (row 18)
+aen1    nor2     AENa           D6L M1        @25AI pwr=R  ok210; D6L from d6l's output via row 13.6, column AJ, row 16.2 and down column AG (it crosses the S/L line at row 22.3 without a dot); M1 via row 28.6 and column AD; AENa also runs left along row 25.9 to Q20's D input. So the ULA drives A0'-A8' from the end of a character's M1 to the next M1
+aen2    inv      n_aen2         AENa          @25AL pwr=R  ok210
+aen3    inv      AENin          n_aen2        @25AN pwr=R/2  ok210; R/2; up column AU to the address enable (row 18)
 
-# ---- address outputs (rows 12-24, columns BD-BJ) ----
+# ---- address outputs (rows 12-27, columns BC-BJ) ----
 # A3'-A8': the latch's inverted outputs are inverted again and driven through tri-state buffers. The buffers' enables
 # (active low) share AEN, made by an RTL inverter with a 1.8K pull-up (row 18) from AENin (the long row 18 line).
-aen     inv_rtl  AEN            AENin         @18BC  ok210; RTL, 1.8K pull-up
+aen     inv_rtl  AEN            AENin         @18BE  ok210; RTL, 1.8K pull-up
 oa3     inv      n_oa3          NQ11          @12BC pwr=R  ok210
 oa4     inv      n_oa4          NQ12          @13BC pwr=R  ok210
 oa5     inv      n_oa5          NQ13          @14BC pwr=R  ok210
 oa6     inv      n_oa6          NQ14          @15BC pwr=R  ok210
 oa7     inv      n_oa7          NQ15          @16BC pwr=R  ok210
 oa8     inv      n_oa8          NQ16          @17BC pwr=R  ok210
-pa3     pin_ts   A3'            n_oa3 ~AEN    @12BH  PN36  ok210
-pa4     pin_ts   A4'            n_oa4 ~AEN    @13BH  PN37  ok210
-pa5     pin_ts   A5'            n_oa5 ~AEN    @14BH  PN38  ok210
-pa6     pin_ts   A6'            n_oa6 ~AEN    @15BH  PN39  ok210
-pa7     pin_ts   A7'            n_oa7 ~AEN    @16BH  PN1  ok210
-pa8     pin_ts   A8'            n_oa8 ~AEN    @17BH  PN2  ok210
+pa3     pin_ts   A3'            n_oa3 ~AEN    @12BG  PN36  ok210
+pa4     pin_ts   A4'            n_oa4 ~AEN    @13BG  PN37  ok210
+pa5     pin_ts   A5'            n_oa5 ~AEN    @14BG  PN38  ok210
+pa6     pin_ts   A6'            n_oa6 ~AEN    @15BG  PN39  ok210
+pa7     pin_ts   A7'            n_oa7 ~AEN    @16BG  PN1  ok210
+pa8     pin_ts   A8'            n_oa8 ~AEN    @17BG  PN2  ok210
 # row counter Q29, Q30, NQ31 (rows 19-23, columns BB-BD): ripple toggles, reset together by RRES (column BA)
 Q29     tff      Q29 Q29n       ~SYNCn FRAME-SYNC  @19BB pwr=R  ok210; reset: FRAME-SYNC, via column BA; clock: SYNCn (fs1's output), down column BB, so the row counter steps as each sync pulse starts
 Q30     tff      Q30 Q30n       ~Q29 FRAME-SYNC     @21BB pwr=R  ok210
@@ -235,17 +237,17 @@ NQ31    tff      - NQ31         ~Q30 FRAME-SYNC     @23BB pwr=R  only the invert
 oa0     inv      n_oa0          Q29n          @20BE pwr=R  ok210
 oa1     inv      n_oa1          Q30n          @21BE pwr=R  ok210
 oa2     inv      n_oa2          NQ31          @22BE pwr=R  ok210
-pa0     pin_ts   A0'            n_oa0 ~AEN    @20BH  PN5, also read back (below)  ok210
-pa1     pin_ts   A1'            n_oa1 ~AEN    @21BH  PN4, also read back  ok210
-pa2     pin_ts   A2'            n_oa2 ~AEN    @22BH  PN3  ok210
+pa0     pin_ts   A0'            n_oa0 ~AEN    @20BG  PN5, also read back (below)  ok210
+pa1     pin_ts   A1'            n_oa1 ~AEN    @21BG  PN4, also read back  ok210
+pa2     pin_ts   A2'            n_oa2 ~AEN    @22BG  PN3  ok210
 # A0' and A1' are read back into the chip for the port decode
-ba0     buf_ef   A0in           A0'           @25BF  ok210
-ba1     buf_ef   A1in           A1'           @26BF  ok210
+ba0     buf_ef   A0in           A0'           @26BG  ok210
+ba1     buf_ef   A1in           A1'           @27BG  ok210
 
-# ---- character fetch decode (row 26, column J), 2C210 as drawn ----
-a15i    inv      A15n           A15           @26H pwr=R   ok210
-hlti    inv      HALTn          N.HALT        @27H pwr=R   ok210
-chr     nor4     CHAR           D6 N.MREQ A15n HALTn   @26J pwr=R/2   ok210; R/2; high for a memory read from A15 high with D6 low while not halted; top input is D6, via column M and the row 13.0 line
+# ---- character fetch decode (row 26, columns F-I), 2C210 as drawn ----
+a15i    inv      A15n           A15           @26F pwr=R   ok210
+hlti    inv      HALTn          N.HALT        @27F pwr=R   ok210
+chr     nor4     CHAR           D6 N.MREQ A15n HALTn   @26I pwr=R/2   ok210; R/2; high for a memory read from A15 high with D6 low while not halted; top input is D6, via column M and the row 13.0 line
 # ---- memory request logic (rows 23-30, columns Q-X), traced on the 2C210 ----
 # N.MREQ runs down column R/S: into chain C (row 24), the two select NORs and Q20's clock. N.M1 turns down column R to
 # the inverter at row 26.5, whose output M1 resets Q20 and runs right along row 28.6, up column AD to row 24.4 (aen1).
@@ -255,22 +257,22 @@ romacc  nor2     ROMACC         N.MREQ A14    @27T pwr=R   ok210; high for a mem
 ramacc  nor2     RAMACC         N.MREQ A14n   @29T pwr=R   ok210; high for a memory cycle with A14 high; runs right along row 29 to the RAM select
 Q20     dff      Q20            AENa ~N.MREQ M1   @27X pwr=R   ok210; clocked as MREQ goes low; reset by M1; D is AENa (row 25.9, from aen1): set when the ULA drives the address
 romln   nor2     ROMLINE        Q20 ROMACC    @30W pwr=R   ok210; runs right along row 30 to the ROM select
-rmin    inv      RAMSELn        RAMACC        @30AJ pwr=R  ok210
+rmin    inv      RAMSELn        RAMACC        @30AS pwr=R  ok210
 
 # ---- I/O decode and vertical sync (rows 30-37, columns E-Z) ----
 # N.WR turns up at column H to row 30.6, N.IORQ at column I to row 31.0, N.RD at column J to row 31.4.
 iowr    nor2     IOWR           N.WR N.IORQ   @33K pwr=R   ok210; high for any I/O write: clears vertical sync
 intack  nor2     INTACK         N.IORQ N.M1   @35K pwr=R   ok210; high during the interrupt acknowledge (IORQ and M1 both low); runs right to row 35.4, column AK, and up
-fsl     nor3     FRAME-SYNC     NMION IOWR FSL   @33N pwr=R/2   ok210; R/2; held off while the NMI is on, cleared by any OUT
-fsr     nor2     FSL            FRAME-SYNC INFE  @36N pwr=R   ok210; cross-coupled with fsl: IN with A0 low starts vertical sync
+fsl     nor3     FRAME-SYNC     NMION IOWR FSL   @33O pwr=R/2   ok210; R/2; held off while the NMI is on, cleared by any OUT
+fsr     nor2     FSL            FRAME-SYNC INFE  @37O pwr=R   ok210; cross-coupled with fsl: IN with A0 low starts vertical sync
 
-# ---- 2C210 only: blanking (rows 1-2, columns AU-BB) ----
-bl1     inv      n_bl1          Q25           @1AU pwr=R   ok210
-bl2     inv      n_bl2          n_bl1         @1AW pwr=R   ok210
-bl3     inv      Q25nd          n_bl2         @1BA pwr=R   ok210; Q25 inverted and delayed by three gates
-blank   nor4     BLANK          Q25nd Q26 Q27 Q28   @1BD pwr=R   ok210; LINE-SYNC with its start delayed by the three inverters
-vb      nor2     n_vb           BLANK VID     @10BA pwr=R  ok210; VID from vid (row 13.2, right and up)
-vbi     inv      N.VIDEO        n_vb          @10BC pwr=R/2  ok210; R/2. The 2C210 blanks the picture during line sync
+# ---- 2C210 only: blanking (row 1, columns AT-BA) ----
+bl1     inv      n_bl1          Q25           @1AT pwr=R   ok210
+bl2     inv      n_bl2          n_bl1         @1AV pwr=R   ok210
+bl3     inv      Q25nd          n_bl2         @1AX pwr=R   ok210; Q25 inverted and delayed by three gates
+blank   nor4     BLANK          Q25nd Q26 Q27 Q28   @1BA pwr=R   ok210; LINE-SYNC with its start delayed by the three inverters
+vb      nor2     n_vb           BLANK VID     @11BB pwr=R  ok210; VID from vid (row 13.2, right and up)
+vbi     inv      N.VIDEO        n_vb          @11BD pwr=R/2  ok210; R/2. The 2C210 blanks the picture during line sync
 # ---- differences from the 2C184 seen so far (to be transcribed in full) ----
 # 1. Rows 1-2, columns AT-BA: a new chain of three inverters fed from Q25 (vertical at column AU) into a NOR at
 #    row 1, column BA; it feeds the LINE-SYNC / NMI area. The 2C184 has nothing here.
@@ -278,17 +280,17 @@ vbi     inv      N.VIDEO        n_vb          @10BC pwr=R/2  ok210; R/2. The 2C2
 #    above) through an R/2 inverter, where the 2C184 goes more directly: the 2C210 gates the picture with a second signal
 #    (probably blanking during sync).
 
-# ---- port decode and the NMI on/off latch (rows 33-37, columns AR-AX) ----
+# ---- port decode and the NMI on/off latch (rows 34-37, columns AP-AT) ----
 # Bus from the left (rows 30.8-32.5): N.WR, N.IORQ, N.RD, INFE (driven from here, runs left), NMION (driven from here,
 # runs left). A0in and A1in come down columns AO and AP from the read-back buffers (rows 25-26).
-infe    nor3     INFE           N.RD N.IORQ A0in   @34AS pwr=R  ok210; IN with A0 low: keyboard and tape read, starts vertical sync
-outfd   nor3     OUTFD          A1in N.IORQ N.WR   @35AS pwr=R  ok210; OUT with A1 low: NMI off
-outfe   nor3     OUTFE          A0in N.IORQ N.WR   @37AS pwr=R  ok210; OUT with A0 low: NMI on
-nl1     nor2     NMION          OUTFD NMIOFF  @35AW pwr=R  ok210; cross-coupled
-nl2     nor2     NMIOFF         NMION OUTFE   @37AW pwr=R  ok210; runs right to column BC and up to the NMI gate (nm2)
+infe    nor3     INFE           N.RD N.IORQ A0in   @34AP pwr=R  ok210; IN with A0 low: keyboard and tape read, starts vertical sync
+outfd   nor3     OUTFD          A1in N.IORQ N.WR   @36AP pwr=R  ok210; OUT with A1 low: NMI off
+outfe   nor3     OUTFE          A0in N.IORQ N.WR   @37AP pwr=R  ok210; OUT with A0 low: NMI on
+nl1     nor2     NMION          OUTFD NMIOFF  @36AT pwr=R  ok210; cross-coupled
+nl2     nor2     NMIOFF         NMION OUTFE   @37AT pwr=R  ok210; runs right to column BC and up to the NMI gate (nm2)
 
-# ---- memory select outputs (rows 30-32, columns BE-BJ): "see cct diagram" (RTL stages and totem-pole outputs) ----
-rmi     inv_rtl  RAMCSi         RAMSELn       @30BF  ok210; RTL
-rmo     pin_tpn  RAM.N.CS       RAMCSi        @30BI  ok210; PN12; the stage after the input transistor inverts (pin_tpn): confirmed by the cell circuit 'PINS ROMCS, RAMCS' on ULA 2C158/2, where the whole cell, input transistor included, does not invert. That circuit also shows the RAM cell holding the ROM cell off through 6K, which is the RAMCSi input of 'rom'
-rom     nor2_rtl ROMCSi         ROMLINE RAMCSi   @31BF  ok210; RTL. ROM N.CS = ROMLINE or RAMACC: the ROM is selected for A14 low, or while Q20 is set, unless the RAM is
-romo    pin_tpn  ROM.N.CS       ROMCSi        @31BI  ok210; PN13; the stage after the input transistor inverts (pin_tpn): confirmed by the cell circuit 'PINS ROMCS, RAMCS' on ULA 2C158/2, where the whole cell, input transistor included, does not invert. That circuit also shows the RAM cell holding the ROM cell off through 6K, which is the RAMCSi input of 'rom'
+# ---- memory select outputs (rows 30-32, columns BB-BJ): "see cct diagram" (RTL stages and totem-pole outputs) ----
+rmi     inv_rtl  RAMCSi         RAMSELn       @30BB  ok210; RTL
+rmo     pin_tpn  RAM.N.CS       RAMCSi        @30BF  ok210; PN12; the stage after the input transistor inverts (pin_tpn): confirmed by the cell circuit 'PINS ROMCS, RAMCS' on ULA 2C158/2, where the whole cell, input transistor included, does not invert. That circuit also shows the RAM cell holding the ROM cell off through 6K, which is the RAMCSi input of 'rom'
+rom     nor2_rtl ROMCSi         ROMLINE RAMCSi   @32BB  ok210; RTL. ROM N.CS = ROMLINE or RAMACC: the ROM is selected for A14 low, or while Q20 is set, unless the RAM is
+romo    pin_tpn  ROM.N.CS       ROMCSi        @32BF  ok210; PN13; the stage after the input transistor inverts (pin_tpn): confirmed by the cell circuit 'PINS ROMCS, RAMCS' on ULA 2C158/2, where the whole cell, input transistor included, does not invert. That circuit also shows the RAM cell holding the ROM cell off through 6K, which is the RAMCSi input of 'rom'
