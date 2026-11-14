@@ -203,7 +203,7 @@ dC2     nor2     DC2            DC1 DC1       @24AC  ok210
 dC3     nor2     DC3            DC2 DC2       @24AE  ok210
 d21     nor3     n_22AJ         X21 DB5 DC3   @22AD  ok210; R/2; X21: the row 21.6 line from the left, via column AB
 d21b    inv      n_22AM         n_22AJ        @22AE  ok210; R/3; output up column AG (to be traced) and down into aen1
-aen1    nor2     AENa           n_22AM M1     @24AI  ok210; M1 via row 28.6 and column AD; AENa also runs left along row 25.9 (to be traced)
+aen1    nor2     AENa           n_22AM M1     @24AI  ok210; M1 via row 28.6 and column AD; AENa also runs left along row 25.9 to Q20's D input
 aen2    inv      n_aen2         AENa          @24AM  ok210
 aen3    inv      AENin          n_aen2        @24AO  ok210; R/2; up column AU to the address enable (row 18)
 
@@ -248,7 +248,7 @@ m1i     inv      M1             N.M1          @26U   ok210
 a14i    inv      A14n           A14           @29Q   ok210
 romacc  nor2     ROMACC         N.MREQ A14    @27T   ok210; high for a memory cycle with A14 low
 ramacc  nor2     RAMACC         N.MREQ A14n   @29T   ok210; high for a memory cycle with A14 high; runs right along row 29 to the RAM select
-Q20     dff      Q20            Q20D ~N.MREQ M1   @27X   ok210; clocked as MREQ goes low; reset by M1; Q20D: the row 25.6 line from the right (to be traced)
+Q20     dff      Q20            AENa ~N.MREQ M1   @27X   ok210; clocked as MREQ goes low; reset by M1; D is AENa (row 25.9, from aen1): set when the ULA drives the address
 romln   nor2     ROMLINE        Q20 ROMACC    @30W   ok210; runs right along row 30 to the ROM select
 rmin    inv      RAMSELn        RAMACC        @30AJ  ok210
 
