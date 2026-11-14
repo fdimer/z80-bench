@@ -88,7 +88,8 @@ class ZX80 {
     // an 8K 2364 with the 8K ROM), the two 2114s of the built-in 1K (IC3 and IC4 on the ZX80, IC4a and IC4b on the ZX81;
     // which holds which half of the byte is assumed: bits 0-3 in the first) and the 4116s of the RAM packs, one per data bit per 16K.
     // The ZX81 board also takes one 24-pin static RAM in position IC4 in place of the two 2114s. A Timex Sinclair 1000
-    // (a Sinclair ZX81 issue 3 board, seen on a real machine) has a 2K NEC uPD4016 there; how its enables are wired is assumed.
+    // (a Sinclair ZX81 issue 3 board, seen on a real machine) has a 2K NEC uPD4016 there. Measured on that board, and as on Sinclair's diagram SRC 049:
+    // CE (pin 18) and OE (20) are joined and reach the ULA's RAMCS (pin 12) through 680 ohms, WE (21) is the Z80's /WR, pin 19 is A10 (link L2).
     const C = (id, part, what, range, arr, base, abits, extra) => new MemChip(id, part, what, range, arr, base, abits, extra);
     this.romChips = [C('IC2', '2332', 'ROM: 4K BASIC', '0000h-0FFFh, repeated up to 3FFFh', this.rom, 0, 12, { rom: true, en: 'CS' }), C('IC2-8K', '2364', 'ROM: 8K BASIC', '0000h-1FFFh, repeated up to 3FFFh', this.rom, 0, 13, { rom: true, en: 'CS' })];
     this.ram1k = [C('IC3', '2114', 'built-in RAM, data bits 0-3', '4000h-43FFh, repeated', this.ram, 0, 10, { nib: 0, en: 'CS' }), C('IC4', '2114', 'built-in RAM, data bits 4-7', '4000h-43FFh, repeated', this.ram, 0, 10, { nib: 4, en: 'CS' })];

@@ -1996,10 +1996,11 @@ const MC = {
       if ((d = /^D(\d)$/.exec(name))) return B.rom && B.rd ? D(+d[1]) : 'z';
       return name === 'CS' ? (B.rom ? 0 : 1) : 1;
     }
-    if (i === MC2K) {                   // the 2K static RAM in IC4 (assumed: CE is the RAM select, OE follows /RD, WE follows /WR)
+    if (i === MC2K) {                   // the 2K static RAM in IC4, as measured on a Timex Sinclair 1000 and drawn on Sinclair's diagram:
+                                        // CE (18) and OE (20) are joined to the RAM select, WE (21) is the Z80's /WR, A10 (19) is A10 (link L2)
       const sel = B.ri >= 0 && zx.ramSize === 0x800;
       if (m) return A === null ? 'z' : (A >> +m[1]) & 1;
-      if (name === 'CE') return sel ? 0 : 1; if (name === 'OE') return sel && B.rd ? 0 : 1; if (name === 'WE') return sel && B.wr ? 0 : 1;
+      if (name === 'CE' || name === 'OE') return sel ? 0 : 1; if (name === 'WE') return B.T.wr === 0 ? 0 : 1;
       if ((d = /^D(\d)$/.exec(name))) return sel && (B.rd || B.wr) ? D(+d[1]) : 'z';
       return 'z';
     }
