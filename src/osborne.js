@@ -173,12 +173,21 @@ class Osborne {
     for (let bank = 0; bank < 2; bank++) for (let bit = 0; bit < 8; bit++)
       this.chips.push(C('U' + ((bank ? 17 : 8) + bit), 'M3764', `RAM board: data bit ${bit}, ${bank ? 'bank 1 row (PRI1 high)' : 'bank 0 row (PRI1 low)'}`, bank ? '0000h-EFFFh while bank 1 is selected' : '0000h-EFFFh while bank 0 is selected, and F000h-FFFFh always', this.dram[bank], 0, 16, { dram: true, bank, bit }));
     this.p1 = new OsbP1(); this.chips.push(this.p1);      // the RAM board's connector, last so the chip indexes stay put
+    this.z80c = new BoardChip('UC9', 'Z80', 'processor', 'address, data and control lines', { label: 'UC9' }); this.chips.push(this.z80c);
+    this.pinF = {}; this.netF = {}; this.heldWhy = null; this.fx = false;
     this.rasT = new Float64Array(256);                    // when each group of rows last had RAS: bank * 128 + (row & 7Fh); kept only while P1 has a fault
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
     this.acc = new Uint32Array(10);          // accesses: 0-7 the byte-wide chips in the order above, 8 and 9 the two DRAM banks
     this.faulty = false;
     this.conn = { pia0: true, pia1: true, sio: true, fdc: true };   // debug: a disconnected chip no longer sees the CPU bus
     this.cpu = new Z80(this.bus);
+    // a held processor (no clock, or RESET, BUSREQ or WAIT low at its pin) does nothing for four clocks at a time
+    const run = this.cpu.step.bind(this.cpu);
+    this.cpu.step = () => {
+      const why = this.heldWhy; if (!why) { this.zr = false; return run(); }
+      if (!this.zr && this.z80c.lv.RESET === 0) { this.cpu.reset(); this.zr = true; }
+      this.cpu.lastEvent = null; return [{ k: 'ID', n: 4, held: why }];
+    };
     this.reset();
   }
   reset() {
@@ -191,6 +200,7 @@ class Osborne {
   }
   // ---- memory ----
   read(a) {
+    if (this.fx) { const z = this.z80c.lv; if (z.MREQ === 1 || z.RD === 1) return this.z80c.busD(0xFF); return this.z80c.busD(this.readF(this.z80c.busA(a), false)); }
     if (this.faulty) return this.readF(a, false);
     const pa = this.pa;
     if (a >= 0xF000) { this.acc[8]++; return this.dram[0][a]; }
@@ -204,6 +214,7 @@ class Osborne {
     return this.dram[pa & 1][a];
   }
   write(a, v) {
+    if (this.fx) { const z = this.z80c.lv; if (z.MREQ === 1 || z.WR === 1) return; return this.writeF(this.z80c.busA(a), this.z80c.busD(v)); }
     if (this.faulty) return this.writeF(a, v);
     const pa = this.pa;
     if (a >= 0xF000) { this.acc[8]++; this.dram[0][a] = v; return; }
@@ -219,6 +230,7 @@ class Osborne {
   }
   // what the CPU would see, without side effects (for the memory view and disassembler)
   peek(a) {
+    if (this.fx) return this.z80c.busD(this.readF(this.z80c.busA(a), true));
     if (this.faulty) return this.readF(a, true);
     const pa = this.pa;
     if (a >= 0xF000) return this.dram[0][a];
@@ -227,9 +239,35 @@ class Osborne {
     return this.dram[pa & 1][a];
   }
   // ---- memory with chip faults (used only while at least one pin fault is set) ----
-  setFault(id, pin, v) { this.chipById[id].setFault(pin, v); this.faulty = this.chips.some(c => c.faulty); }
-  clearFaults() { for (const c of this.chips) { c.f = {}; c.recalc(); } this.faulty = false; }
-  faultList() { const out = []; for (const c of this.chips) for (const k in c.f) out.push([c.id, k, c.f[k]]); return out; }
+  // ---- lines and faults (the shared scheme in memchips.js) ----
+  setFault(id, pin, v) { this.setPinFault(id, pin, v); }
+  // The RAM board's lines, from the measured RD1140 board: the sixteen M3764s share the address lines from the
+  // buffers U25 and U16 and the write enable; each row has its own RAS (RAS0 for U8-U15, RAS1 for U17-U24) and CAS is
+  // common. The two chips of a data bit share the board's data line from P1 (their DIN and DOUT taken as joined to it,
+  // the usual way with a 4164). The main board's chips are drawn on lines of their own until the main board is traced.
+  nets() {
+    if (this.NETS) return this.NETS;
+    const N = {}, U = n => 'U' + n, b0 = [0, 1, 2, 3, 4, 5, 6, 7].map(b => U(8 + b)), b1 = [0, 1, 2, 3, 4, 5, 6, 7].map(b => U(17 + b)), all = b0.concat(b1);
+    for (let n = 0; n < 8; n++) N['RA' + n] = { label: `RAM board address line ${n} (from the buffers U25 and U16)`, d: -1, pins: all.map(c => [c, 'A' + n]) };
+    for (let n = 0; n < 8; n++) N['BD' + n] = { label: `RAM board data line D${n}`, d: -1, pins: [['P1', 'D' + n], [b0[n], 'DIN'], [b0[n], 'DOUT'], [b1[n], 'DIN'], [b1[n], 'DOUT']] };
+    N.RAS0 = { label: 'RAM board RAS line of row 0 (U8-U15)', d: -1, pins: b0.map(c => [c, 'RAS']) };
+    N.RAS1 = { label: 'RAM board RAS line of row 1 (U17-U24)', d: -1, pins: b1.map(c => [c, 'RAS']) };
+    N.CAS = { label: 'RAM board CAS line', d: -1, pins: all.map(c => [c, 'CAS']) };
+    N.WE = { label: 'RAM board write enable line', d: -1, pins: all.map(c => [c, 'WE']) };
+    return (this.NETS = N);
+  }
+  // Faults changed: what the Z80's pins do. An address pin at a level changes the address for everything; a data pin
+  // changes every byte that passes it; MREQ, IORQ, RD or WR held high stop those cycles; CLK, RESET, BUSREQ and WAIT
+  // hold the processor; INT and NMI at a level act on it.
+  refault() {
+    const z = this.z80c.lv;
+    this.fx = this.z80c.faulty;
+    this.heldWhy = 'CLK' in z ? 'no clock at the Z80\'s CLK pin' : z.RESET === 0 ? 'RESET is low at the Z80: it is held in reset' : z.BUSREQ === 0 ? 'BUSREQ is low at the Z80: it has released the bus' : z.WAIT === 0 ? 'WAIT is low at the Z80: it waits' : null;
+    if (z.NMI === 0 && !this.nmiLow && this.cpu) this.cpu.nmiPending = true;
+    this.nmiLow = z.NMI === 0;
+  }
+  held() { return this.heldWhy; }
+  busA(a) { return this.fx ? this.z80c.busA(a) : a; }
   dramRead(bank, a, quiet) {
     let v = this.dram[bank][a];
     for (let b = 0; b < 8; b++) {
@@ -327,6 +365,10 @@ class Osborne {
   }
   // ---- I/O: 74LS138 on A2-A4, enabled when A7 = 0 (A5, A6 not decoded) ----
   input(p) {
+    if (this.fx) { const z = this.z80c.lv; if (z.IORQ === 1 || z.RD === 1) return this.z80c.busD(0xFF); return this.z80c.busD(this.inputPort(this.z80c.busA(p))); }
+    return this.inputPort(p);
+  }
+  inputPort(p) {
     const lo = p & 0xFF, r = lo & 3;
     if (lo & 0x80) return 0xFF;
     switch ((lo >> 2) & 7) {
@@ -341,6 +383,7 @@ class Osborne {
     }
   }
   output(p, v) {
+    if (this.fx) { const z = this.z80c.lv; if (z.IORQ === 1 || z.WR === 1) return; p = this.z80c.busA(p); v = this.z80c.busD(v); }
     const lo = p & 0xFF, r = lo & 3;
     if (lo & 0x80) return;
     switch ((lo >> 2) & 7) {
@@ -377,7 +420,7 @@ class Osborne {
   }
   syncInt() {
     const s = this.conn.sio && this.sio.intRequest();
-    this.cpu.intLine = this.intRequest();
+    const i = this.z80c.lv.INT; this.cpu.intLine = i !== undefined ? i === 0 : this.intRequest();
     this.cpu.intVector = s ? this.sio.vector() : 0xFE;
     return s;
   }
@@ -432,4 +475,5 @@ class Osborne {
     }
   }
 }
+Object.assign(Osborne.prototype, BOARD_FAULTS);
 if (typeof module !== 'undefined') module.exports = { Osborne, OSB, OSB_KEYS, OsbChip, OsbP1, OSB_PINOUTS };
