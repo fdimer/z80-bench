@@ -155,18 +155,18 @@ Q28     tff      Q28 Q28n       ~Q27 CRES     @5BD  ok210
 # count 207 = Q28 Q27 Q24 Q23 Q22 Q21 high, Q26 Q25 low: the 8-input NOR goes high and resets the counter,
 # so a line is 207 counts (checked against the known 207 T-state line).
 c207    nor8     T207           Q28n Q27n Q26 Q25 Q21n Q22n Q23n Q24n   @8BB  ok210
-# CRES from T207: path rows 8-10, column BE, to be traced
+# CRES: see crn (row 11): count 207 or INTACK
 LS      nor4     LINE-SYNC      Q25n Q26 Q27 Q28   @3BE   high for counts 16-31: 16 counts of horizontal sync  ok210
 
 # ---- NMI, sync and clock outputs (rows 2-10, columns BE-BJ) ----
 nm1     inv      n_5BG          LINE-SYNC     @5BG  ok210
-nm2     nor2     n_5BI          n_5BG NMIOFF  @5BI   NMIOFF from the NMI flip-flop (row 7, to be traced)  ok210
+nm2     nor2     n_5BI          n_5BG NMIOFF  @5BI   NMIOFF from the NMI latch (nl2)  ok210
 nm3     inv      n_5BL          n_5BI         @5BL  ok210
 nm4     pin_oc   N.NMI          n_5BL         @5BN   PN15, 5K pull-up to VCC on chip  ok210
 fs1     nor2     SYNCn          LINE-SYNC FRAME-SYNC   @8BG  ok210
 fs2     inv      N.SYNC         SYNCn         @8BJ   R/2  ok210
 tv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BL   PN16, "3 level output" (circuit not on this drawing)  ok210
-ck1     inv      n_2BH          CLKSRC        @2BH   R/2; CLKSRC: the long line at row 2 (to be traced to Q19)  ok210
+ck1     inv      n_2BH          CLKSRC        @2BH   R/2; CLKSRC = Q19, up column AK  ok210
 ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output  ok210
 
 # ---- clock: oscillator, Q19, the counter clock (rows 17-25, columns N-AL) ----
