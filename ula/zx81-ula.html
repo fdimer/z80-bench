@@ -120,7 +120,7 @@ footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; fl
   </section>
 
   <footer>
-    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6679/ULA2C210/1 (12 January 1982) and the cell circuits ULA 2C158/2, from the Ferranti archive catalogued in 2026 by Happy Little Diodes. The netlist, the Verilog and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/zx81-ULA/ula">zx81-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">c0314e6 2026-11-14</span>.</p>
+    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6679/ULA2C210/1 (12 January 1982) and the cell circuits ULA 2C158/2, from the Ferranti archive catalogued in 2026 by Happy Little Diodes. The netlist, the Verilog and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/zx81-ULA/ula">zx81-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">183acc6 2026-11-14</span>.</p>
     <p class="small"><b>Terms of use.</b> The archive's documents are for preserving material of historical interest and for non-commercial, educational and archival research only; commercial use of them or their contents, including in connection with the manufacture, marketing or sale of goods, is prohibited by Sky UK Limited. This page, the netlist and the Verilog are made from those contents and carry the same terms: strictly not for commercial use of any kind. The code is under the PolyForm Noncommercial License 1.0.0.</p>
     <p class="small"><b>Not modelled.</b> The tape (LOAD is done by putting the program straight into RAM), a RAM pack's own address decoding (the 16K is one block on the ULA's RAM CS), and the analogue side of the pins. The Z80's timing follows the data sheet's shape with fixed delays.</p>
   </footer>
@@ -1277,7 +1277,7 @@ const ULA_NET = "# ZX81 ULA 2C210, gate-level netlist transcribed from Ferranti 
   function gotRom(u, name, remember) {
     if (u.length !== 8192) { say(`${name || 'That file'} is ${u.length} bytes; a ZX81 ROM is 8192.`, 'err'); return; }
     rom = u; if (remember) try { localStorage.setItem('zx81rom', b64.enc(u)); } catch (e) {}
-    build(); say(`ROM loaded (CRC32 ${crc32(u)}). Running: the cursor appears after about 3 seconds of ZX81 time.`, 'ok'); setRunning(true);
+    build(); say(`ROM loaded (CRC32 ${crc32(u)}). Running: the cursor appears after about 3 seconds of ZX81 time` + (engine === 'net' ? ', which the gate-level netlist takes some minutes to reach.' : '.'), 'ok'); setRunning(true);
   }
   $('romFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) f.arrayBuffer().then(b => gotRom(new Uint8Array(b), f.name, true)); e.target.value = ''; });
   $('pFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (!m) { say('Load the ROM first.', 'err'); return; }
@@ -1289,7 +1289,7 @@ const ULA_NET = "# ZX81 ULA 2C210, gate-level netlist transcribed from Ferranti 
   $('engine').onchange = () => { if (rom) { build(); say('Logic changed; the machine starts again from power-on.'); if (!running) setRunning(true); } };
   const stepBy = f => { if (!m) return; if (running) setRunning(false); try { f(); } catch (e) { say('The machine stopped: ' + e.message, 'err'); } ranT = m.T - m.T0; draw(); drawWave(); meters(); };
   $('btnStepI').onclick = () => stepBy(() => m.step());
-  $('btnStepF').onclick = () => stepBy(() => { const f = m.frames, lim = m.T + 4 * FRAME_T; while (m.frames === f && m.T < lim) m.step(); pictureCheck(); pictureCheck(); });
+  $('btnStepF').onclick = () => stepBy(() => { const f = m.frames, lim = m.T + 4 * FRAME_T; while (m.frames === f && m.T < lim) m.step(); pc.frames = -1; pictureCheck(); pc.frames = -1; pictureCheck(); });
   $('zoom').onchange = drawWave; $('back').oninput = drawWave;
   $('btnVcd').onclick = () => copy(rcount ? vcd() : 'nothing recorded', $('btnVcd'));
   $('btnReport').onclick = () => { $('report').value = report(); };
