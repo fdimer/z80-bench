@@ -55,6 +55,8 @@ comparison.
 | `ula/2c210_gates.v` | **Generated.** The netlist as Verilog, one primitive per gate with its delay. For simulation, and to check other designs against; not for synthesis |
 | `ula/2c210_sync.v` | The synchronous design for an FPGA or CPLD: one 13 MHz clock. `ula2c210_core` is the logic; `ula2c210_sync` wraps it with the chip's pins |
 | `ula/v2js.js` | Runs `ula2c210_core` in the testbench by translating its (deliberately small) subset of Verilog to JavaScript |
+| `ula/zx81ula.js` | **The closed loop**: a ZX81 in which nothing of the ULA is modelled. The Z80 core's bus cycles go onto the ULA's pins T-state by T-state, timed from the ULA's own clock, and the opcode the Z80 reads, NMI, WAIT, the memory selects, the font address and the picture all come back from the ULA's pins. Works with either engine |
+| `ula/run81.js` | Runs it from the command line: `ZX81_ROM=/path/to/rom [KEYS="2.4:1 2.7:P"] [PGM=picture.pgm] node ula/run81.js [seconds] [sync \| net]` |
 
 ## Netlist format
 
@@ -98,6 +100,17 @@ the emulator's dots exactly with no offset.
 The gate level corrected two of the emulator's constants (its logic was right): the sync, and so the NMI, starts 20
 T-states after the interrupt acknowledge begins, not 13, and lasts 16 T-states, not 20 (`ULA_HSYNC_DELAY` and
 `ULA_HSYNC_LEN` in `src/zx80.js`). With them the NMIs agree to within 0.2 of a T-state.
+
+## Closed loop
+
+With the ULA in charge (`zx81ula.js`), the real ROM boots a 16K ZX81 to the cursor on both engines, the display runs
+at 50 frames a second in SLOW mode with its NMIs, interrupts and wait states, and typing P puts PRINT on the screen.
+Up to the first NMI (213,000 instructions) the Z80 runs instruction for instruction as in the hybrid emulator; after
+that the two differ only in where the NMIs fall. Over the first 0.75 s the netlist and the synchronous design give the
+same frames, NMIs, interrupts, wait states and program counter.
+
+Speed, in this general-purpose harness: the synchronous design runs about 22 times slower than a real ZX81, the
+netlist about 90 times. Not modelled yet: the tape, and a RAM pack's own decoding (the RAM is one block on RAM CS).
 
 ## Verilog
 

@@ -54,7 +54,7 @@ function translate(text, modName) {
     if (is('begin')) { eat('begin'); let js = ''; while (!is('end')) js += stmt(); eat('end'); return js; }
     if (is('if')) { eat('if'); eat('('); const c = expr([')']); eat(')'); let js = `if (${c}) {${stmt()}}`; if (is('else')) { eat('else'); js += ` else {${stmt()}}`; } return js; }
     const n = T[p++].v; if (kind[n] !== 'reg') throw new Error('assignment to ' + n + ', which is not a reg'); eat('<=');
-    const e = expr([';']); eat(';'); return `n.${n} = (${e}) & ${mask(n)};`;
+    const e = expr([';']); eat(';'); return `n_${n} = (${e}) & ${mask(n)};`;
   };
   eat('module'); p++; eat('(');
   while (!is(')')) { const dir = T[p++].v; if (is('wire')) eat('wire'); const w = range(), n = T[p++].v; width[n] = w; kind[n] = dir; if (is(',')) eat(','); }
@@ -68,14 +68,19 @@ function translate(text, modName) {
     else if (is('always')) { eat('always'); eat('@'); eat('('); eat('posedge'); eat('clk'); eat(')'); always.push(stmt()); }
     else throw new Error('not in the subset: ' + JSON.stringify(peek()));
   }
+  // put the assigns in dependency order, so that one pass settles them (a second pass in comb() confirms it)
+  { const names = new Set(assigns.map(x => x[0])), deps = x => [...x[1].matchAll(/s\.(\w+)/g)].map(m => m[1]).filter(n => names.has(n));
+    const done = new Set(), out = []; let left = assigns.slice();
+    while (left.length) { const ready = left.filter(x => deps(x).every(d => done.has(d))); if (!ready.length) throw new Error('combinational loop among: ' + left.map(x => x[0]).join(' ')); for (const x of ready) { out.push(x); done.add(x[0]); } left = left.filter(x => !done.has(x[0])); }
+    assigns.length = 0; assigns.push(...out); }
   const regs = Object.keys(kind).filter(n => kind[n] === 'reg');
   return {
     width, kind, regs, init,
     inputs: Object.keys(kind).filter(n => kind[n] === 'input'), outputs: Object.keys(kind).filter(n => kind[n] === 'output'),
-    // settle the wires from the inputs and regs (repeated until nothing moves: the order of the assigns does not matter)
-    comb: new Function('s', `for (let i = 0; i < 20; i++) { let ch = false, v;\n${assigns.map(([n, e]) => `v = (${e}) & ${mask(n)}; if (v !== s.${n}) { s.${n} = v; ch = true; }`).join('\n')}\nif (!ch) return; } throw new Error('combinational loop');`),
+    // settle the wires from the inputs and regs, in one pass (they are in dependency order)
+    comb: new Function('s', assigns.map(([n, e]) => `s.${n} = (${e}) & ${mask(n)};`).join('\n')),
     // one rising edge of clk: every reg's next value from the present values, then all at once (non-blocking)
-    edge: new Function('s', `const n = {};\n${always.join('\n')}\nfor (const k in n) s[k] = n[k];`)
+    edge: new Function('s', `let ${regs.map(n => `n_${n} = s.${n}`).join(', ')};\n${always.join('\n')}\n${regs.map(n => `s.${n} = n_${n};`).join(' ')}`)
   };
 }
 
@@ -116,40 +121,45 @@ class SyncUla {
     const M = this.M = typeof text === 'string' ? translate(text, 'ula2c210_core') : text, s = this.s = {};
     for (const n in M.width) s[n] = 0;
     for (const n of M.regs) s[n] = M.init[n] || 0;
-    this.ext = { d: 0xFF, a: 0x1FF }; this.t = 0; this.events = 0; this.watch = {}; this.last = {};
+    this.ext = { d: 0xFF, a: 0x1FF }; this.t = 0; this.events = 0; this.wk = []; this.watch = new Proxy({}, { set: (o, k, f) => { o[k] = f; this.wk = Object.keys(o); return true; } }); this.last = {};
     Object.assign(s, { kbd_n: 0x1F, usa_uk: 1, tape_in: 1, mreq_n: 1, m1_n: 1, rd_n: 1, wr_n: 1, iorq_n: 1, halt_n: 1, a15: 0, a14: 0 });
-    this.settle();
+    this.dirty = true; this.settle();
   }
+  // set() only notes that something moved; the wires are settled, and watchers told, before anything is read, before
+  // a clock edge and before time moves on
   settle() {
+    if (!this.dirty) return; this.dirty = false;
     const s = this.s;
     for (let i = 0; i < 4; i++) {            // the chip reads its own pins: what it pulls low, it reads low
       const d = this.ext.d & ~s.d_pull & 0xFF, a = s.a_oe ? s.a_out : this.ext.a;
       s.d_in = d; s.a0_in = a & 1; s.a1_in = a >> 1 & 1; this.M.comb(s);
       if ((this.ext.d & ~s.d_pull & 0xFF) === d && (s.a_oe ? s.a_out : this.ext.a) === a) break;
     }
-    for (const n in this.watch) { const v = this.get(n); if (!(n in this.last)) { this.last[n] = v; continue; } if (v !== this.last[n]) { this.last[n] = v; this.watch[n](v, this.t); } }
+    const w = this.wk; for (let i = 0; i < w.length; i++) { const n = w[i], v = this.peek(n); if (v !== this.last[n]) { const first = !(n in this.last); this.last[n] = v; if (!first) this.watch[n](v, this.t); } }
   }
-  get(n) {
-    const s = this.s; let m;
-    if ((m = /^nD(\d)$/.exec(n))) return (this.ext.d & ~s.d_pull) >> +m[1] & 1;
-    if ((m = /^A(\d)'$/.exec(n))) return (s.a_oe ? s.a_out : this.ext.a) >> +m[1] & 1;
+  get(n) { this.settle(); return this.peek(n); }
+  peek(n) {
+    const s = this.s, k = SyncUla.BIT[n];
+    if (k) return k[0] === 'd' ? (this.ext.d & ~s.d_pull) >> k[1] & 1 : (s.a_oe ? s.a_out : this.ext.a) >> k[1] & 1;
     switch (n) {
       case 'N.PHI': return s.phi_n; case 'N.NMI': return 1 - s.nmi_pull; case 'ROM.N.CS': return s.rom_cs_n; case 'RAM.N.CS': return s.ram_cs_n;
       case 'FRAME-SYNC': return s.fs; case 'SYNCn': return 1 - s.sync; case 'TV/TAPE': return s.sync ? 0 : s.black ? 1 : 2;
       case 'Q29': return s.row & 1; case 'Q30': return s.row >> 1 & 1; case 'NQ31': return 1 - (s.row >> 2 & 1);
       case 'Q19': return 1 - s.phi_n; case 'CHAR': return s.chr; case 'FORCE': return s.nop; case 'Q17': return s.q17; case 'AENa': return s.aena; case 'Q20': return s.q20; case 'Q8': return s.sr >> 7 & 1;
     }
+    const pin = SyncUla.PIN[n]; if (pin) return s[pin];
     return n in s ? s[n] : undefined;
   }
   set(n, v) {
-    const s = this.s; let m;
-    if (n === 'OSC') { this.M.edge(s); this.events++; }
-    else if ((m = /^nD(\d)$/.exec(n))) this.ext.d = this.ext.d & ~(1 << +m[1]) | v << +m[1];
-    else if ((m = /^A(\d)'$/.exec(n))) this.ext.a = this.ext.a & ~(1 << +m[1]) | v << +m[1];
-    else if ((m = /^nKB(\d)$/.exec(n))) s.kbd_n = s.kbd_n & ~(1 << +m[1]) | v << +m[1];
-    else { const k = { nMREQ: 'mreq_n', nM1: 'm1_n', nRD: 'rd_n', nWR: 'wr_n', nIORQ: 'iorq_n', nHALT: 'halt_n', nA14: 'a14', nA15: 'a15', nUSA: 'usa_uk', nTAPE: 'tape_in' }[n]; if (!k) throw new Error('no pin ' + n); s[k] = v; }
-    this.settle();
+    const s = this.s;
+    if (n === 'OSC') { this.settle(); this.M.edge(s); this.events++; this.dirty = true; return; }      // each change of OSC is one rising edge of clk
+    const k = SyncUla.BIT[n];
+    if (k) { const o = k[0] === 'k' ? s : this.ext, f = k[0] === 'k' ? 'kbd_n' : k[0]; o[f] = o[f] & ~(1 << k[1]) | v << k[1]; }
+    else { const pin = SyncUla.PIN[n]; if (!pin) throw new Error('no pin ' + n); s[pin] = v; }
+    this.dirty = true;
   }
-  runTo(t) { this.t = t; }
+  runTo(t) { this.settle(); this.t = t; }
 }
+SyncUla.BIT = {}; for (let i = 0; i < 9; i++) { if (i < 8) SyncUla.BIT['nD' + i] = ['d', i]; if (i < 5) SyncUla.BIT['nKB' + i] = ['k', i]; SyncUla.BIT[`A${i}'`] = ['a', i]; }
+SyncUla.PIN = { nMREQ: 'mreq_n', nM1: 'm1_n', nRD: 'rd_n', nWR: 'wr_n', nIORQ: 'iorq_n', nHALT: 'halt_n', nA14: 'a14', nA15: 'a15', nUSA: 'usa_uk', nTAPE: 'tape_in' };
 if (typeof module !== 'undefined') module.exports = { translate, fromYosys, SyncUla };
