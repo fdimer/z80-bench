@@ -234,6 +234,10 @@ pa2     pin_ts   A2'            n_oa2 ~AEN    @22BH  PN3
 ba0     buf_ef   A0in           A0'           @25BF
 ba1     buf_ef   A1in           A1'           @26BF
 
+# ---- character fetch decode (row 26, column J), 2C210 as drawn ----
+a15i    inv      A15n           A15           @26H   ok210
+hlti    inv      HALTn          N.HALT        @27H   ok210
+chr     nor4     CHAR           N.M1 N.MREQ A15n HALTn   @26J   ok210; R/2; high during an opcode fetch from A15 high while not halted (top input taken as N.M1, via the column K/L verticals; to be confirmed)
 # ---- memory request logic (rows 22-30, columns N-AF) ----
 # N.MREQ runs from the PN9 buffer (row 23) right to the column T vertical, which feeds chain C, two NORs and Q20's clock.
 # N.M1 (row 24) turns down at column S to an inverter whose output resets Q20.
