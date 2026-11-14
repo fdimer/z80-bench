@@ -51,7 +51,8 @@ function toVerilog(netText, name) {
 // archive, which is for non-commercial use only; so is this file. Strictly not for commercial use of any kind.
 //
 // For simulation only: the chip makes its pulses from gate delays, which synthesis tools throw away. Delays are in
-// nanoseconds and are estimates, not Ferranti's figures. Pins keep the netlist's names (A0p = A0', N_ = active low).
+// nanoseconds: gates from Ferranti's Table 2.1 by power, fan-in and fan-out; buffers and pins are estimates.
+// Pins keep the netlist's names (A0p = A0', N_ = active low).
 // Open-collector pins and pins with an on-chip pull-up have a pullup here. The cross-coupled NOR latches (NMI on/off,
 // frame sync) start unknown in a simulator, as they do in the chip, until the first OUT.
 // TV_TAPE is the three-level video pin as a number: 0 sync, 1 black, 2 white.

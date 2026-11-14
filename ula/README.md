@@ -126,10 +126,36 @@ down or up changes the line count for a few frames; that timing is the ROM's.
 The page's picture check reads the dots on the TV/TAPE pin back as characters, with the ROM's font, and compares them
 with the display file in RAM: 768 of 768 on the screens tried.
 
+## Gate delays
+
+Every gate on the drawing is marked with its power: no mark is R (a single current source), R/2 and R/3 are double
+and treble. The whole scan was searched for the marks by template matching and each one read by eye: 37 marks, on 33
+gates and on the Q19 flip-flop (four marks around its cell). R/2: the eight shift-register load gates, the eight
+data-line drivers and their enable, the clock output, sync and video output inverters, the video gate, CHAR, FRAME-SYNC,
+S/L's gate, the address enable and Q19. R/3: the latch clock gates (LCLKn, its two inverters and LK2), the dot clock,
+the counter reset, D6L and the S/L inverter. They are the `pwr=` tokens in `2c210.net`.
+
+`sim.js` takes each gate's delay from Ferranti's Table 2.1 (ULA2C000/5C000 gate delays, typical at 25 C; in the
+specifications folder of the documents) by its power, its fan-in and its fan-out, the number of inputs its output
+drives. They run from 2.8 ns (an R/2 inverter with one load) to 26 ns (an R gate with many). A flip-flop or latch cell is
+taken as two gates of its power; the input buffers, the RTL output stages and the pin drivers keep estimates (3, 25
+and 8 ns), as the table does not cover them.
+
+Measured in the testbench, against the maxima Ferranti wrote on Timex's specification: RAM CS 48 ns after MREQ falls
+(56 ns), ROM CS 48 ns (68 ns), A0'-A8' driven 62 ns after M1 rises (93 ns). All three engines (netlist, gates file,
+synchronous design) still match the emulator in everything.
+
+One margin the real delays show: the shift register is loaded from the font byte at the start of the next M1, in a
+pulse that ends about 70 ns after the Z80's clock rises. By then the Z80 has started to put the new address out, so the
+picture depends on the ROM's output holding the old byte long enough. In the testbench the picture is right when the
+Z80's address delay plus the ROM's output hold is 33 ns or more, and wrong at 30 ns. The Z80A data sheet gives only a
+maximum for the address delay (110 ns), so a fast Z80 with a fast ROM would be the case to try on real hardware. The
+testbench's memory model (`TB_ADDR`, `TB_OH`, `TB_ACC`) is what sets this; its defaults are 40, 20 and 250 ns.
+
 ## Verilog
 
-**`2c210_gates.v`** is the drawing in Verilog: 189 gates, flip-flops and pin drivers, with the same delays as `sim.js` (estimates, not Ferranti's
-figures). Like the chip it makes its latch, load and reset pulses from gate delays, so it is for a simulator. Read back
+**`2c210_gates.v`** is the drawing in Verilog: 189 gates, flip-flops and pin drivers, with the same delays as `sim.js` (see
+Gate delays). Like the chip it makes its latch, load and reset pulses from gate delays, so it is for a simulator. Read back
 into a netlist and run through the testbench (`ULA=gates.v`), it gives the same result as the netlist it came from.
 
 **`2c210_sync.v`** does the same job with one clock, 13 MHz (twice the ZX81's 6.5 MHz), so a T-state is four clock
@@ -163,27 +189,30 @@ placed and routed for a real FPGA, so there are no timing figures.
 
 ## Electrical requirements for a replacement
 
-What a board that plugs into the ULA's 40-pin socket has to do, from the drawing's pin circuits and Sinclair's circuit
-diagram. The logic above is the easy part.
+What a board that plugs into the ULA's 40-pin socket has to do, from Timex's engineering specification for the chip
+(EG-M-507 rev B, 22 Nov 1982, with Ferranti's handwritten replies), Ferranti's gate array data, the drawing's pin
+circuits and Sinclair's circuit diagram. Where Timex and Ferranti differ, Ferranti's note is the chip as built. The
+logic above is the easy part.
 
 | Pins | Signal | In the chip | A replacement needs |
 |---|---|---|---|
-| 40, 34 | +5 V, 0 V | bipolar, runs hot | its own regulator if the logic is 3.3 V |
-| 32, 30, 28, 26, 24, 23, 21, 19 | D0-D7 | input with 16K pull-up; open-collector pull-down | 5 V tolerant inputs; outputs that only ever pull low. They work against the 470 ohm resistors to the memory's data lines, so they must sink about 10 mA and reach a good low |
-| 33, 31, 29, 27, 25 | KBD0-KBD4 | inputs, 16K pull-ups | pull-ups to +5 V: the keyboard has none of its own |
-| 22 | USA/UK | input, 16K pull-up | pull-up (the link, when fitted, grounds it) |
-| 20 | TAPE IN | 400 ohm series, clamp diodes, a biased two-transistor input stage (circuit on ULA 2C158/2) | an input stage that turns the tape's small signal into logic: a comparator or the same network, not a bare FPGA pin |
-| 35 | OSC | on-chip oscillator with the board's 6.5 MHz ceramic resonator | its own 13 MHz oscillator (or 6.5 MHz and a doubler); pin 35 left unconnected |
-| 9, 10, 6, 8, 7, 17, 18, 11 | MREQ, M1, RD, WR, IORQ, HALT, A15, A14 | inputs, 16K pull-ups | 5 V tolerant inputs |
-| 5, 4, 3, 36, 37, 38, 39, 1, 2 | A0'-A8' | tri-state outputs; A0' and A1' also read | tri-state outputs that win against the Z80 through the 1K resistors (5 mA), released within a few tens of ns of M1 falling; A0' and A1' are inputs too |
-| 14 | clock out | totem-pole output to TR2 | a 5 V swing into TR2's base resistor |
-| 15 | NMI | open collector, 5K pull-up on chip | open-drain output with a pull-up to +5 V |
-| 13, 12 | ROM CS, RAM CS | RTL stages, totem-pole outputs | 5 V-level outputs; RAM CS feeds the RAM through 680 ohms on the board |
-| 16 | TV/TAPE | one pin with three levels, from an emitter follower with 200 ohms in series and 1K to 0 V (circuit on ULA 2C158/2): sync 0 V, black about 2.8 V, white about 4.3 V unloaded (calculated from the resistor values, not measured) | two outputs (`tv_sync_n`, `tv_white`) mixed by resistors to those three levels; worth checking against a working machine. The same pin is the tape output |
+| 40, 34 | +5 V, 0 V | bipolar (Ferranti's note on Timex's specification) | its own regulator if the logic is 3.3 V |
+| 32, 30, 28, 26, 24, 23, 21, 19 | D0-D7 | TTL inputs (high 2.0 V, low 0.8 V); open-collector outputs with a 5K pull-up; Timex asked for 0.4 V at 2.5 mA, Ferranti: "ours are 8 mA (16 mA)" | 5 V tolerant inputs; outputs that only ever pull low and sink 8 mA at 0.4 V (they work against the 470 ohm resistors to the memory's data lines); a 5K pull-up to +5 V on each |
+| 33, 31, 29, 27, 25 | KBD0-KBD4 | inputs with a higher threshold: high 2.7 V min, low 1.0 V max; 16K pull-ups | pull-ups to +5 V (the keyboard has none of its own) and the same thresholds |
+| 22 | USA/UK | as the keyboard inputs: higher threshold, 16K pull-up | pull-up and the same thresholds (the link, when fitted, grounds it) |
+| 20 | TAPE IN | Timex asked for hysteresis; Ferranti: "there is no hysteresis on our i/p", low 0.2 V max, high 1.0 V min. 400 ohm series, clamp diodes and a biased two-transistor stage (ULA 2C158/2) | an input stage that turns the tape's small signal into logic with those thresholds: a comparator or the same network, not a bare FPGA pin |
+| 35 | OSC | on-chip oscillator: 6.5 MHz ceramic resonator to 0 V, with 100 pF and 18K (Timex's drawing), one pin | its own 13 MHz oscillator (or 6.5 MHz and a doubler); pin 35 left unconnected |
+| 9, 10, 6, 8, 7, 17, 18, 11 | MREQ, M1, RD, WR, IORQ, HALT, A15, A14 | TTL inputs, 16K pull-ups | 5 V tolerant inputs with 16K pull-ups |
+| 5, 4, 3, 36, 37, 38, 39, 1, 2 | A0'-A8' | tri-state outputs, 0.4 V at 2.5 mA, 2.4 V at -400 uA, leakage 10 uA; A0' and A1' are also inputs, the only inputs without a pull-up | tri-state outputs that win against the Z80 through the 1K resistors; driven within 93 ns of M1 rising and held until the next M1 falls; A0' and A1' read without pull-ups |
+| 14 | clock out | TTL output to TR2 | a 5 V swing into TR2's base resistor |
+| 15 | NMI | open collector, 5K pull-up on chip | open-drain output with a 5K pull-up to +5 V |
+| 13, 12 | ROM CS, RAM CS | TTL outputs through RTL stages | 5 V-level outputs, low within 68 ns (ROM) and 56 ns (RAM) of MREQ falling; RAM CS feeds the RAM through 680 ohms on the board |
+| 16 | TV/TAPE | one pin with three levels: white 4.0 V, black 3.0 V, sync 0.1 V typical (0.4 V max), from an emitter follower with 200 ohms in series and 1K to 0 V (ULA 2C158/2) | two outputs (`tv_sync_n`, `tv_white`) mixed by resistors to those three levels; still worth measuring on a working machine. The same pin is the tape output |
 
 Timing a replacement must keep: the NOP must be on D0-D5 and D7 before the Z80 reads at the start of T3 and until M1
-rises; the font byte is taken as the next T-state starts, so the ROM must stay selected and A0'-A8' driven until then;
-and the selects must follow MREQ and A14 without waiting for a clock.
+rises; the selects within the times above, without waiting for a clock; A0'-A8' and the ROM select held from the
+refresh until the next M1, because the font byte is loaded as that M1 begins (see Gate delays for how tight that is);
+data from the keyboard port within 400 ns of IORQ falling (Timex's figure).
 
 The start-up state is whatever the registers power up as; like the chip, the design has no reset pin, and the ROM's
 first OUT instructions put it in order.

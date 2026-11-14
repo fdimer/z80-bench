@@ -14,6 +14,20 @@
 // what the chip drives while enabled, and what the outside drives (through the board's resistor) otherwise.
 
 const ULA_DELAY = { buf_ef: 3, inv: 6, nor: 7, or: 9, rtl: 25, dff: 10, tff: 10, dlatch: 8, pin: 8, out3: 8 };
+// Ferranti, ULA2C000/5C000 data, Table 2.1: gate delay in ns (typical, 25 C) by power (R single, R/2 double, R/3 treble
+// current source), fan-in 1-8 (rows) and fan-out 1-6 (columns). Beyond fan-out 6 the last step is carried on.
+const ULA_GATE_NS = {
+  'R':   [[5.7, 8.4, 11.1, 13.9, 16.6, 19.3], [6.2, 9.0, 11.7, 14.5, 17.2, 19.9], [9.8, 12.5, 15.2, 18.0, 20.7, 23.4], [10.4, 13.1, 15.8, 18.6, 21.3, 24.0],
+          [13.8, 16.6, 19.3, 22.0, 24.8, 27.5], [14.4, 17.2, 19.9, 22.7, 25.4, 28.1], [17.9, 20.7, 23.4, 26.2, 28.9, 31.7], [18.5, 21.3, 24.0, 26.8, 29.5, 32.2]],
+  'R/2': [[2.8, 4.2, 5.6, 6.9, 8.3, 9.7], [3.1, 4.5, 5.9, 7.2, 8.6, 10.0], [4.9, 6.2, 7.6, 9.0, 10.4, 11.7], [5.2, 6.5, 7.9, 9.3, 10.7, 12.0],
+          [6.9, 8.3, 9.7, 11.0, 12.4, 13.8], [7.2, 8.6, 10.0, 11.3, 12.7, 14.1], [9.0, 10.4, 11.7, 13.1, 14.5, 15.8], [9.3, 10.7, 12.0, 13.4, 14.8, 16.1]],
+  'R/3': [[1.9, 2.8, 3.7, 4.6, 5.5, 6.4], [2.1, 3.0, 3.9, 4.8, 5.7, 6.6], [3.3, 4.2, 5.1, 6.0, 6.9, 7.8], [3.5, 4.4, 5.3, 6.2, 7.1, 8.0],
+          [4.6, 5.5, 6.4, 7.4, 8.3, 9.2], [4.8, 5.7, 6.6, 7.6, 8.5, 9.4], [6.0, 6.9, 7.8, 8.7, 9.6, 10.6], [6.2, 7.1, 8.0, 8.9, 9.8, 10.7]]
+};
+function ulaGateNs(pwr, fanIn, fanOut) {
+  const row = ULA_GATE_NS[pwr][Math.min(Math.max(fanIn, 1), 8) - 1], fo = Math.max(fanOut, 1);
+  return fo <= 6 ? row[fo - 1] : row[5] + (fo - 6) * (row[5] - row[4]);
+}
 
 class UlaSim {
   constructor(text, opts = {}) {
@@ -27,21 +41,30 @@ class UlaSim {
       const f = line.split(/\s+/), at = f.findIndex(x => x[0] === '@'), w = at < 0 ? f : f.slice(0, at);
       const [id, type] = w; const tail = at < 0 ? '' : f.slice(at).join(' ');
       if (id === 'alias') { this.alias[type] = w[2]; continue; }
-      const dm = /delay=([\d.]+)/.exec(tail);
+      const dm = /delay=([\d.]+)/.exec(tail), pm = /\bpwr=(R\/2|R\/3|R)\b/.exec(tail);
       let outs, ins;
       if (type === 'tff') { outs = w.slice(2, 4); ins = w.slice(4); } else { outs = [w[2]]; ins = w.slice(3); }
-      this.els.push({ id, type, outs, ins, d: dm ? +dm[1] : null, grid: at < 0 ? '' : f[at].slice(1) });
+      this.els.push({ id, type, outs, ins, d: dm ? +dm[1] : null, pwr: pm ? pm[1] : null, grid: at < 0 ? '' : f[at].slice(1) });
     }
     const R = n => this.alias[n] || n;
     for (const e of this.els) {
       e.outs = e.outs.map(R);
       e.inv = e.ins.map(n => n[0] === '~'); e.ins = e.ins.map(n => R(n.replace(/^~/, '')));
+      if (e.d === null && e.pwr && !opts.flatDelays) e.pwrPending = true;     // from Ferranti's table, once the fan-outs are known
       if (e.d === null) e.d = this.delay[/^nor/.test(e.type) ? (e.type.endsWith('_rtl') ? 'rtl' : 'nor') : /^or/.test(e.type) ? 'or'
         : e.type === 'inv_rtl' ? 'rtl' : /^pin_(oc|ts|tp)/.test(e.type) ? 'pin' : e.type] || this.delay.inv;
       e.state = 0; e.pend = null;
       if (e.type === 'pin_in' || e.type === 'pin_io' || e.type === 'osc') { this.pins[e.outs[0]] = e.ins[0]; this.ext[e.outs[0]] = 1; e.src = true; }
       if (e.type === 'pin_oc' || e.type === 'pin_ts') (this.wired[e.outs[0]] = this.wired[e.outs[0]] || []).push(e);
       for (const n of e.ins) if (n !== '-' && n !== 'VCC' && n !== 'GND') (this.fan[n] = this.fan[n] || []).push(e);
+    }
+    // gate delays from Ferranti's table: fan-in is the gate's inputs, fan-out the inputs its output drives. A flip-flop
+    // or latch cell is taken as two gates of its power: one loaded inside the cell, then one driving its outputs.
+    const loads = n => (n === '-' ? 0 : (this.fan[n] || []).length);
+    for (const e of this.els) if (e.pwrPending) {
+      const out = Math.max(1, ...e.outs.map(loads));
+      e.d = +(/^(dff|tff|dlatch)$/.test(e.type) ? ulaGateNs(e.pwr, 2, 2) + ulaGateNs(e.pwr, 2, out + 1) : ulaGateNs(e.pwr, e.ins.length, out)).toFixed(1);
+      delete e.pwrPending;
     }
     // a pin_ts net is also read by the chip (A0', A1'): what is outside counts while the chip lets go
     for (const n in this.wired) if (!(n in this.ext)) this.ext[n] = 1;
@@ -122,4 +145,4 @@ class UlaSim {
   settle(limit = 2000) { for (const e of this.els) this.update(e); this.runTo(this.t + limit); }
 }
 
-if (typeof module !== 'undefined') module.exports = { UlaSim, ULA_DELAY };
+if (typeof module !== 'undefined') module.exports = { UlaSim, ULA_DELAY, ULA_GATE_NS, ulaGateNs };

@@ -41,30 +41,40 @@ else if (WHICH === 'gates.v') {
 const OSC = 1000 / 6.5;                   // ns per oscillator period
 let oscT = 0, osc = 0;
 // Z80 timing (ns after the clock edge): address, MREQ/RD/IORQ/WR/M1, and memory access time
-const D = { addr: 40, ctl: 30, acc: 150 };
+// Z80 delays after the clock edge (address, control) and the memory's access time and output hold, in ns. The Z80A
+// data sheet gives maxima only (address 110, MREQ/RD 85, M1 100); TB_ADDR etc. set them for a timing-margin run.
+const D = { addr: +(process.env.TB_ADDR || 40), ctl: +(process.env.TB_CTL || 30), acc: +(process.env.TB_ACC || 250), oh: +(process.env.TB_OH || 20) };
 const tbq = [];                            // testbench actions: {t, f}
 const at = (t, f) => { tbq.push({ t, f }); tbq.sort((a, b) => a.t - b.t); };
-const busA = a => { for (let n = 0; n < 16; n++) { const name = n < 9 ? `A${n}'` : n === 14 ? 'nA14' : n === 15 ? 'nA15' : null; if (name) sim.set(name, a >> n & 1); } cpuA = a; };
+const busA = a => { for (let n = 0; n < 16; n++) { const name = n < 9 ? `A${n}'` : n === 14 ? 'nA14' : n === 15 ? 'nA15' : null; if (name) sim.set(name, a >> n & 1); } const ch = (a ^ cpuA) & 0xFE00; cpuA = a; if (ch) memChange(); };
 let cpuA = 0, rdLow = false, mreqLow = false;
 
-// the board's memory, seen from the ULA's data pins: it drives the bus while MREQ and RD are low (or in a refresh
-// the ULA has selected the ROM), after its access time
-let memOn = null;
-function memory() {
-  const romSel = sim.get('ROM.N.CS') === 0, ramSel = sim.get('RAM.N.CS') === 0;
-  if (!mreqLow || !(rdLow || romSel)) { drive(0xFF); return; }
-  const lo = aBus();
-  const a = (cpuA & 0xFE00) | lo;          // A0-A8 reach the ROM and RAM through the ULA side of the resistors
-  const v = romSel ? m.rom[a & 0x1FFF] : ramSel && rdLow ? m.mread(0x4000 | a & 0x3FFF, false, true) : 0xFF;
-  drive(v);
+// the board's memory, seen from the ULA's data pins. The ROM (a 2364: chip select only) drives the bus while ROM CS is
+// low; the RAM (2114s) while RAM CS is low and WR is high. After any change of address, select or WR the old byte holds
+// for D.oh, the lines are then undefined (taken as FFh, which would load an all-ink pattern) and the new byte appears
+// D.acc after the last change. A0-A8 reach the memory from the ULA's side of the board's resistors.
+let wrLow = false, memSeq = 0, invalidPending = false;
+function memWant() {
+  const romSel = sim.get('ROM.N.CS') === 0, ramSel = sim.get('RAM.N.CS') === 0, a = (cpuA & 0xFE00) | aBus();
+  return romSel ? m.rom[a & 0x1FFF] : ramSel && !wrLow ? m.mread(0x4000 | a & 0x3FFF, false, true) : 0xFF;
 }
+function memChange() {
+  const v = memWant(), my = ++memSeq;
+  if (v !== dOut && !invalidPending) { invalidPending = true; at(sim.t + D.oh, () => { invalidPending = false; if (memSeq === my || dOut !== memWant()) drive(0xFF); }); }
+  at(sim.t + D.acc, () => { if (my === memSeq) drive(memWant()); });
+}
+const memory = memChange;
 let dOut = 0xFF;
-const drive = v => { dOut = v; for (let n = 0; n < 8; n++) sim.set('nD' + n, v >> n & 1); };
-const onMem = () => at(sim.t + D.acc, memory);
-for (const n of ['ROM.N.CS', 'RAM.N.CS']) sim.watch[n] = onMem;
+const drive = v => { if (v === dOut) return; dOut = v; for (let n = 0; n < 8; n++) sim.set('nD' + n, v >> n & 1); };
+const onMem = () => memChange();
+for (const n of ['ROM.N.CS', 'RAM.N.CS']) sim.watch[n] = (v, t) => { if (v === 0 && mreqLow && tMreq >= 0 && t - tMreq < 150) dly[n === 'RAM.N.CS' ? 'ram' : 'rom'].push(t - tMreq); onMem(); };
+for (let n = 0; n < 9; n++) sim.watch[`A${n}'`] = () => memChange();      // the ULA's own address drive
 const dBus = () => { let v = 0; for (let n = 0; n < 8; n++) v |= sim.get('nD' + n) << n; return v; };
 const aBus = () => { let v = 0; for (let n = 0; n < 9; n++) v |= sim.get(`A${n}'`) << n; return v; };
-const ctl = (name, v) => { sim.set(name, v); if (name === 'nMREQ') { mreqLow = !v; onMem(); } if (name === 'nRD') { rdLow = !v; onMem(); } };
+// the chip's own delays, to set against the figures on Timex's specification (Ferranti's maxima: RAM CS 56 ns and ROM CS
+// 68 ns from MREQ falling, A0'-A8' 93 ns from M1 rising)
+const dly = { ram: [], rom: [], addr: [] }; let tMreq = -1, tM1 = -1;
+const ctl = (name, v) => { if (name === 'nMREQ' && !v) tMreq = sim.t; sim.set(name, v); if (name === 'nMREQ') { mreqLow = !v; onMem(); } if (name === 'nRD') { rdLow = !v; onMem(); } };
 
 // ---- the clock: the Z80's CLK is N.PHI through TR2 (an inverter); a T-state starts on CLK rising (N.PHI falling) ----
 let r1 = null;                             // time of the first CLK rise; the clock is regular from there
@@ -85,9 +95,22 @@ sim.watch['N.NMI'] = (v, t) => { if (v === 0) rep.nmiSim.push(tToT(t) + emuOff);
 sim.watch['FRAME-SYNC'] = (v, t) => rep.vsSim.push([tToT(t) + emuOff, v]);
 const syncFalls = [], outs = [];
 sim.watch['SYNCn'] = (v, t) => { if (v === 0) syncFalls.push(tToT(t) + emuOff); };
+if (WHICH !== 'sync' && WHICH !== 'yosys') sim.watch[WHICH === 'gates.v' ? 'AEN' : 'AEN'] = (v, t) => { if (v === 0 && tM1 >= 0 && t - tM1 < 200) dly.addr.push(t - tM1 + 8); };
 const vidEdges = []; sim.watch['TV/TAPE'] = (v, t) => vidEdges.push([t, v]);
 const hs = m.hsyncs.bind(m); m.hsyncs = function () { while (this.nextH <= this.t) { if (this.nmiGen) rep.nmiEmu.push(this.nextH); hs(); } hs(); };
 
+// WAVE=n: record the signals below around the n-th character fetch and print them at the end
+const WAVE_NAMES = (process.env.WAVE_NETS || "N.PHI,Q19,SCLK,nM1,nMREQ,nD0,Q17,D6L,DC3,DB5,S/L,R1,Q1,Q2,Q7,Q8,Q32,VID,TV/TAPE").split(',');
+let waveAt = -1; const waveLog = {};
+if (process.env.WAVE) for (const n of WAVE_NAMES) { const prev = sim.watch[n]; waveLog[n] = []; sim.watch[n] = (v, t) => { waveLog[n].push([t, v]); if (prev) prev(v, t); }; }
+function printWave() {
+  if (waveAt < 0) return; const t0 = waveAt, t1 = t0 + 3000;
+  for (const n of WAVE_NAMES) { let s = '', e = waveLog[n], v = sim.get(n), k = 0; v = undefined;
+    for (const [t, x] of e) if (t <= t0) v = x;
+    for (let x = t0; x < t1; x += 10) { for (const [t, y] of e) if (t <= x) v = y; s += v === undefined ? '?' : v === 2 ? '^' : v ? '-' : '_'; }
+    console.log(n.padEnd(9), s); }
+  console.log('10 ns per column; T1 of the character fetch at column 5; 30.8 columns per T-state');
+}
 // let the ULA's clock start, then line the emulator's T-states up with it
 step(3000);
 let emuOff = m.t - (Math.floor(tToT(sim.t)) + 2);   // emulator T = sim T + emuOff
@@ -109,16 +132,11 @@ while (m.t < endT) {
       const w = c.k === 'IA' ? 2 : 0;    // an interrupt acknowledge has two wait states; IORQ instead of MREQ and RD
       at(R(1) + D.addr, () => { busA(c.a); sim.set('nM1', 0); sim.set('nHALT', c.halt ? 0 : 1); });
       if (w) at(F(3) + D.ctl, () => sim.set('nIORQ', 0)); else at(F(1) + D.ctl, () => { ctl('nMREQ', 0); ctl('nRD', 0); });
-      at(R(3 + w) + D.ctl, () => { ctl('nMREQ', 1); ctl('nRD', 1); sim.set('nIORQ', 1); sim.set('nM1', 1); });
+      at(R(3 + w) + D.ctl, () => { ctl('nMREQ', 1); ctl('nRD', 1); sim.set('nIORQ', 1); tM1 = sim.t; sim.set('nM1', 1); });
       at(R(3 + w) + D.addr, () => busA(c.rf));
       at(F(3 + w) + D.ctl, () => ctl('nMREQ', 0));
       at(F(4 + w) + D.ctl, () => ctl('nMREQ', 1));
-      if (c.ch !== undefined && process.env.WAVE && rep.chars === +process.env.WAVE) {   // dump a waveform of one character fetch
-        const names = ['N.PHI', 'Q19', 'nM1', 'nMREQ', 'nRD', 'nD6', 'CHAR', 'LCLKn', 'LCLK', 'Q17', 'D6L', 'M1', 'FORCE', 'nD0', 'DB5', 'DC3', 'S/L', 'AENa', 'AEN', "A3'", 'Q20', 'ROM.N.CS', 'Q8', 'TV/TAPE'];
-        const t1 = R(1) - 50, rows = names.map(() => '');
-        for (let x = t1; x < R(7); x += 10) { step(x); names.forEach((n, j) => { const v = sim.get(n); rows[j] += v === undefined ? '?' : v === 2 ? '^' : v ? '-' : '_'; }); }
-        names.forEach((n, j) => console.log(n.padEnd(9), rows[j])); console.log('T1 starts at column 5; 10 ns per column, 30.8 columns per T-state');
-      }
+      if (c.ch !== undefined && process.env.WAVE && rep.chars === +process.env.WAVE) waveAt = R(1) - 50;   // record a waveform from here
       if (c.k === 'M1') {                 // T3: the Z80 takes the byte on CLK rising
         step(R(3) - 1); rep.m1++;
         const seen = dBus();
@@ -135,8 +153,8 @@ while (m.t < endT) {
     } else if (c.k === 'MR' || c.k === 'MW') {
       at(R(1) + D.addr, () => busA(c.a));
       at(F(1) + D.ctl, () => { ctl('nMREQ', 0); if (c.k === 'MR') ctl('nRD', 0); });
-      if (c.k === 'MW') at(F(2) + D.ctl, () => sim.set('nWR', 0));
-      at(F(3) + D.ctl, () => { ctl('nMREQ', 1); ctl('nRD', 1); sim.set('nWR', 1); });
+      if (c.k === 'MW') at(F(2) + D.ctl, () => { sim.set('nWR', 0); wrLow = true; memChange(); });
+      at(F(3) + D.ctl, () => { ctl('nMREQ', 1); ctl('nRD', 1); sim.set('nWR', 1); if (wrLow) { wrLow = false; memChange(); } });
       step(F(2));
       const rs = sim.get('ROM.N.CS'), ms = sim.get('RAM.N.CS'), a14 = c.a >> 14 & 1;
       if (rs !== a14 || ms !== 1 - a14) rep.selBad.push({ t: tt, k: c.k, a: c.a.toString(16), romcs: rs, ramcs: ms });
@@ -162,11 +180,12 @@ for (const k of ['inBad', 'nopBad', 'faBad', 'rowBad', 'selBad', 'pix']) rep[k] 
 rep.pix = rep.pix.filter(x => x.t < m.t - 8);       // the run stops on an instruction boundary: the last character's dots have no next cycle to follow
 rep.chars = rep.pix.length;
 
+printWave();
 // ---- pixels: sample the video output at each dot of each character the emulator drew; the offset that matches
 // best is the ULA's delay from the emulator's T-state t0+4 to the first dot ----
 function lvl(t) { let lo = 0, hi = vidEdges.length - 1, v = 2; while (lo <= hi) { const mid = (lo + hi) >> 1; if (vidEdges[mid][0] <= t) { v = vidEdges[mid][1]; lo = mid + 1; } else hi = mid - 1; } return v; }
 let best = null;
-for (let off = -16; off <= 32; off++) {           // in half dots
+for (let off = +(process.env.OFF0 || -16); off <= +(process.env.OFF1 || 32); off++) {           // in half dots
   let bad = 0, n = 0;
   for (const p of rep.pix) {
     const T0 = p.t - emuOff;
@@ -191,4 +210,6 @@ console.log(`row counter: ${rep.rowBad.length} differ`, hist(rep.rowBad.map(r =>
 console.log(`ROM/RAM select on reads and writes: ${rep.selBad.length} differ`, rep.selBad.slice(0, 3));
 console.log(`NMIs: emulator ${rep.nmiEmu.length}, ULA ${rep.nmiSim.length}; ULA minus emulator, in T-states:`, hist(nmiPairs));
 console.log(`vertical sync: emulator`, rep.vsEmu.slice(0, 6), 'ULA', rep.vsSim.slice(0, 6).map(([t, v]) => [Math.round(t), v]));
+const st = a => a.length ? `${Math.min(...a).toFixed(1)}-${Math.max(...a).toFixed(1)} ns over ${a.length}` : 'not measured';
+console.log(`delays: RAM CS from MREQ ${st(dly.ram)} (Ferranti's max 56 ns); ROM CS from MREQ ${st(dly.rom)} (68 ns); A0'-A8' driven after M1 rises ${st(dly.addr)} (93 ns; includes the 8 ns output buffer)`);
 console.log(`pixels: best offset ${best && best.off / 2} dots after T-state t0+4, ${best && best.bad} of ${best && best.n} dots differ`);
