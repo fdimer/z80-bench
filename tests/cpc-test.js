@@ -3,7 +3,9 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = { console }; vm.createContext(ctx);
 for (const f of ['z80core.js', 'memchips.js', 'cpc.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', f), 'utf8') + '\nthis.Z80 = Z80; this.CPCMachine = typeof CPCMachine !== "undefined" ? CPCMachine : undefined; this.CPC = typeof CPC !== "undefined" ? CPC : undefined; this.memSetFault = typeof memSetFault !== "undefined" ? memSetFault : undefined;', ctx);
-const { CPCMachine, CPC, memSetFault } = ctx;
+const { CPCMachine, CPC } = ctx;
+// a fault on one pin: the pin disconnected from its line ('z': floating; 0 or 1: at that level), or an output stuck at a level
+const memSetFault = (m, id, pin, v) => m.setPinFault(id, pin, v);
 let pass = 0, fail = 0;
 const ok = (name, cond, extra) => { if (cond) pass++; else { fail++; console.log('FAIL', name, extra === undefined ? '' : extra); } };
 // instruction lengths in clocks on a CPC (always a multiple of four)
@@ -74,6 +76,26 @@ for (const [name, bytes, want, setup] of [
   [63, 40, 46, 0x8E, 38, 0, 25, 30, 0, 7].forEach((v, r) => { m.output(0xBC00, r); m.output(0xBD00, v); }); m.gaMode = 0x0C; m.cpu.pc = 0x4000; m.run(400000);
   memSetFault(m, 'IC108', 'RESET', 0); m.run(4000); const f0 = m.frames; m.run(400000); ok('6845 RESET pin low: no sync, no frames', m.frames === f0 && !m.hs && !m.vsync && !m.de); memSetFault(m, 'IC108', 'RESET', null);
   ok('all cleared', !m.faulty && !m.gf && !m.busF && m.held() === null);
+}
+{ // a whole line held at a level, against one pin disconnected from it
+  const m = new CPCMachine(); m.gaMode = 0x0C;
+  m.setNetFault('RA6', 1);                                                          // RAM address line 6: CPU A8 (row) and A15 (column)
+  ok('line held high: all eight RAM chips see it', CPC.RAM_ICS.every(ic => m.chipById['IC' + ic].f.A6 === 1) && Object.keys(m.chipById.IC116.f).length === 0);
+  m.write(0x8100, 0xAB); ok('the whole byte folds', m.read(0x0000) === 0xAB && m.read(0x8000) === 0xAB);
+  m.setPinFault('IC120', 'A6', 0);                                                  // this one chip's pin cut from the line and low
+  ok('one pin disconnected from the held line keeps its own level', m.chipById.IC120.f.A6 === 0 && m.chipById.IC119.f.A6 === 1);
+  m.write(0x0000, 0x01); ok('only that chip (bit 0) addresses differently', (m.ram[0x0000] & 1) === 1 && (m.ram[0x8100] & 0xFE) === 0x00, m.ram[0x0000] + ' ' + m.ram[0x8100]);
+  ok('listed once each', m.faultList().length === 2 && /held high \(8 pins\)/.test(m.faultList()[0][2]) && /IC120 pin A6 disconnected from its line, at low/.test(m.faultList()[1][2]), JSON.stringify(m.faultList()));
+  m.clearFaults(); ok('cleared', !m.faulty && m.faultList().length === 0 && Object.keys(m.chipById.IC120.f).length === 0);
+  m.setNetFault('RD0', 1); m.ram[0x4000] = 0x00;
+  ok('RAM data-out line held high: the RAM chip and the gate array pin both show it; the CPU reads it', m.chipById.IC120.f.DOUT === 1 && m.chipById.IC116.f.D0 === 1 && m.read(0x4000) === 0x01);
+  m.setNetFault('RD0', null); m.setPinFault('IC120', 'DOUT', 'z'); ok('an output disconnected: the listening pin floats', m.chipById.IC116.f.D0 === 'z' && m.read(0x4000) === 0x01); m.clearFaults();
+  m.setNetFault('A3', 0); ok('address line held low: Z80, ROM and the bus', m.z80.f.A3 === 0 && m.romChip.f.A3 === 0 && m.busA(0xFFFF) === 0xFFF7); m.clearFaults();
+  m.cpu.pc = 0x4321; m.gaMode = 0x0D; m.setNetFault('RESET', 0); const t0 = m.t; m.run(4000);
+  ok('RESET line held low: Z80, gate array and 6845 in reset, time goes on', m.cpu.pc === 0 && m.gaMode === 0 && m.t - t0 >= 4000 && /RESET/.test(m.held()));
+  m.setPinFault('IC116', 'RESET', 'z'); m.output(0x7F00, 0x8D); ok('gate array\'s RESET pin disconnected from the held line: it works again', m.gaMode === 0x0D); m.clearFaults();
+  m.setNetFault('INT', 0); ok('INT line held low: a request all the time', m.intOut() === true); m.setPinFault('IC111', 'INT', 'z'); ok('unless the Z80\'s pin is disconnected from it', m.intOut() === false); m.clearFaults();
+  ok('drivers', m.isDriver('IC116', 'INT') && !m.isDriver('IC111', 'INT') && m.isDriver('IC111', 'A3') && !m.isDriver('IC111', 'D3') && m.netOf('IC108', 'CS') === 'A14' && m.netOf('IC116', 'R') === null);
 }
 { // interrupt counter: 52 HSYNCs, and VSYNC resynchronisation
   const m = new CPCMachine(); m.gaMode = 0x0C; [63, 40, 46, 0x8E, 38, 0, 25, 30, 0, 7].forEach((v, r) => { m.output(0xBC00, r); m.output(0xBD00, v); });

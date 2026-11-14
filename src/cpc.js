@@ -36,13 +36,17 @@
 // A fault on a pin is a fault on that chip's connection only: a broken trace to the gate array's VSYNC pin leaves the
 // 8255 seeing VSYNC. So is the 6845 (IC108): faults on HSYNC, VSYNC, DE, the display address lines MA0-MA13, the row
 // lines RA0-RA2 and its clock. On this board MA10, MA11, RA3, RA4 and CURSOR go nowhere that matters.
-// Bus faults: the Z80 (IC111) is a chip object as well. A fault on one of its address, data or control pins (MREQ,
-// IORQ, RD, WR, M1) is a fault on that line of the bus: every chip sees the line at that level. A fault on a chip's
-// own pin for the same line overrides it for that chip (a ROM or RAM address or data pin, the gate array's inputs,
-// the 6845's data and select pins). A fault on the Z80's CLK pin stops the Z80 alone, and faults on its input pins
-// (INT, NMI, WAIT, BUSREQ, RESET) change what the Z80 sees without touching the chip that drives the line.
+// Faults. There are two kinds, and the machine keeps them apart (pinF and netF):
+//   - a pin disconnected from its line (a broken trace, a lifted pin): only that chip is affected. An input pin then
+//     floats high, or can be given a level of its own; an output pin no longer drives its line, which floats high
+//     for the pins that listen to it;
+//   - a line held high or low (a short on the wire): every pin on that line sees the level, on every chip, unless
+//     the pin is itself disconnected from the line.
+// CPC_NETS lists which pins share each line. applyFaults() turns the two lists into each chip's own fault table
+// (chip.f), which is what the chip models and the pin display use. The Z80 (IC111) is a chip object too: a level on
+// one of its address, data or control pins acts on the bus for every device, whether or not it is drawn as a chip.
 // RESET is one line for the whole board: chipReset() resets the Z80, the gate array, the 6845 and the 8255, each
-// unless its own RESET pin is held high or disconnected; a chip whose RESET pin is held low stays in reset.
+// unless its own RESET pin is held high or disconnected; a chip whose RESET pin is low stays in reset.
 // Clocks: the 16 MHz oscillator feeds the gate array (CK16), which makes PHI (4 MHz, to the Z80) and CCLK (1 MHz, to
 // the 6845 and the sound chip). Without CK16 the gate array and everything it times stop. Without PHI, or with READY
 // held low, the Z80 is held (cpu.step returns one idle character of four clocks) while the video goes on. Without
@@ -101,6 +105,30 @@ const CPC_Z80_PINS = [[1, 'A11'], [2, 'A12'], [3, 'A13'], [4, 'A14'], [5, 'A15']
   [16, 'INT'], [17, 'NMI'], [18, 'HALT', 'o'], [19, 'MREQ'], [20, 'IORQ'], [21, 'RD'], [22, 'WR'], [23, 'BUSACK', 'o'], [24, 'WAIT'], [25, 'BUSREQ'], [26, 'RESET'], [27, 'M1'], [28, 'RFSH', 'o'], [29, 'GND', 'g'],
   ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => [30 + n, 'A' + n])].map(([n, name, k]) => [n, name, k || 'i']);
 if (typeof MEM_PINOUTS !== 'undefined') { Object.assign(MEM_PINOUTS, CPC_GA_PINS); MEM_PINOUTS.HD6845 = CPC_CRTC_PINS; MEM_PINOUTS.Z80 = CPC_Z80_PINS; for (const n of ['SYNC', 'RESET', 'CPU', 'MREQ', 'IORQ', 'M1', 'RD', '244EN', 'ROMEN', 'RAMRD', 'CASAD', 'INT', 'MWE']) MEM_ACTIVE_LOW.add(n); }
+// Which pins share a line. d: the pin that drives it (index into pins), or -1 when the driver is not drawn as a chip
+// or several pins drive it in turn (the data bus).
+const CPC_NETS = (() => {
+  const N = {}, ram = n => 'IC' + CPC.RAM_ICS[n], rams = pin => CPC.RAM_ICS.map(ic => ['IC' + ic, pin]);
+  for (let n = 0; n < 16; n++) N['A' + n] = { label: `address line A${n}`, d: 0, pins: [['IC111', 'A' + n], ...(n < 15 ? [['IC103', 'A' + n]] : []), ...(n >= 14 ? [['IC116', 'A' + n]] : []), ...(n === 14 ? [['IC108', 'CS']] : n === 8 ? [['IC108', 'RS']] : n === 9 ? [['IC108', 'R/W']] : [])] };
+  for (let n = 0; n < 8; n++) N['D' + n] = { label: `data line D${n}`, d: -1, pins: [['IC111', 'D' + n], ['IC103', 'O' + n], [ram(n), 'DIN'], ['IC108', 'D' + n]] };
+  for (const k of ['MREQ', 'IORQ', 'M1', 'RD']) N[k] = { label: k + ' line', d: 0, pins: [['IC111', k], ['IC116', k]] };
+  N.RESET = { label: 'RESET line', d: -1, pins: [['IC111', 'RESET'], ['IC116', 'RESET'], ['IC108', 'RESET']] };
+  N.INT = { label: 'INT line', d: 0, pins: [['IC116', 'INT'], ['IC111', 'INT']] };
+  N.READY = { label: 'READY line (the Z80\'s WAIT)', d: 0, pins: [['IC116', 'READY'], ['IC111', 'WAIT']] };
+  N.PHI = { label: '4 MHz clock PHI', d: 0, pins: [['IC116', 'PHI'], ['IC111', 'CLK']] };
+  N.CCLK = { label: '1 MHz clock CCLK', d: 0, pins: [['IC116', 'CCLK'], ['IC108', 'CLK']] };
+  N.HSYNC = { label: 'HSYNC line', d: 0, pins: [['IC108', 'HSYNC'], ['IC116', 'HSYNC']] };
+  N.VSYNC = { label: 'VSYNC line', d: 0, pins: [['IC108', 'VSYNC'], ['IC116', 'VSYNC']] };
+  N.DISPEN = { label: 'DISPEN line', d: 0, pins: [['IC108', 'DE'], ['IC116', 'DISPEN']] };
+  N.ROMEN = { label: 'ROMEN line', d: 0, pins: [['IC116', 'ROMEN'], ['IC103', 'CE']] };
+  N.RAS = { label: 'RAS line', d: 0, pins: [['IC116', 'RAS'], ...rams('RAS')] };
+  N.CAS = { label: 'CAS line', d: 0, pins: [['IC116', 'CAS'], ...rams('CAS')] };
+  N.MWE = { label: 'RAM write enable MWE', d: 0, pins: [['IC116', 'MWE'], ...rams('WE')] };
+  for (let n = 0; n < 8; n++) N['RA' + n] = { label: `RAM address line ${n} (from the address selectors)`, d: -1, pins: rams('A' + n) };
+  for (let n = 0; n < 8; n++) N['RD' + n] = { label: `RAM data out, bit ${n}`, d: 0, pins: [[ram(n), 'DOUT'], ['IC116', 'D' + n]] };
+  return N;
+})();
+const CPC_NET_OF = {}; for (const k in CPC_NETS) for (const [id, pin] of CPC_NETS[k].pins) CPC_NET_OF[id + '.' + pin] = k;
 // The gate array and the 6845 as chips with pin faults, in the same shape as a MemChip so that the fault list and the pin display treat it alike.
 // lv[name] is the level a faulty pin sits at (a disconnected pin floats high, except the colour outputs, which go dark); undefined = no fault.
 class CPCChip {
@@ -128,6 +156,7 @@ class CPCMachine {
     this.vdu = new CPCChip('IC108', 'HD6845', '6845 video controller: display address and sync timing', 'ports BCxxh-BFxxh');
     this.z80 = new CPCChip('IC111', 'Z80', 'processor: a fault on a bus pin here is a fault on that line, for every chip', 'address, data and control lines');
     this.chips = [this.romChip, ...this.ramBank, this.ga, this.vdu, this.z80];
+    this.pinF = {}; this.netF = {};
     this.ga.onChange = this.vdu.onChange = this.z80.onChange = () => this.refault(); this.refault();
     this.banks = [[this.romChip], this.ramBank];
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
@@ -175,6 +204,41 @@ class CPCMachine {
     this.chipReset();
   }
   // ---- memory ----
+  // ---- the two kinds of fault ----
+  netOf(id, pin) { return CPC_NET_OF[id + '.' + pin] || null; }
+  isDriver(id, pin) { const n = CPC_NETS[this.netOf(id, pin)]; if (!n) return false; return n.d >= 0 && n.pins[n.d][0] === id && n.pins[n.d][1] === pin; }
+  // v: 'z' disconnected from its line (floating), 0 or 1 disconnected and at that level, null to reconnect. id 'net' sets a line.
+  setPinFault(id, pin, v) { if (id === 'net') return this.setNetFault(pin, v); const k = id + '.' + pin; if (v === null || v === undefined) delete this.pinF[k]; else this.pinF[k] = v; this.applyFaults(); }
+  // a whole line held at 0 or 1 (null to release it)
+  setNetFault(net, v) { if (v === null || v === undefined) delete this.netF[net]; else this.netF[net] = v; this.applyFaults(); }
+  clearFaults() { this.pinF = {}; this.netF = {}; this.applyFaults(); }
+  clearChip(id) { for (const k of Object.keys(this.pinF)) if (k.startsWith(id + '.')) delete this.pinF[k]; this.applyFaults(); }
+  applyFaults() {
+    const f = {}; for (const c of this.chips) f[c.id] = {};
+    for (const net in this.netF) for (const [id, pin] of CPC_NETS[net].pins) f[id][pin] = this.netF[net];
+    for (const k in this.pinF) {                                                 // an output cut off from its line, or stuck: the pins that listen see the line float, or the level
+      const [id, pin] = k.split('.'), net = CPC_NET_OF[k], N = net && CPC_NETS[net];
+      if (N && !(net in this.netF) && N.d >= 0 && N.pins[N.d][0] === id && N.pins[N.d][1] === pin) for (const [i2, p2] of N.pins) if (i2 !== id || p2 !== pin) f[i2][p2] = this.pinF[k];
+    }
+    for (const k in this.pinF) { const [id, pin] = k.split('.'); f[id][pin] = this.pinF[k]; }
+    for (const c of this.chips) { c.f = f[c.id]; c.recalc(); }
+    for (const b of this.banks) memBankFlag(b);
+    this.faulty = this.chips.some(c => c.faulty);
+  }
+  // the faults as set, for lists: [id, pin, text]; a line has id 'net'
+  faultList() {
+    const out = [];
+    for (const net in this.netF) out.push(['net', net, `${CPC_NETS[net].label} held ${this.netF[net] ? 'high' : 'low'} (${CPC_NETS[net].pins.length} pins)`]);
+    for (const k in this.pinF) { const [id, pin] = k.split('.'), v = this.pinF[k], shared = CPC_NET_OF[k] && CPC_NETS[CPC_NET_OF[k]].pins.length > 1; out.push([id, pin, `${id} pin ${pin} ${shared ? 'disconnected from its line' + (v === 'z' ? '' : v ? ', at high' : ', at low') : v === 'z' ? 'disconnected' : v ? 'stuck high' : 'stuck low'}`]); }
+    return out;
+  }
+  // the same for one chip's caption
+  chipFaults(id) {
+    const out = [];
+    for (const k in this.pinF) if (k.startsWith(id + '.')) { const v = this.pinF[k]; out.push(k.slice(id.length + 1) + (v === 'z' ? ' disconnected' : v ? ' disconnected, high' : ' disconnected, low')); }
+    for (const net in this.netF) for (const [i2, pin] of CPC_NETS[net].pins) if (i2 === id && !((id + '.' + pin) in this.pinF)) out.push(`${pin}: line held ${this.netF[net] ? 'high' : 'low'}`);
+    return out;
+  }
   // Faults changed. Work out the bus lines held at a level (faults on the Z80's pins) and each chip's view of them:
   // gv is the gate array's view (the bus-level faults on the control lines it listens to, then its own pin faults).
   refault() {
@@ -187,8 +251,9 @@ class CPCMachine {
     this.ga.ramDead = 'RAS' in g || 'CAS' in g;
     // what the Z80 sees on WAIT: its own pin, else the gate array's READY output
     this.rdy = z.WAIT !== undefined ? z.WAIT : g.READY;
-    this.heldWhy = 'CLK' in z ? 'no clock at the Z80\'s CLK pin' : z.RESET === 0 ? 'RESET is low at the Z80: it is held in reset' : z.BUSREQ === 0 ? 'BUSREQ is low at the Z80: it has released the bus'
-      : 'CK16' in gv ? 'no clock: the gate array has no 16 MHz' : 'PHI' in gv ? 'no clock: PHI does not reach the Z80' : this.rdy === 0 ? (z.WAIT === 0 ? 'WAIT is low at the Z80: it waits' : 'READY is low: the Z80 waits') : null;
+    this.heldWhy = 'CK16' in gv ? 'no clock: the gate array has no 16 MHz' : 'PHI' in gv ? 'no clock: PHI does not reach the Z80' : 'CLK' in z ? 'no clock at the Z80\'s CLK pin'
+      : z.RESET === 0 ? 'RESET is low at the Z80: it is held in reset' : z.BUSREQ === 0 ? 'BUSREQ is low at the Z80: it has released the bus'
+      : this.rdy === 0 ? (g.READY === 0 ? 'READY is low: the Z80 waits' : 'WAIT is low at the Z80: it waits') : null;
     if (z.NMI === 0 && !this.nmiLow) this.cpu.nmiPending = true;                 // the pin going low is one falling edge
     this.nmiLow = z.NMI === 0;
   }
@@ -320,7 +385,7 @@ class CPCMachine {
   // ---- the 6845, one character (four CPU clocks) at a time ----
   lineT() { return (this.crtc[0] + 1) * 4; }
   frameLines() { return (this.crtc[4] + 1) * (this.crtc[9] + 1) + this.crtc[5]; }
-  setGateArray(part) { if (!CPC_GA_PINS[part]) return; this.ga.f = {}; this.ga.part = part; this.ga.recalc(); this.faulty = this.chips.some(c => c.faulty); }
+  setGateArray(part) { if (!CPC_GA_PINS[part]) return; this.ga.part = part; this.clearChip('IC116'); }
   // the 6845's VSYNC pin, through any fault on it (it also goes to the 8255)
   vsOut() { const f = this.vdu.lv.VSYNC; return f === undefined ? this.vsync : !!f; }
   char() {
@@ -448,4 +513,4 @@ class CPCMachine {
     return out;
   }
 }
-if (typeof module !== 'undefined') module.exports = { CPCMachine, CPCChip, CPC, CPC_GA_PINS, CPC_CRTC_PINS, CPC_Z80_PINS, cpcCrc32 };
+if (typeof module !== 'undefined') module.exports = { CPCMachine, CPCChip, CPC, CPC_NETS, CPC_GA_PINS, CPC_CRTC_PINS, CPC_Z80_PINS, cpcCrc32 };

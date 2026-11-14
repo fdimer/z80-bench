@@ -343,6 +343,10 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .cpfig .pin.forced .nm { fill: var(--warn); }
 .cpfig .pin.forced.fz .ring { stroke-dasharray: 2 3; }
 .cpfig .mcfaults { display: block; margin-top: 2px; }
+.mcpop { min-width: 250px; max-width: 320px; }
+.mcpop label.cut { display: flex; gap: 6px; align-items: center; margin: 2px 0 8px; font-weight: 600; cursor: pointer; }
+.mcpop .cap { color: var(--muted); margin-bottom: 4px; }
+.mcpop .note { color: var(--muted); margin-top: 6px; font-size: 11.5px; line-height: 1.35; }
 </style>
 
 <div class="wrap">
@@ -406,7 +410,9 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <dt>Address bus</dt><dd id="brAddr">–</dd>
           <dt>Data bus</dt><dd id="brData">–</dd>
         </dl>
-        <p class="hint">Clicking CLK pulses one clock. /INT is level-sensitive, /NMI triggers on a falling edge. Holding /WAIT low inserts wait states; /BUSREQ low floats the buses at the end of the current machine cycle; /RESET low holds the CPU in reset. <b>Bus faults:</b> click an address or data pin of the Z80, or MREQ, IORQ, RD, WR or M1, to put a fault on that line of the bus: every chip then sees the line disconnected from the Z80 (floating high), stuck high or stuck low. <b>The Z80's inputs:</b> a click on INT, NMI, WAIT, BUSREQ or RESET holds that line low or releases it; RESET is one line for the whole board, so it also resets the gate array, the 6845 and the 8255. Right-click one of them, or CLK, for a fault on the Z80's own pin (disconnected, stuck high or stuck low), which changes what the Z80 sees without touching the chip that drives the line. <b>Pin faults:</b> on the gate array (IC116), the 6845 (IC108) and the memory chips, a fault belongs to that chip's pin only, like a broken trace to that chip, and it overrides a bus fault on the same line for that chip: with bus A14 stuck high the 6845 is never selected, unless its own CS pin is held low. A stuck bus line still wins over what a chip tries to drive onto it. Every gate array pin can be given a fault except CPU ADDR, CAS ADDR and 244EN, its clocks included: without CK16 (the 16 MHz oscillator) the whole machine stops; without PHI, or with READY held low, the Z80 is held while the picture goes on; without CCLK the 6845 stands still. READY held high removes the wait states: RAM accesses then fall out of step with the gate array, which is modelled approximately (a read returns what the RAM last put out, a write is lost). On the 6845: its data pins, CS, RS, R/W and E, HSYNC, VSYNC, DE, the display address lines MA0–MA13, the row lines RA0–RA2 (MA10 and MA11 are not used on this board) and its clock. All pins follow the machine clock by clock: the 6845's outputs change once a character (four clocks), and R, G and B show the colour at each clock. Faults are listed in the Debug panel.</p>
+        <p class="hint">Click any ringed pin for its fault menu. There are two kinds of fault. <b>A line held high or low</b> is a short on the wire: every pin on that line, on every chip, sees the level and shows it. <b>A pin disconnected from its line</b> (tick the box) is a broken trace or a lifted pin: only that chip is affected. A disconnected input floats high, or can be given a level of its own; a disconnected output no longer drives its line, which then floats high for the pins that listen to it. A disconnected pin ignores a fault on the line. Lines that reach devices not drawn as chips still act on them: an address or data line held at a level is seen by the whole machine.</p>
+        <p class="hint">Clicking the Z80's CLK pulses one clock (right-click it for its fault menu). RESET is one line for the Z80, the gate array, the 6845 and the 8255: held low, they all stay in reset while the clocks run. Without CK16 (the 16 MHz oscillator) the whole machine stops; without PHI, or with READY low, the Z80 is held while the picture goes on; without CCLK the 6845 stands still. With READY high the wait states go: RAM accesses then fall out of step with the gate array, which is modelled approximately (a read returns what the RAM last put out, a write is lost). The gate array's CPU ADDR, CAS ADDR and 244EN, and the Z80's HALT, BUSACK and RFSH, are shown only. All pins follow the machine clock by clock: the 6845's outputs change once a character (four clocks), and R, G and B show the colour at each clock. Faults are listed in the Debug panel.</p>
+
       </section>
       <section class="panel" id="pMemChips">
         <h2>Memory chips <span class="aside" id="mcInfo">live pins · click a pin to disconnect it or hold it high or low</span></h2>
@@ -420,7 +426,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           </figure>
         </div>
         <p class="hint">The machine's memory chips, from the CPC 464 circuit diagram: IC103, the 32K ROM holding the firmware and BASIC, and IC117–IC124, eight 4164 dynamic RAMs, one per data bit (IC124 is D7, IC120 is D0). Each RAM address pin is fed by a 74LS153 selector with a row bit and then a column bit of the CPU address: A0 carries A2 then A9, A1 carries A1 then A0, A2 A4/A11, A3 A3/A10, A4 A6/A13, A5 A5/A12, A6 A8/A15 and A7 A7/A14. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the CPU's bus cycles on every clock, wait states included; the display's own reads of the RAM, which share every microsecond with the CPU, are not shown on the pins. The gate array and the 6845 are shown beside the processor.</p>
-        <p class="hint">To simulate a fault, click a pin: Disconnected lifts the pin from the board (an input then floats high, an output no longer reaches the bus), Stuck high and Stuck low hold it at that level. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. Faults are listed in the Debug panel and cleared there, here, or by Master reset. The memory view and the disassembly show what the CPU reads through the faults.</p>
+        <p class="hint">To simulate a fault, click a pin for its menu. Hold the whole line high or low and every pin on that line is affected, on every chip: the eight RAM chips share their address, RAS, CAS and write-enable lines, and each RAM chip's data output is one line with a data pin of the gate array. Or tick "Disconnected from the line" for a fault on this chip's pin alone. A chip with a fault is marked in red, and every fault is listed in the Debug panel, where it can be removed.</p>
       </section>
   </div>
 
@@ -682,14 +688,14 @@ function buildChip() {
 }
 function pinClick(name) {
   if (name === 'CLK') { pulseClock(); return; }
-  if (name in cpc.z80.f) { setStatus(`The Z80's ${name} pin has a fault of its own, so it does not follow the line. Right-click the pin to remove the fault.`, true); return; }
+  return;   // the other inputs open the fault menu (cpZ80Faults)
   const k = name.toLowerCase();
   const was = pins[k];
   pins[k] = was ? 0 : 1; pinSync();
   if (k === 'nmi' && was === 1) cpu.nmiPending = true;
   if (k === 'int') cpu.intLine = pins.int === 0;
   if (k === 'reset' && pins.reset === 1) setStatus('Reset released: the CPU starts at 0000h on the next clock');
-  else if (k === 'reset') { cpc.chipReset(); disDirty = true; setStatus('RESET line low: the Z80, the gate array, the 6845 and the 8255 are held in reset', true); }
+  else if (k === 'reset') { setStatus('/RESET is low: the CPU resets on the next clock', true); }
   else describeInputs();
   render();
 }
@@ -1650,7 +1656,7 @@ $('dbgType').onchange = dbgFields; $('dbgMemCond').onchange = dbgFields;
 $('dbgAdd').onclick = dbgAdd;
 for (const id of ['dbgAddr', 'dbgMemVal', 'dbgBusVal']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); dbgAdd(); } });
 $('dbgList').addEventListener('click', e => { const b = e.target.closest('button[data-key]'); if (!b) return; b.classList.contains('x') ? dbgRemove(b.dataset.key) : dbgGo(b.dataset.key); });
-$('dbgClear').onclick = () => { if (mcReady) { memClearFaults(MC.m); disDirty = true; } breakpoints.clear(); afterBps.clear(); watches.clear(); memWatches.clear(); pinWatches.clear(); busWatches.clear(); hitReg = null; dbgHit = null; render(); };
+$('dbgClear').onclick = () => { if (mcReady) { cpc.clearFaults(); disDirty = true; } breakpoints.clear(); afterBps.clear(); watches.clear(); memWatches.clear(); pinWatches.clear(); busWatches.clear(); hitReg = null; dbgHit = null; render(); };
 // ---------- master reset: memory, ROMs, every debug point and the input pins ----------
 function masterReset() {
   if (running) stopRun();
@@ -1736,39 +1742,40 @@ function cpSideDraw(S) {
     const title = svg('title', {}, g); title.textContent = kind === 'i' ? `${c.id} pin ${n}, ${name}: click to disconnect it or hold it high or low` : `${c.id} pin ${n}, ${name}`;
     if (kind === 'i') {
       g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
-      g.addEventListener('click', ev => mcMenu(name, ev, S.ci, S.fig));
+      g.addEventListener('click', ev => { ev.stopPropagation(); mcMenu(name, ev, S.ci, S.fig); });
       g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const r = g.getBoundingClientRect(); mcMenu(name, { clientX: r.left, clientY: r.top }, S.ci, S.fig); } });
     }
     S.els[name] = { g, sv, prev: null };
   }
 }
-// the Z80's bus pins: a click puts a fault on that line of the bus; a right-click on CLK, on the Z80's clock alone
+// the Z80's pins open the same fault menu as every other chip's (CLK: on a right-click, since a click pulses one clock)
 const CP_BUS_PINS = [...Array(16).keys()].map(n => 'A' + n).concat([...Array(8).keys()].map(n => 'D' + n), ['MREQ', 'IORQ', 'RD', 'WR', 'M1']);
-const CP_Z80_INPUTS = ['CLK', 'INT', 'NMI', 'WAIT', 'BUSREQ', 'RESET'];
+const CP_Z80_INPUTS = ['INT', 'NMI', 'WAIT', 'BUSREQ', 'RESET'];
 let cpZ80Done = false;
 function cpZ80Faults() {
   cpZ80Done = true; const fig = $('cpFigZ80'), ci = cpc.chips.indexOf(cpc.z80);
-  for (const name of CP_BUS_PINS) {
-    const g = pinEls[name].g, stub = g.querySelector('.stub'), x = +stub.getAttribute('x'), y = +stub.getAttribute('y') + 6, left = x < 128;
-    const hit = svg('rect', { x: left ? x - 70 : x - 4, y: y - 11, width: 104, height: 22, fill: 'transparent' }), ring = svg('rect', { class: 'ring', x: x - 3, y: y - 9, width: 32, height: 18, rx: 3 });
-    g.insertBefore(ring, g.firstChild); g.insertBefore(hit, g.firstChild);
-    g.classList.add('input'); g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
-    g.querySelector('title').textContent = `Bus line ${name}: click to put a fault on the line (every chip sees it)`;
-    g.addEventListener('click', ev => mcMenu(name, ev, ci, fig));
+  for (const name of CP_BUS_PINS.concat(CP_Z80_INPUTS)) {
+    const g = pinEls[name].g;
+    if (!g.querySelector('.ring')) {
+      const stub = g.querySelector('.stub'), x = +stub.getAttribute('x'), y = +stub.getAttribute('y') + 6, left = x < 128;
+      const hit = svg('rect', { x: left ? x - 70 : x - 4, y: y - 11, width: 104, height: 22, fill: 'transparent' }), ring = svg('rect', { class: 'ring', x: x - 3, y: y - 9, width: 32, height: 18, rx: 3 });
+      g.insertBefore(ring, g.firstChild); g.insertBefore(hit, g.firstChild);
+      g.classList.add('input'); g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
+    }
+    g.querySelector('title').textContent = `IC111 pin ${name}: click for its fault menu`;
+    g.addEventListener('click', ev => { ev.stopPropagation(); mcMenu(name, ev, ci, fig); });
     g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const r = g.getBoundingClientRect(); mcMenu(name, { clientX: r.left, clientY: r.top }, ci, fig); } });
   }
-  for (const name of CP_Z80_INPUTS) {
-    const g = pinEls[name].g; g.querySelector('title').textContent += ` Right-click for a fault on the Z80's own ${name} pin.`;
-    g.addEventListener('contextmenu', ev => { ev.preventDefault(); mcMenu(name, ev, ci, fig); });
-  }
+  const clkPin = pinEls.CLK.g; clkPin.querySelector('title').textContent += ' Right-click for its fault menu.';
+  clkPin.addEventListener('contextmenu', ev => { ev.preventDefault(); mcMenu('CLK', ev, ci, fig); });
 }
 function cpSideRender() {
   const B = MC.bus();
   if (!cpZ80Done && pinEls.A0) cpZ80Faults();
   if (cpZ80Done) {
-    const zf = cpc.z80.f; for (const name of CP_BUS_PINS.concat(CP_Z80_INPUTS)) { const g = pinEls[name].g, f = name in zf; g.classList.toggle('forced', f); g.classList.toggle('fz', f && zf[name] === 'z'); if (f && name !== 'CLK' && pins[name.toLowerCase()] === 0) pins[name.toLowerCase()] = 1; }   // a pin with its own fault lets go of the line
-    const fl = Object.entries(zf), sig = fl.join();
-    if (cpSideRender.z !== sig) { cpSideRender.z = sig; $('cpCapZ80').innerHTML = '<b>IC111 · Z80A</b><br>processor, 4 MHz' + (fl.length ? `<br><span class="mcfaults mono">${fl.map(([k, v]) => `${CP_Z80_INPUTS.includes(k) ? esc(k) + ' pin' : 'bus ' + esc(k)} ${mcFaultText(v)}`).join(' · ')}</span>` : ''); }
+    const zf = cpc.z80.f; for (const name of CP_BUS_PINS.concat(CP_Z80_INPUTS, ['CLK'])) { const g = pinEls[name].g, f = name in zf; g.classList.toggle('forced', f); g.classList.toggle('fz', f && zf[name] === 'z'); }
+    const fl = cpc.chipFaults('IC111'), sig = fl.join();
+    if (cpSideRender.z !== sig) { cpSideRender.z = sig; $('cpCapZ80').innerHTML = '<b>IC111 · Z80A</b><br>processor, 4 MHz' + (fl.length ? `<br><span class="mcfaults mono">${esc(fl.join(' · '))}</span>` : ''); }
   }
   for (const S of cpSide) {
     const c = cpc.chips[S.ci]; if (S.drawn !== c.part) cpSideDraw(S);
@@ -1779,8 +1786,8 @@ function cpSideRender() {
       el.g.classList.toggle('forced', f); el.g.classList.toggle('fz', f && c.f[name] === 'z');
       el.sv.textContent = v === 'z' ? 'Z' : v === 'p' ? '+' : v === 'g' ? '⏚' : v; el.prev = v;
     }
-    const fl = Object.entries(c.f), sig = c.part + fl.join();
-    if (S.capSig !== sig) { S.capSig = sig; S.cap.innerHTML = `<b>${esc(c.id)} · ${esc(c.part)}</b><br>${esc(c.what)}` + (fl.length ? `<br><span class="mcfaults mono">${fl.map(([k, v]) => `${esc(k)} ${mcFaultText(v)}`).join(' · ')}</span>` : ''); }
+    const fl = cpc.chipFaults(c.id), sig = c.part + fl.join();
+    if (S.capSig !== sig) { S.capSig = sig; S.cap.innerHTML = `<b>${esc(c.id)} · ${esc(c.part)}</b><br>${esc(c.what)}` + (fl.length ? `<br><span class="mcfaults mono">${esc(fl.join(' · '))}</span>` : ''); }
   }
 }
 function renderCp() { drawCp(); renderCpState(); if (mcReady) cpSideRender(); }
@@ -2038,7 +2045,7 @@ const MC = {
     if (i === 9) {                      // the gate array
       const T = B.T, V = cpc.videoAt(T.at), act = (B.rd || B.wr) && T.t !== 'T1', gaw = T.iorq === 0 && T.m1 !== 0 && T.wr === 0 && A !== null && !(A & 0x8000) && !!(A & 0x4000);
       const dead = cpc.gaDead();
-      if ((d = /^D(\d)$/.exec(name))) return gaw ? D(+d[1]) : B.rd && T.t !== 'T1' ? (cpc.ram[A] >> +d[1]) & 1 : 'z';
+      if ((d = /^D(\d)$/.exec(name))) return gaw ? D(+d[1]) : B.rd && T.t !== 'T1' ? (cpc.ramRead(A, true) >> +d[1]) & 1 : 'z';
       switch (name) {
         case 'A15': return A === null ? 'z' : A >> 15 & 1; case 'A14': return A === null ? 'z' : A >> 14 & 1;
         case 'MREQ': return T.mreq; case 'IORQ': return T.iorq; case 'M1': return T.m1; case 'RD': return T.rd;
@@ -2074,7 +2081,7 @@ const MC = {
       case 'CAS': return act && B.T.t !== 'T1' ? 0 : 1;
       case 'WE': return B.wr ? 0 : 1;
       case 'DIN': return D(c.bit);
-      case 'DOUT': return B.rd && B.T.t !== 'T1' ? (cpc.ram[A] >> c.bit) & 1 : 'z';     // also during a ROM read: RAMRD only gates the latch IC114
+      case 'DOUT': return B.rd && B.T.t !== 'T1' ? (cpc.ramRead(A, true) >> c.bit) & 1 : 'z';     // also during a ROM read: RAMRD only gates the latch IC114
     }
     return 'z';
   }
@@ -2083,12 +2090,12 @@ const MC = {
 // The page supplies MC: { m (the machine: chips, acc, faulty), groups(), tile(c, i), acc(i), bus(), net(c, i, name, B) }.
 let mcSel = 0, mcEls = {}, mcDrawn = '', mcPrevAcc = null, mcSeen = null, mcTileSig = '', mcPop = null;
 const mcFaultText = v => v === 'z' ? 'disconnected' : v ? 'stuck high' : 'stuck low';
-function mcSetFault(id, pin, v) { memSetFault(MC.m, id, pin, v); disDirty = true; }
+function mcSetFault(id, pin, v) { cpc.setPinFault(id, pin, v); disDirty = true; }
 function mcClosePop() { if (mcPop) { mcPop.remove(); mcPop = null; } }
-document.addEventListener('click', e => { if (mcPop && !mcPop.contains(e.target) && !e.target.closest('.pin.input')) mcClosePop(); });
+document.addEventListener('click', e => { if (mcPop && !mcPop.contains(e.target) && !e.target.closest('.pin.input') && !e.target.closest('.mcpop')) mcClosePop(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') mcClosePop(); });
 // debug-pane entries for the faults
-function mcDebugItems() { return memFaultList(MC.m).map(([id, pin, v]) => ['mfault:' + id + ':' + pin, 'chip fault', `${id} (${MC.m.chipById[id].part}) pin ${pin} ${mcFaultText(v)}`]); }
+function mcDebugItems() { return cpc.faultList().map(([id, pin, text]) => ['mfault:' + id + ':' + pin, id === 'net' ? 'line fault' : 'pin fault', text]); }
 function mcDebugRemove(t, v) { if (t !== 'mfault') return false; const i = v.lastIndexOf(':'); mcSetFault(v.slice(0, i), v.slice(i + 1), null); return true; }
 // a DIP of any size, drawn the same way as the CPU
 function mcDraw() {
@@ -2119,17 +2126,43 @@ function mcDraw() {
   }
   $('mcCap').innerHTML = `<b>${esc(c.id)} · ${esc(c.part)}</b><br>${esc(c.what)}<br>${esc(c.range)}`;
 }
+// The fault menu of a pin. A pin on a shared line gets a tick box, "disconnected from the line (this pin only)":
+// without the tick the level buttons hold the whole line (every pin on it, on every chip); with it they set what
+// this pin alone sees. A pin with a line of its own keeps the plain choices.
 function mcMenu(name, ev, ci, host) {
   mcClosePop();
-  const c = MC.m.chips[ci === undefined ? mcSel : ci], f = name in c.f ? c.f[name] : null, fig = host || $('mcFig'), r = fig.getBoundingClientRect();
-  const el = document.createElement('div'); el.className = 'mcpop';
-  el.innerHTML = `<div class="ttl">${esc(c.id)} · ${esc(name)}</div><div class="sub">${f === null ? 'normal: connected to the board' : mcFaultText(f)}</div><div class="btns">` +
-    `<button type="button" data-a="z"${f === 'z' ? ' disabled' : ''}>Disconnected</button><button type="button" data-a="1"${f === 1 ? ' disabled' : ''}>Stuck high</button><button type="button" data-a="0"${f === 0 ? ' disabled' : ''}>Stuck low</button>` +
-    (f !== null ? '<button type="button" class="primary" data-a="r">Normal</button>' : '') + '</div>';
-  fig.appendChild(el); mcPop = el;
+  const c = MC.m.chips[ci === undefined ? mcSel : ci], fig = host || $('mcFig'), r = fig.getBoundingClientRect(), key = c.id + '.' + name;
+  const net = cpc.netOf(c.id, name), N = net && CPC_NETS[net], shared = !!N && N.pins.length > 1, out = cpc.isDriver(c.id, name);
+  const el = document.createElement('div'); el.className = 'mcpop'; fig.appendChild(el); mcPop = el;
+  const lv = v => v ? 'high' : 'low', btn = (a, label, on) => `<button type="button" data-a="${a}"${on ? ' class="primary" aria-pressed="true"' : ''}>${label}</button>`;
+  const draw = () => {
+    const own = key in cpc.pinF ? cpc.pinF[key] : null, line = shared && net in cpc.netF ? cpc.netF[net] : null, cut = own !== null;
+    let h = `<div class="ttl">${esc(c.id)} · ${esc(name)}</div>`;
+    if (shared) {
+      const others = N.pins.filter(([i2, p2]) => i2 !== c.id || p2 !== name).map(([i2, p2]) => i2 + ' ' + p2), ids = [...new Set(others.map(o => o.split(' ')[0]))];
+      h += `<div class="sub">${esc(N.label)}: shared with ${others.length > 4 ? ids.length + ' chips (' + esc(ids[0]) + '…' + esc(ids[ids.length - 1]) + ')' : esc(others.join(', '))}</div>`;
+      h += `<label class="cut"><input type="checkbox" data-a="cut"${cut ? ' checked' : ''}> Disconnected from the line (this pin only)</label>`;
+      if (!cut) h += `<div class="cap">Hold the whole line:</div><div class="btns">${btn('n', 'Normal', line === null)}${btn('1', 'High', line === 1)}${btn('0', 'Low', line === 0)}</div><div class="note">${line === null ? 'No fault on the line.' : `Every pin on this line sees it ${lv(line)}.`}</div>`;
+      else if (out) h += `<div class="note">This pin no longer drives the line, which floats high for the other pins${line !== null ? ' (but the line is held ' + lv(line) + ')' : ''}.</div>`;
+      else h += `<div class="cap">This pin then sees:</div><div class="btns">${btn('z', 'Floating', own === 'z')}${btn('1', 'High', own === 1)}${btn('0', 'Low', own === 0)}</div><div class="note">Only ${esc(c.id)} is affected${line !== null ? '; the rest of the line is held ' + lv(line) : ''}. A floating input reads high.</div>`;
+    } else {
+      h += `<div class="sub">a line of its own on this board</div><div class="btns">${btn('n', 'Normal', own === null)}${btn('z', 'Disconnected', own === 'z')}${btn('1', 'High', own === 1)}${btn('0', 'Low', own === 0)}</div>`;
+    }
+    el.innerHTML = h;
+  };
+  const act = a => {
+    const cut = key in cpc.pinF;
+    if (a === 'cut') { cpc.setPinFault(c.id, name, cut ? null : 'z'); }
+    else if (!shared || cut) cpc.setPinFault(c.id, name, a === 'n' ? null : a === 'z' ? 'z' : +a);
+    else cpc.setNetFault(net, a === 'n' ? null : +a);
+    disDirty = true; draw(); render();
+  };
+  draw();
   el.style.left = Math.max(4, Math.min(ev.clientX - r.left, r.width - el.offsetWidth - 4)) + 'px'; el.style.top = (ev.clientY - r.top + 10) + 'px';
-  el.addEventListener('click', e2 => { e2.stopPropagation(); const a = e2.target.dataset.a; if (!a) return; mcSetFault(c.id, name, a === 'r' ? null : a === 'z' ? 'z' : +a); mcClosePop(); render(); });
-  const b0 = el.querySelector('button:not([disabled])'); if (b0) b0.focus();
+  el.addEventListener('click', e2 => { e2.stopPropagation(); const b = e2.target.closest('button'); if (b && b.dataset.a) act(b.dataset.a); });
+  el.addEventListener('change', e2 => { if (e2.target.dataset.a === 'cut') act('cut'); });
+  el.addEventListener('keydown', e2 => { if (e2.key === 'Escape') mcClosePop(); });
+  const b0 = el.querySelector('input, button'); if (b0) b0.focus();
 }
 function mcTiles() {
   const ch = MC.m.chips, groups = MC.groups();
@@ -2140,8 +2173,8 @@ function mcTiles() {
   $('mcTiles').innerHTML = groups.map(([title, idx]) => `<div><h3>${esc(title)}</h3><div class="grp">${idx.map(tile).join('')}</div></div>`).join('');
 }
 $('mcTiles').addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (!b) return; mcSel = +b.dataset.i; mcClosePop(); mcDraw(); render(); });
-$('mcClear').onclick = () => { const c = MC.m.chips[mcSel]; for (const k of Object.keys(c.f)) mcSetFault(c.id, k, null); render(); };
-$('mcClearAll').onclick = () => { memClearFaults(MC.m); disDirty = true; render(); };
+$('mcClear').onclick = () => { cpc.clearChip(MC.m.chips[mcSel].id); disDirty = true; render(); };
+$('mcClearAll').onclick = () => { cpc.clearFaults(); disDirty = true; render(); };
 function renderMemChips() {
   const ch = MC.m.chips; if (mcSel >= ch.length) mcSel = 0;
   if (mcDrawn !== ch[mcSel].id + '/' + ch[mcSel].part) mcDraw();
@@ -2161,8 +2194,8 @@ function renderMemChips() {
     el.g.classList.toggle('forced', f); el.g.classList.toggle('fz', f && c.f[name] === 'z');
     el.sv.textContent = v === 'z' ? 'Z' : v === 'p' ? '+' : v === 'g' ? '⏚' : v; el.prev = v;
   }
-  const fl = Object.entries(c.f), total = memFaultList(MC.m).length;
-  $('mcFaults').textContent = fl.length ? fl.map(([k, v]) => `${k} ${mcFaultText(v)}`).join(' · ') : '';
+  const fl = cpc.chipFaults(c.id), total = cpc.faultList().length;
+  $('mcFaults').textContent = fl.join(' · ');
   $('mcClear').disabled = !fl.length; $('mcClearAll').disabled = !total;
   $('mcInfo').textContent = total ? `${total} pin fault${total === 1 ? '' : 's'} set` : 'live pins · click a pin to disconnect it or hold it high or low';
 }
