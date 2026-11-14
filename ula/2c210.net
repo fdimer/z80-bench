@@ -90,7 +90,7 @@ usac    pin_oc   nD6            n_18V         @18Y
 tapa    nor2     n_18R          TAPE EN       @18R
 tapb    nor2     n_19V          n_18R FORCE   @19V
 tapc    pin_oc   nD7            n_19V         @19Y
-en      inv      EN             n_20AA        @20U   R/2; input from the port decode (taken as INFE, to be confirmed)
+en      inv      EN             INFE          @20U   ok210; R/2; INFE comes up column L from the fsr gate's input (row 37.8) to row 20.4
 
 # ---- dot shift register Q1-Q8 (rows 3-10, columns T-AL) ----
 # Inverters A-H take D0-D7. Each stage's reset is NOR(~Dn, S/L, D6L): with S/L and D6L low, a 1 in the ROM byte
@@ -131,8 +131,8 @@ NQ13    dlatch   NQ13           D2 ~LCLK      @14AA
 NQ14    dlatch   NQ14           D3 ~LCLK      @14AD
 NQ15    dlatch   NQ15           D4 ~LCLK      @14AG?
 NQ16    dlatch   NQ16           D5 ~LCLK      @14AJ?
-Q17     dlatch   Q17            D6 ~LCLK      @14AL  ok210; true output; D from the row 13.9 line from the left (taken as D6)
-d6l     inv      D6L            Q17           @12AN  ok210; R/3; its output also runs up column AN to the shift register's D6L line
+Q17     dlatch   Q17            CHAR ~LCLK    @14AL  ok210; true output; D: the row 13.8 line, down column R to the CHAR line at row 19.4 (so Q17 holds 'this fetch was a character', not D6 itself)
+d6l     inv      D6L            Q17           @12AN  ok210; R/3; low after a character fetch; its output also runs up column AN to the shift register's D6L line
 NQ18    dlatch   NQ18           D7 ~LCLK      @14AN  ok210; D from the row 11.4 line (D7)
 # video (rows 12-15, columns AL-AT), 2C210 as drawn: Q32 holds the inverse-video bit; four NORs make VID = XNOR(Q8, Q32)
 q32d    nor2     n_q32d         D6L NQ18      @13AM  ok210
@@ -191,9 +191,9 @@ sck     inv      SCLK           DA0           @16N   ok210; R/3; output up colum
 dA1     nor2     DA1            DA0 DA0       @17P  ok210
 dA2     nor2     DA2            DA1 DA1       @17S  ok210
 dA3     nor2     DA3            DA2 DA2       @17U  ok210
-lckn    nor4     LCLKn          DA1 DA3 R18O Q19   @18V   ok210; R/3; DA1 via row 16.3; R18O: the row 18.3 line from column O, which comes up from below (to be traced)
-i19     inv      n_i19          R19           @19T   ok210; R19: column R from above joined to the row 19.1 line from column O, which comes up from below (to be traced)
-lk2     nor3     LK2            LCLKn R18O n_i19   @18AE  ok210; R/3, 2C210 only; output down to row 19.8 and left (destination to be traced)
+lckn    nor4     LCLKn          DA1 DA3 N.M1 Q19   @18V   ok210; R/3; DA1 via row 16.3; N.M1 via column O and row 18.3
+i19     inv      n_i19          CHAR          @19T   ok210; CHAR comes up column O to row 19.4
+lk2     nor3     FORCE          LCLKn N.M1 n_i19   @18AE  ok210; R/3, 2C210 only; LK2 on the drawing: high when LCLKn is low in an M1 character fetch; down to row 19.8, left, and up column I as FORCE
 dB1     nor2     DB1            Q19n Q19n     @21U  ok210
 dB2     nor2     DB2            DB1 DB1       @21X  ok210
 dB3     nor2     DB3            DB2 DB2       @21AA  ok210
@@ -202,7 +202,7 @@ dB5     nor2     DB5            DB4 DB4       @21AE  ok210
 dC1     nor2     DC1            N.MREQ N.MREQ @24V  ok210
 dC2     nor2     DC2            DC1 DC1       @24AC  ok210
 dC3     nor2     DC3            DC2 DC2       @24AE  ok210
-d21     nor3     n_22AJ         X21 DB5 DC3   @22AD  ok210; R/2; X21: the row 21.6 line from the left, via column AB
+d21     nor3     n_22AJ         Q19n DB5 DC3  @22AD  ok210; R/2; Q19n along row 21.7 from Q19 and down column AB
 d21b    inv      S/L            n_22AJ        @22AE  ok210; R/3; this is S/L: right along row 22.3, up column AJ to the shift register (and Q32's clock); also down into aen1
 aen1    nor2     AENa           S/L M1     @24AI  ok210; M1 via row 28.6 and column AD; AENa also runs left along row 25.9 to Q20's D input
 aen2    inv      n_aen2         AENa          @24AM  ok210
@@ -225,7 +225,7 @@ pa6     pin_ts   A6'            n_oa6 ~AEN    @15BH  PN39
 pa7     pin_ts   A7'            n_oa7 ~AEN    @16BH  PN1
 pa8     pin_ts   A8'            n_oa8 ~AEN    @17BH  PN2
 # row counter Q29, Q30, NQ31 (rows 19-23, columns BB-BD): ripple toggles, reset together by RRES (column BA)
-Q29     tff      Q29 Q29n       ~RCLK FRAME-SYNC   @19BB  ok210; reset: FRAME-SYNC, via row 28.3 and column BA; RCLK comes down column BA from above (to be traced)
+Q29     tff      Q29 Q29n       ~SYNCn FRAME-SYNC  @19BB  ok210; reset: FRAME-SYNC, via column BA; clock: SYNCn (fs1's output), down column BB, so the row counter steps as each sync pulse starts
 Q30     tff      Q30 Q30n       ~Q29 FRAME-SYNC     @21BB
 NQ31    tff      - NQ31         ~Q30 FRAME-SYNC     @23BB  only the inverted output is drawn
 oa0     inv      n_oa0          Q29n          @20BE
@@ -241,7 +241,7 @@ ba1     buf_ef   A1in           A1'           @26BF
 # ---- character fetch decode (row 26, column J), 2C210 as drawn ----
 a15i    inv      A15n           A15           @26H   ok210
 hlti    inv      HALTn          N.HALT        @27H   ok210
-chr     nor4     CHAR           N.M1 N.MREQ A15n HALTn   @26J   ok210; R/2; high during an opcode fetch from A15 high while not halted (top input taken as N.M1, via the column K/L verticals; to be confirmed)
+chr     nor4     CHAR           D6 N.MREQ A15n HALTn   @26J   ok210; R/2; high for a memory read from A15 high with D6 low while not halted; top input is D6, via column M and the row 13.0 line
 # ---- memory request logic (rows 23-30, columns Q-X), traced on the 2C210 ----
 # N.MREQ runs down column R/S: into chain C (row 24), the two select NORs and Q20's clock. N.M1 turns down column R to
 # the inverter at row 26.5, whose output M1 resets Q20 and runs right along row 28.6, up column AD to row 24.4 (aen1).
