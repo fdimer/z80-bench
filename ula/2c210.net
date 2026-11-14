@@ -131,12 +131,12 @@ NQ13    dlatch   NQ13           D2 ~LCLK      @14AA
 NQ14    dlatch   NQ14           D3 ~LCLK      @14AD
 NQ15    dlatch   NQ15           D4 ~LCLK      @14AG?
 NQ16    dlatch   NQ16           D5 ~LCLK      @14AJ?
-Q17     dlatch   Q17            D6 ~LCLK      @14AL  ok210; true output; D from the row 13.9 line from the left (taken as D6, to be confirmed)
+Q17     dlatch   Q17            D6 ~LCLK      @14AL  ok210; true output; D from the row 13.9 line from the left (taken as D6)
 d6l     inv      D6L            Q17           @12AN  ok210; R/3; its output also runs up column AN to the shift register's D6L line
 NQ18    dlatch   NQ18           D7 ~LCLK      @14AN  ok210; D from the row 11.4 line (D7)
 # video (rows 12-15, columns AL-AT), 2C210 as drawn: Q32 holds the inverse-video bit; four NORs make VID = XNOR(Q8, Q32)
 q32d    nor2     n_q32d         D6L NQ18      @13AM  ok210
-Q32     dff      Q32            n_q32d ~QCK VCC   @13AP  ok210; QCK: the column AN vertical, row 14 (to be traced); no reset drawn
+Q32     dff      Q32            n_q32d ~S/L VCC   @13AP  ok210; clocked by S/L (column AJ): it takes the inverse bit when the byte is loaded; no reset drawn
 vx      nor2     VX             Q8 Q32        @13AR  ok210; SV = Q8 (Q8's output runs right to column AM and down)
 vy      nor2     VY             Q8 VX         @12AU  ok210
 vz      nor2     VZ             VX Q32        @14AU  ok210
