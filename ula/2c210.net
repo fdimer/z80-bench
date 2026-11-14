@@ -202,8 +202,8 @@ dC1     nor2     DC1            N.MREQ N.MREQ @24V  ok210
 dC2     nor2     DC2            DC1 DC1       @24AC  ok210
 dC3     nor2     DC3            DC2 DC2       @24AE  ok210
 d21     nor3     n_22AJ         X21 DB5 DC3   @22AD  ok210; R/2; X21: the row 21.6 line from the left, via column AB
-d21b    inv      n_22AM         n_22AJ        @22AE  ok210; R/3; output up column AG (to be traced) and down into aen1
-aen1    nor2     AENa           n_22AM M1     @24AI  ok210; M1 via row 28.6 and column AD; AENa also runs left along row 25.9 to Q20's D input
+d21b    inv      S/L            n_22AJ        @22AE  ok210; R/3; this is S/L: right along row 22.3, up column AJ to the shift register (and Q32's clock); also down into aen1
+aen1    nor2     AENa           S/L M1     @24AI  ok210; M1 via row 28.6 and column AD; AENa also runs left along row 25.9 to Q20's D input
 aen2    inv      n_aen2         AENa          @24AM  ok210
 aen3    inv      AENin          n_aen2        @24AO  ok210; R/2; up column AU to the address enable (row 18)
 
@@ -264,7 +264,7 @@ bl1     inv      n_bl1          Q25           @1AU   ok210
 bl2     inv      n_bl2          n_bl1         @1AW   ok210
 bl3     inv      Q25nd          n_bl2         @1BA   ok210; Q25 inverted and delayed by three gates
 blank   nor4     BLANK          Q25nd Q26 Q27 Q28   @1BD   ok210; LINE-SYNC with its start delayed by the three inverters
-vb      nor2     n_vb           BLANK VID     @10BA  ok210; VID: the video from the row 13 logic (to be traced)
+vb      nor2     n_vb           BLANK VID     @10BA  ok210; VID from vid (row 13.2, right and up)
 vbi     inv      N.VIDEO        n_vb          @10BC  ok210; R/2. The 2C210 blanks the picture during line sync
 # ---- differences from the 2C184 seen so far (to be transcribed in full) ----
 # 1. Rows 1-2, columns AT-BA: a new chain of three inverters fed from Q25 (vertical at column AU) into a NOR at
