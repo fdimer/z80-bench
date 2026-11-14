@@ -8,9 +8,11 @@ Sources: Ferranti logic diagrams from the Ferranti archive catalogued in 2026 by
 | ZX81-FER-SCH-102 | LD6679/ULA2C210/1, "ULA-2C210 Logic", issue 1 | 2C210 | 12 January 1982 | The chip in the ZX81s modelled here; the main target |
 | ZX81-FER-SCH-011 | LD6532/ULA2C184/1, "ULA-2C184 Logic", issue 1 | 2C184 | 7 April 1981 | The earlier chip, kept for comparison |
 
-Both are one sheet on the same grid (rows 1-38, columns A-BJ) with the same layout, so a reading on one can be checked on
-the other. The archive also holds the 2C158 logic and block diagrams (ZX81-FER-SCH-103 and -105, September 1980), not used
-yet. The drawings themselves are not in this repository: only the netlists transcribed from them, with grid references.
+| ZX81-FER-SCH-103 | ULA 2C158/2, "ULA 2C158" blocks, issue 4 | 2C158 | 24 September 1980 | The circuit of every cell the logic diagrams draw as a symbol: latch, T and D flip-flops, each kind of pin, the oscillator, the tape input and the three-level TV/TAPE output. Marked by hand "2C210 peripherals" |
+
+The two logic diagrams are one sheet each on the same grid (rows 1-38, columns A-BJ) with the same layout, so a reading
+on one can be checked on the other. The archive also holds the 2C158 logic diagram (ZX81-FER-SCH-105, September 1980),
+not used yet. The drawings themselves are not in this repository: only the netlists transcribed from them, with grid references.
 
 The other sources (Sinclair's ZX81 circuit diagram SRC 049 for the pinout and board, and the behaviour model in
 `src/zx80.js`) are described in the main README.
@@ -70,12 +72,17 @@ other nets are named after the grid square of the gate that drives them, so `n_2
 
 ## Status
 
-`2c210.net` is complete: every entry is checked against the drawing (`ok210`). Two things are not on the drawing and were
-settled by what makes the chip work:
-- the output stages of RAM N.CS and ROM N.CS (an RTL circuit on a separate "cct diagram") invert (`pin_tpn`);
-- the clock output does not, so the Z80's CLK (through TR2) is in phase with Q19. With the other phase the character
-  latch closes in a race with MREQ at the T3 rise; with this one its last window is after CLK falls in T2, and FORCE
-  holds the NOP across the T3 rise.
+`2c210.net` is complete: every entry is checked against the drawing (`ok210`). Two polarities are not on the logic
+diagram, which says "see cct diagram". They were first settled by what makes the chip work, and the cell circuits
+(ULA 2C158/2) then confirmed both:
+- the ROM CS and RAM CS cells: an input transistor, then a stage that inverts (`inv_rtl` then `pin_tpn`), so the cell
+  as a whole does not invert, and the RAM cell holds the ROM cell off;
+- the clock output cell does not invert, so the Z80's CLK (through TR2) is in phase with Q19. The character latch's
+  last window is then after CLK falls in T2, and FORCE holds the NOP across the T3 rise.
+
+The same sheet confirms the conventions used for the symbols: the data latch is open while its clock is low; the T
+and D flip-flops act on the falling edge of their clock pin and have an active-high reset; and on TV/TAPE, sync wins,
+then N.VIDEO high is black.
 
 Readings corrected while closing the trace: the character fetch decodes D6 (not M1); Q17 latches CHAR, not D6; the
 NOP drive (FORCE) is LK2 = NOR(LCLKn, N.M1, NOT CHAR); EN = NOT INFE; the address enable takes D6L, not S/L, so the
@@ -138,14 +145,14 @@ diagram. The logic above is the easy part.
 | 32, 30, 28, 26, 24, 23, 21, 19 | D0-D7 | input with 16K pull-up; open-collector pull-down | 5 V tolerant inputs; outputs that only ever pull low. They work against the 470 ohm resistors to the memory's data lines, so they must sink about 10 mA and reach a good low |
 | 33, 31, 29, 27, 25 | KBD0-KBD4 | inputs, 16K pull-ups | pull-ups to +5 V: the keyboard has none of its own |
 | 22 | USA/UK | input, 16K pull-up | pull-up (the link, when fitted, grounds it) |
-| 20 | TAPE IN | 400 ohm series, clamp diode to 0 V, 5K divider, inverter | an input stage that turns the tape's small signal into logic: a comparator or the same network, not a bare FPGA pin |
+| 20 | TAPE IN | 400 ohm series, clamp diodes, a biased two-transistor input stage (circuit on ULA 2C158/2) | an input stage that turns the tape's small signal into logic: a comparator or the same network, not a bare FPGA pin |
 | 35 | OSC | on-chip oscillator with the board's 6.5 MHz ceramic resonator | its own 13 MHz oscillator (or 6.5 MHz and a doubler); pin 35 left unconnected |
 | 9, 10, 6, 8, 7, 17, 18, 11 | MREQ, M1, RD, WR, IORQ, HALT, A15, A14 | inputs, 16K pull-ups | 5 V tolerant inputs |
 | 5, 4, 3, 36, 37, 38, 39, 1, 2 | A0'-A8' | tri-state outputs; A0' and A1' also read | tri-state outputs that win against the Z80 through the 1K resistors (5 mA), released within a few tens of ns of M1 falling; A0' and A1' are inputs too |
 | 14 | clock out | totem-pole output to TR2 | a 5 V swing into TR2's base resistor |
 | 15 | NMI | open collector, 5K pull-up on chip | open-drain output with a pull-up to +5 V |
 | 13, 12 | ROM CS, RAM CS | RTL stages, totem-pole outputs | 5 V-level outputs; RAM CS feeds the RAM through 680 ohms on the board |
-| 16 | TV/TAPE | one pin with three levels: sync, black, white. Its circuit is not on the drawing | two outputs (`tv_sync_n`, `tv_white`) mixed by resistors to the three levels the modulator expects; the levels have to be measured on a working machine. The same pin is the tape output |
+| 16 | TV/TAPE | one pin with three levels, from an emitter follower with 200 ohms in series and 1K to 0 V (circuit on ULA 2C158/2): sync 0 V, black about 2.8 V, white about 4.3 V unloaded (calculated from the resistor values, not measured) | two outputs (`tv_sync_n`, `tv_white`) mixed by resistors to those three levels; worth checking against a working machine. The same pin is the tape output |
 
 Timing a replacement must keep: the NOP must be on D0-D5 and D7 before the Z80 reads at the start of T3 and until M1
 rises; the font byte is taken as the next T-state starts, so the ROM must stay selected and A0'-A8' driven until then;

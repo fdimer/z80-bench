@@ -165,9 +165,9 @@ nm3     inv      n_5BL          n_5BI         @5BL  ok210
 nm4     pin_oc   N.NMI          n_5BL         @5BN   PN15, 5K pull-up to VCC on chip  ok210
 fs1     nor2     SYNCn          LINE-SYNC FRAME-SYNC   @8BG  ok210
 fs2     inv      N.SYNC         SYNCn         @8BJ   R/2  ok210
-tv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BL   PN16, "3 level output" (circuit not on this drawing)  ok210
+tv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BL   PN16, '3 level output'; circuit on ULA 2C158/2: N.SYNC high pulls the output to 0 V; otherwise N.VIDEO high gives the lower level (black, about 2.8 V), low the higher (white, about 4.3 V); 200 ohms in series  ok210
 ck1     inv      n_2BH          CLKSRC        @2BH   R/2; CLKSRC = Q19, up column AK  ok210
-ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output  ok210; non-inverting, so N.PHI = NOT Q19 and the Z80's CLK (through TR2, an inverter) = Q19: the latch windows then fall after CLK falls in T1 and T2, and FORCE covers the T3 rise when the Z80 takes the NOP
+ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output  ok210; the cell does not invert (circuit 'PIN phi-bar' on ULA 2C158/2: input transistor, phase splitter, totem pole), so N.PHI = NOT Q19 and the Z80's CLK (through TR2, an inverter) = Q19: the latch windows fall after CLK falls in T1 and T2, and FORCE covers the T3 rise when the Z80 takes the NOP
 
 # ---- clock: oscillator, Q19, the counter clock (rows 17-25, columns N-AL) ----
 oscb    inv      OSCn           OSC           @21E   inverter after the oscillator cell and a cross-under  ok210
@@ -285,6 +285,6 @@ nl2     nor2     NMIOFF         NMION OUTFE   @37AW  ok210; runs right to column
 
 # ---- memory select outputs (rows 30-32, columns BE-BJ): "see cct diagram" (RTL stages and totem-pole outputs) ----
 rmi     inv_rtl  RAMCSi         RAMSELn       @30BF  ok210; RTL
-rmo     pin_tpn  RAM.N.CS       RAMCSi        @30BI  ok210; PN12; output stage taken as inverting (pin_tpn): its circuit is on the separate 'cct diagram', and the selects only work this way round
+rmo     pin_tpn  RAM.N.CS       RAMCSi        @30BI  ok210; PN12; the stage after the input transistor inverts (pin_tpn): confirmed by the cell circuit 'PINS ROMCS, RAMCS' on ULA 2C158/2, where the whole cell, input transistor included, does not invert. That circuit also shows the RAM cell holding the ROM cell off through 6K, which is the RAMCSi input of 'rom'
 rom     nor2_rtl ROMCSi         ROMLINE RAMCSi   @31BF  ok210; RTL. ROM N.CS = ROMLINE or RAMACC: the ROM is selected for A14 low, or while Q20 is set, unless the RAM is
-romo    pin_tpn  ROM.N.CS       ROMCSi        @31BI  ok210; PN13; output stage taken as inverting (pin_tpn): its circuit is on the separate 'cct diagram', and the selects only work this way round
+romo    pin_tpn  ROM.N.CS       ROMCSi        @31BI  ok210; PN13; the stage after the input transistor inverts (pin_tpn): confirmed by the cell circuit 'PINS ROMCS, RAMCS' on ULA 2C158/2, where the whole cell, input transistor included, does not invert. That circuit also shows the RAM cell holding the ROM cell off through 6K, which is the RAMCSi input of 'rom'
