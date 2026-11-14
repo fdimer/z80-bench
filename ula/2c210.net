@@ -198,12 +198,12 @@ dB2     nor2     DB2            DB1 DB1       @21X  ok210
 dB3     nor2     DB3            DB2 DB2       @21AA  ok210
 dB4     nor2     DB4            DB3 DB3       @21AC  ok210
 dB5     nor2     DB5            DB4 DB4       @21AE  ok210
-dC1     nor2     DC1            N.MREQ N.MREQ @24Z  ok210
+dC1     nor2     DC1            N.MREQ N.MREQ @24V  ok210
 dC2     nor2     DC2            DC1 DC1       @24AC  ok210
 dC3     nor2     DC3            DC2 DC2       @24AE  ok210
 d21     nor3     n_22AJ         X21 DB5 DC3   @22AD  ok210; R/2; X21: the row 21.6 line from the left, via column AB
 d21b    inv      n_22AM         n_22AJ        @22AE  ok210; R/3; output up column AG (to be traced) and down into aen1
-aen1    nor2     AENa           n_22AM Y24    @24AI  ok210; Y24: the row 24.4 line from column AD, which comes up from below (to be traced); AENa also runs left along row 25.9 (to be traced)
+aen1    nor2     AENa           n_22AM M1     @24AI  ok210; M1 via row 28.6 and column AD; AENa also runs left along row 25.9 (to be traced)
 aen2    inv      n_aen2         AENa          @24AM  ok210
 aen3    inv      AENin          n_aen2        @24AO  ok210; R/2; up column AU to the address enable (row 18)
 
@@ -241,16 +241,16 @@ ba1     buf_ef   A1in           A1'           @26BF
 a15i    inv      A15n           A15           @26H   ok210
 hlti    inv      HALTn          N.HALT        @27H   ok210
 chr     nor4     CHAR           N.M1 N.MREQ A15n HALTn   @26J   ok210; R/2; high during an opcode fetch from A15 high while not halted (top input taken as N.M1, via the column K/L verticals; to be confirmed)
-# ---- memory request logic (rows 22-30, columns N-AF) ----
-# N.MREQ runs from the PN9 buffer (row 23) right to the column T vertical, which feeds chain C, two NORs and Q20's clock.
-# N.M1 (row 24) turns down at column S to an inverter whose output resets Q20.
-m1i     inv      M1             N.M1          @26W
-a14i    inv      A14n           A14           @29V
-romsel  nor2     ROMSEL         N.MREQ A14n   @29Z   high for a memory cycle with A14 low (to the ROM select, row 29 line)
-ramsel  nor2     RAMSELa        N.MREQ A14    @27Z   high for a memory cycle with A14 high
-Q20     dff      Q20            Q20D ~N.MREQ M1   @28AC  D from the long loop to the right (column BA, to be traced)
-ramblk  nor2     RAMSELn        Q20 RAMSELa   @30AD  low when the RAM is selected and Q20 is clear (to RAM N.CS, row 30)
-# chain C input is N.MREQ: dC1..dC3 are three NOR-inverters (rows 24), output up column AG to the row 22 NOR
+# ---- memory request logic (rows 23-30, columns Q-X), traced on the 2C210 ----
+# N.MREQ runs down column R/S: into chain C (row 24), the two select NORs and Q20's clock. N.M1 turns down column R to
+# the inverter at row 26.5, whose output M1 resets Q20 and runs right along row 28.6, up column AD to row 24.4 (aen1).
+m1i     inv      M1             N.M1          @26U   ok210
+a14i    inv      A14n           A14           @29Q   ok210
+romacc  nor2     ROMACC         N.MREQ A14    @27T   ok210; high for a memory cycle with A14 low
+ramacc  nor2     RAMACC         N.MREQ A14n   @29T   ok210; high for a memory cycle with A14 high; runs right along row 29 to the RAM select
+Q20     dff      Q20            Q20D ~N.MREQ M1   @27X   ok210; clocked as MREQ goes low; reset by M1; Q20D: the row 25.6 line from the right (to be traced)
+romln   nor2     ROMLINE        Q20 ROMACC    @30W   ok210; runs right along row 30 to the ROM select
+rmin    inv      RAMSELn        RAMACC        @30AJ  ok210
 
 # ---- I/O decode and vertical sync (rows 30-37, columns E-Z) ----
 # N.WR turns up at column H to row 30.6, N.IORQ at column I to row 31.0, N.RD at column J to row 31.4.
@@ -283,7 +283,7 @@ nl1     nor2     NMION          OUTFD NMIOFF  @35AW  ok210; cross-coupled
 nl2     nor2     NMIOFF         NMION OUTFE   @37AW  ok210; runs right to column BC and up to the NMI gate (nm2)
 
 # ---- memory select outputs (rows 30-32, columns BE-BJ): "see cct diagram" (RTL stages and totem-pole outputs) ----
-rmi     inv_rtl  RAMCSi         RAMSELn       @30BF  ok210; RTL; input from the row 30 line (the RAM select logic, via an inverter at 30AJ)
+rmi     inv_rtl  RAMCSi         RAMSELn       @30BF  ok210; RTL
 rmo     pin_tp   RAM.N.CS       RAMCSi        @30BI  ok210; PN12
-rom     nor2_rtl ROMCSi         ROMLINE RAMCSi   @31BF  ok210; RTL; ROMLINE: the row 31 line from the left
+rom     nor2_rtl ROMCSi         ROMLINE RAMCSi   @31BF  ok210; RTL. ROM N.CS = ROMLINE or RAMACC: the ROM is selected for A14 low, or while Q20 is set, unless the RAM is
 romo    pin_tp   ROM.N.CS       ROMCSi        @31BI  ok210; PN13
