@@ -90,7 +90,7 @@ usac    pin_oc   nD6            n_18V         @18Y
 tapa    nor2     n_18R          TAPE EN       @18R
 tapb    nor2     n_19V          n_18R FORCE   @19V
 tapc    pin_oc   nD7            n_19V         @19Y
-en      inv      EN             n_20AA        @20U   R/2; input from the port decode (to be traced)
+en      inv      EN             n_20AA        @20U   R/2; input from the port decode (taken as INFE, to be confirmed)
 
 # ---- dot shift register Q1-Q8 (rows 3-10, columns T-AL) ----
 # Inverters A-H take D0-D7. Each stage's reset is NOR(~Dn, S/L, D6L): with S/L and D6L low, a 1 in the ROM byte
@@ -251,10 +251,10 @@ ramblk  nor2     RAMSELn        Q20 RAMSELa   @30AD  low when the RAM is selecte
 
 # ---- I/O decode and vertical sync (rows 30-37, columns E-Z) ----
 # N.WR turns up at column H to row 30.6, N.IORQ at column I to row 31.0, N.RD at column J to row 31.4.
-iowr    nor2     IOWR           N.WR N.IORQ   @33K   high for any I/O write: clears vertical sync
-iosel   nor2     IOSEL          N.IORQ X35    @35K   X35: from above (column L, row 29 and up; probably A0in), to be traced
-fsl     nor3     FRAME-SYNC     FSA IOWR FSL  @33N   R/2; FSA: the long row 31.6 line (to be traced)
-fsr     nor2     FSL            FRAME-SYNC FSS   @36N   cross-coupled with fsl: FSS sets vertical sync (row 31.8 line from column M)
+iowr    nor2     IOWR           N.WR N.IORQ   @33K   ok210; high for any I/O write: clears vertical sync
+intack  nor2     INTACK         N.IORQ N.M1   @35K   ok210; high during the interrupt acknowledge (IORQ and M1 both low); runs right to row 35.4, column AK, and up
+fsl     nor3     FRAME-SYNC     NMION IOWR FSL   @33N   ok210; R/2; held off while the NMI is on, cleared by any OUT
+fsr     nor2     FSL            FRAME-SYNC INFE  @36N   ok210; cross-coupled with fsl: IN with A0 low starts vertical sync
 
 # ---- 2C210 only: blanking (rows 1-2, columns AU-BB) ----
 bl1     inv      n_bl1          Q25           @1AU   ok210
@@ -270,13 +270,14 @@ vbi     inv      N.VIDEO        n_vb          @10BC  ok210; R/2. The 2C210 blank
 #    above) through an R/2 inverter, where the 2C184 goes more directly: the 2C210 gates the picture with a second signal
 #    (probably blanking during sync).
 
-# ---- port decode and the NMI on/off latch (rows 33-37, columns AR-AX), 2C210 as drawn ----
-# Three NOR3 gates take lines from the row 31-32 bus (A0in, A1in, IOWR, IOSEL and others; exact assignment to be traced).
-pd1     nor3     PD1            P1a P1b P1c   @34AS  ok210; output right to column AU and up (taken as the keyboard read enable EN, to be confirmed)
-pd2     nor3     PD2            P2a P2b P2c   @35AS  ok210; sets the latch (taken as OUT with A0 low: NMI on)
-pd3     nor3     PD3            P3a P3b P3c   @37AS  ok210; resets the latch (taken as OUT with A1 low: NMI off)
-nl1     nor2     NMION          PD2 NMIOFF    @35AW  ok210; cross-coupled
-nl2     nor2     NMIOFF         PD3 NMION     @37AW  ok210; NMIOFF runs right to column BC and up to the NMI gate (nm2)
+# ---- port decode and the NMI on/off latch (rows 33-37, columns AR-AX) ----
+# Bus from the left (rows 30.8-32.5): N.WR, N.IORQ, N.RD, INFE (driven from here, runs left), NMION (driven from here,
+# runs left). A0in and A1in come down columns AO and AP from the read-back buffers (rows 25-26).
+infe    nor3     INFE           N.RD N.IORQ A0in   @34AS  ok210; IN with A0 low: keyboard and tape read, starts vertical sync
+outfd   nor3     OUTFD          A1in N.IORQ N.WR   @35AS  ok210; OUT with A1 low: NMI off
+outfe   nor3     OUTFE          A0in N.IORQ N.WR   @37AS  ok210; OUT with A0 low: NMI on
+nl1     nor2     NMION          OUTFD NMIOFF  @35AW  ok210; cross-coupled
+nl2     nor2     NMIOFF         NMION OUTFE   @37AW  ok210; runs right to column BC and up to the NMI gate (nm2)
 
 # ---- memory select outputs (rows 30-32, columns BE-BJ): "see cct diagram" (RTL stages and totem-pole outputs) ----
 rmi     inv_rtl  RAMCSi         RAMSELn       @30BF  ok210; RTL; input from the row 30 line (the RAM select logic, via an inverter at 30AJ)
