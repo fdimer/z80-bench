@@ -24,7 +24,18 @@ const dfile = m.mread(0x400C, false, true) | m.mread(0x400D, false, true) << 8;
 m.run(3.25e6 * 0.1);
 
 // ---- the gate-level ULA ----
-const sim = new UlaSim(fs.readFileSync(path.join(__dirname, '2c210.net'), 'utf8'), { init: { NMION: 0, NMIOFF: 1, 'FRAME-SYNC': 0, FSL: 1 } });
+// which ULA: the netlist (default), the generated gate-level Verilog read back (ULA=gates.v), or the synchronous
+// Verilog run through ula/v2js.js (ULA=sync)
+const WHICH = process.env.ULA || 'net';
+const INIT = { NMION: 0, NMIOFF: 1, 'FRAME-SYNC': 0, FSL: 1 };
+const facade = (real, map) => ({ set: (n, v) => real.set(map(n), v), get: n => real.get(map(n)), runTo: t => real.runTo(t), get t() { return real.t; }, get events() { return real.events; },
+  watch: new Proxy({}, { set(_, k, f) { real.watch[map(k)] = f; return true; } }) });
+let sim;
+if (WHICH === 'net') sim = new UlaSim(fs.readFileSync(path.join(__dirname, '2c210.net'), 'utf8'), { init: INIT });
+else if (WHICH === 'gates.v') {
+  const { fromVerilog, san } = require('./gen_verilog.js'), init = {}; for (const k in INIT) init[san(k)] = INIT[k];
+  sim = facade(new UlaSim(fromVerilog(fs.readFileSync(path.join(__dirname, '2c210_gates.v'), 'utf8')), { init }), san);
+} else sim = new (require('./v2js.js').SyncUla)(fs.readFileSync(path.join(__dirname, '2c210_sync.v'), 'utf8'));
 const OSC = 1000 / 6.5;                   // ns per oscillator period
 let oscT = 0, osc = 0;
 // Z80 timing (ns after the clock edge): address, MREQ/RD/IORQ/WR/M1, and memory access time

@@ -48,8 +48,11 @@ comparison.
 | `ula/2c210.net` | The 2C210 netlist (main target). |
 | `ula/2c184.net` | The 2C184 netlist, transcribed from its drawing (partial). One line per gate, flip-flop or pin buffer, each with its grid square, so it can be checked against the drawing |
 | `ula/sim.js` | Event-driven simulation of the netlist, one element per gate, flip-flop or pin buffer, each with a delay (inertial: shorter pulses are swallowed) |
-| `ula/tb.js` | Testbench: the emulator boots the real ROM, and its Z80 bus cycles are replayed as bus waveforms on the gate-level ULA, clocked by the ULA's own clock; what the ULA does is checked against the emulator. `ZX81_ROM=/path/to/rom node ula/tb.js [frames]` (the ROM is never copied into the repository) |
-| (to come) `ula/2c210.v` | Verilog generated from the netlist: a timed model, and a synchronous version for an FPGA or CPLD |
+| `ula/tb.js` | Testbench: the emulator boots the real ROM, and its Z80 bus cycles are replayed as bus waveforms on the gate-level ULA, clocked by the ULA's own clock; what the ULA does is checked against the emulator. `ZX81_ROM=/path/to/rom node ula/tb.js [frames]` (the ROM is never copied into the repository). `ULA=gates.v` runs it on the generated Verilog read back, `ULA=sync` on the synchronous design |
+| `ula/gen_verilog.js` | Writes `2c210_gates.v` from the netlist, and reads such a file back into a netlist (for the testbench) |
+| `ula/2c210_gates.v` | **Generated.** The netlist as Verilog, one primitive per gate with its delay. For simulation, and to check other designs against; not for synthesis |
+| `ula/2c210_sync.v` | The synchronous design for an FPGA or CPLD: one 13 MHz clock. `ula2c210_core` is the logic; `ula2c210_sync` wraps it with the chip's pins |
+| `ula/v2js.js` | Runs `ula2c210_core` in the testbench by translating its (deliberately small) subset of Verilog to JavaScript |
 
 ## Netlist format
 
@@ -88,6 +91,62 @@ the emulator's dots exactly with no offset.
 The gate level corrected two of the emulator's constants (its logic was right): the sync, and so the NMI, starts 20
 T-states after the interrupt acknowledge begins, not 13, and lasts 16 T-states, not 20 (`ULA_HSYNC_DELAY` and
 `ULA_HSYNC_LEN` in `src/zx80.js`). With them the NMIs agree to within 0.2 of a T-state.
+
+## Verilog
+
+**`2c210_gates.v`** is the drawing in Verilog: 217 elements, the same delays as `sim.js` (estimates, not Ferranti's
+figures). Like the chip it makes its latch, load and reset pulses from gate delays, so it is for a simulator. Read back
+into a netlist and run through the testbench (`ULA=gates.v`), it gives the same result as the netlist it came from.
+
+**`2c210_sync.v`** does the same job with one clock, 13 MHz (twice the ZX81's 6.5 MHz), so a T-state is four clock
+periods (`ph` 0-3; the Z80's clock is high in 0 and 1):
+
+| In the chip | Made from | In the synchronous design |
+|---|---|---|
+| Character latch open (LCLK) | Q19 low and OSC high, during M1 | taken on the edge that ends `ph` 2 |
+| NOP on the data lines (FORCE) | M1, a character, latch closed | the same, combinational |
+| Shift register load (S/L) | a 35 ns pulse after Q19 rises, if MREQ is high | the edge that starts `ph` 0 |
+| Dot clock | OSC rising | the edges that start `ph` 0 and `ph` 2 |
+| Line counter | ripple counter on Q19 falling, cleared at 207 or by INT acknowledge | 0-206 on the edge that starts `ph` 2 |
+| NMI and frame-sync latches, Q20 | cross-coupled gates and a flip-flop clocked by MREQ | registers, set on the next clock edge (at most 77 ns later) |
+| Memory selects, keyboard port, address enable | combinational | combinational |
+
+Through the testbench (`ULA=sync`) it matches the emulator on everything the gate level does: NOPs, font addresses,
+selects, port reads, row counter, vertical sync and every dot. Its NMI and sync come about 95 ns (0.3 of a T-state)
+earlier than the gate-level model's, because the ripple counter's delay is gone.
+
+**How far this is checked.** No Verilog simulator or synthesis tool was available where this was written. The gates
+file is checked by reading it back; the synchronous core by `v2js.js`, which executes the Verilog text itself but
+knows only a subset of the language. **Neither file has been through a Verilog compiler yet**, and the pin wrapper
+`ula2c210_sync` (tri-state pins, not in the subset) has not been run at all. Before building anything: compile both
+with a real tool (Icarus Verilog, Verilator, Yosys or a vendor's), and simulate them against each other.
+
+## Electrical requirements for a replacement
+
+What a board that plugs into the ULA's 40-pin socket has to do, from the drawing's pin circuits and Sinclair's circuit
+diagram. The logic above is the easy part.
+
+| Pins | Signal | In the chip | A replacement needs |
+|---|---|---|---|
+| 40, 34 | +5 V, 0 V | bipolar, runs hot | its own regulator if the logic is 3.3 V |
+| 32, 30, 28, 26, 24, 23, 21, 19 | D0-D7 | input with 16K pull-up; open-collector pull-down | 5 V tolerant inputs; outputs that only ever pull low. They work against the 470 ohm resistors to the memory's data lines, so they must sink about 10 mA and reach a good low |
+| 33, 31, 29, 27, 25 | KBD0-KBD4 | inputs, 16K pull-ups | pull-ups to +5 V: the keyboard has none of its own |
+| 22 | USA/UK | input, 16K pull-up | pull-up (the link, when fitted, grounds it) |
+| 20 | TAPE IN | 400 ohm series, clamp diode to 0 V, 5K divider, inverter | an input stage that turns the tape's small signal into logic: a comparator or the same network, not a bare FPGA pin |
+| 35 | OSC | on-chip oscillator with the board's 6.5 MHz ceramic resonator | its own 13 MHz oscillator (or 6.5 MHz and a doubler); pin 35 left unconnected |
+| 9, 10, 6, 8, 7, 17, 18, 11 | MREQ, M1, RD, WR, IORQ, HALT, A15, A14 | inputs, 16K pull-ups | 5 V tolerant inputs |
+| 5, 4, 3, 36, 37, 38, 39, 1, 2 | A0'-A8' | tri-state outputs; A0' and A1' also read | tri-state outputs that win against the Z80 through the 1K resistors (5 mA), released within a few tens of ns of M1 falling; A0' and A1' are inputs too |
+| 14 | clock out | totem-pole output to TR2 | a 5 V swing into TR2's base resistor |
+| 15 | NMI | open collector, 5K pull-up on chip | open-drain output with a pull-up to +5 V |
+| 13, 12 | ROM CS, RAM CS | RTL stages, totem-pole outputs | 5 V-level outputs; RAM CS feeds the RAM through 680 ohms on the board |
+| 16 | TV/TAPE | one pin with three levels: sync, black, white. Its circuit is not on the drawing | two outputs (`tv_sync_n`, `tv_white`) mixed by resistors to the three levels the modulator expects; the levels have to be measured on a working machine. The same pin is the tape output |
+
+Timing a replacement must keep: the NOP must be on D0-D5 and D7 before the Z80 reads at the start of T3 and until M1
+rises; the font byte is taken as the next T-state starts, so the ROM must stay selected and A0'-A8' driven until then;
+and the selects must follow MREQ and A14 without waiting for a clock.
+
+The start-up state is whatever the registers power up as; like the chip, the design has no reset pin, and the ROM's
+first OUT instructions put it in order.
 
 ## Comparison with other replacements
 
