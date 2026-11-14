@@ -235,3 +235,10 @@ ramsel  nor2     RAMSELa        N.MREQ A14    @27Z   high for a memory cycle wit
 Q20     dff      Q20            Q20D ~N.MREQ M1   @28AC  D from the long loop to the right (column BA, to be traced)
 ramblk  nor2     RAMSELn        Q20 RAMSELa   @30AD  low when the RAM is selected and Q20 is clear (to RAM N.CS, row 30)
 # chain C input is N.MREQ: dC1..dC3 are three NOR-inverters (rows 24), output up column AG to the row 22 NOR
+
+# ---- I/O decode and vertical sync (rows 30-37, columns E-Z) ----
+# N.WR turns up at column H to row 30.6, N.IORQ at column I to row 31.0, N.RD at column J to row 31.4.
+iowr    nor2     IOWR           N.WR N.IORQ   @33K   high for any I/O write: clears vertical sync
+iosel   nor2     IOSEL          N.IORQ X35    @35K   X35: from above (column L, row 29 and up; probably A0in), to be traced
+fsl     nor3     FRAME-SYNC     FSA IOWR FSL  @33N   R/2; FSA: the long row 31.6 line (to be traced)
+fsr     nor2     FSL            FRAME-SYNC FSS   @36N   cross-coupled with fsl: FSS sets vertical sync (row 31.8 line from column M)
