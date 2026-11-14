@@ -328,6 +328,16 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .mcpop .sub { color: var(--muted); margin-bottom: 6px; font-family: var(--font-mono); font-size: 11.5px; }
 .mcpop .btns { display: flex; flex-wrap: wrap; gap: 6px; }
 .mcpop button { padding: 4px 10px; font-size: 12.5px; }
+.cpchips { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 8px 14px; align-items: start; margin-bottom: 10px; }
+.cpfig svg.chip { max-width: 380px; }
+.cpfig .pin.forced .ring { stroke: var(--warn); stroke-width: 2.6; stroke-dasharray: 4 2; }
+.cpfig .pin.forced .nm { fill: var(--warn); }
+.cpfig .pin.forced.fz .ring { stroke-dasharray: 2 3; }
+.cpfig .mcfaults { display: block; margin-top: 2px; }
+.mcpop { min-width: 250px; max-width: 320px; }
+.mcpop label.cut { display: flex; gap: 6px; align-items: center; margin: 2px 0 8px; font-weight: 600; cursor: pointer; }
+.mcpop .cap { color: var(--muted); margin-bottom: 4px; }
+.mcpop .note { color: var(--muted); margin-top: 6px; font-size: 11.5px; line-height: 1.35; }
 </style>
 
 <div class="wrap">
@@ -382,37 +392,42 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <div class="zxkb" id="zxKb" aria-label="Keyboard"></div>
         <p class="hint" id="zxHint">Click the picture and type, or use the keyboard above: keywords (white, top) come from the key pressed at the K cursor, red symbols need SHIFT, which latches for one key. Enter is NEWLINE and Backspace is RUBOUT (SHIFT+0). Tape: insert a .o program file, then type LOAD (W, then NEW LINE); SAVE (E, then NEW LINE) downloads the program as a .o file. Both are instant. RAM listing gives the system variables, the BASIC program as text and a hex dump. The picture is built the way a TV would, from the ZX80's own sync pulses, so it blanks while BASIC is busy, as on the real machine. The ROM is not included: load your own 4 KB image; your browser keeps it.</p>
       </section>
-      <section class="panel" id="pMemChips">
-        <h2>Memory chips <span class="aside" id="mcInfo">live pins · click a pin to disconnect it or hold it high or low</span></h2>
-        <div class="mcwrap">
-          <div class="mctiles" id="mcTiles"></div>
-          <figure class="mcfig" id="mcFig">
-            <svg class="chip" id="mcChip" role="group" aria-label="Selected memory chip pinout"></svg>
-            <figcaption id="mcCap"></figcaption>
-            <div class="mcfaults mono" id="mcFaults"></div>
-            <div class="row mcbtns"><button id="mcClear" type="button">Clear this chip's faults</button><button id="mcClearAll" type="button">Clear all memory faults</button></div>
-          </figure>
+      <section class="panel" id="pPinout">
+        <h2><span id="zxPinTitle">Processor and ULA</span> <span class="aside">top view · live pins · ringed pins can be given a fault</span></h2>
+        <div class="cpchips">
+          <figure class="mcfig cpfig" id="zxFigZ80"><svg class="chip" id="chip" viewBox="0 0 380 540" role="group" aria-label="Z80 pinout"></svg><figcaption id="zxCapZ80"><b>Z80A</b><br>processor, 3.25 MHz</figcaption></figure>
+          <figure class="mcfig cpfig" id="zxFigUla"><svg class="chip" id="zxChipUla" role="group" aria-label="ULA pinout"></svg><figcaption id="zxCapUla"></figcaption></figure>
         </div>
-        <p class="hint">The machine's memory chips: the ROM (IC2: the 4K 2332 of the ZX80, or the 8K 2364), the two 2114s of the built-in 1K (IC3 and IC4 on the ZX80, IC4a and IC4b on the ZX81), the single 2K 4016 that a Timex Sinclair 1000 has in position IC4 instead (read from a real board) or, with a RAM pack, its 4116 dynamic RAMs, one per data bit in each 16K. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the bus on every clock. Assumed: the first 2114 holds data bits 0–3, and the RAM pack is wired in the usual way (its chips have no board numbers here). The 8K of the hi-res board is not included.</p>
-        <p class="hint">To simulate a fault, click a pin: Disconnected lifts the pin from the board (an input then floats high, an output no longer reaches the bus), Stuck high and Stuck low hold it at that level. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. Faults are listed in the Debug panel and cleared there, here, or by Master reset. The memory view and the disassembly show what the CPU reads through the faults.</p>
-      </section>
-  </div>
-
-  <div class="grid">
-    <div class="col">
-      <section class="panel">
-        <h2>Pinout <span class="aside">40-pin DIP · top view</span></h2>
-        <div class="chipwrap"><svg class="chip" id="chip" viewBox="0 0 380 540" role="group" aria-label="Z80 pinout"></svg></div>
         <div class="legend">
-          <span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z)</span><span><i class="li"></i>Input: click to toggle</span>
+          <span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z)</span><span><i class="li"></i>Ringed pin: click for its fault menu</span>
         </div>
         <dl class="busread">
           <dt>Machine cycle</dt><dd id="brCycle">–</dd>
           <dt>Address bus</dt><dd id="brAddr">–</dd>
           <dt>Data bus</dt><dd id="brData">–</dd>
         </dl>
-        <p class="hint">Clicking CLK pulses one clock. /INT is level-sensitive, /NMI triggers on a falling edge. Holding /WAIT low inserts wait states; /BUSREQ low floats the buses at the end of the current machine cycle; /RESET low holds the CPU in reset.</p>
+        <p class="hint">Click any ringed pin for its fault menu. There are two kinds of fault. <b>A line held high or low</b> is a short on the wire: every pin on that line, on every chip, sees the level and shows it. <b>A pin disconnected from its line</b> (tick the box) is a broken trace or a lifted pin: only that chip is affected. A disconnected input floats high, or can be given a level of its own; a disconnected output no longer drives its line, which then floats high for the pins that listen to it. A disconnected pin ignores a fault on its line. Faults are listed in the Debug pane and stay until cleared there, in the Memory chips panel, or by Master reset.</p>
+        <p class="hint">Clicking the Z80's CLK pulses one clock (right-click it for its fault menu). On the ZX81 the ULA (IC1) makes the clock, selects the ROM and the RAM, reads the keyboard and the tape, and builds the picture: it feeds the Z80 a NOP for every character it takes from the display file, then drives A0'–A8' during the refresh half of that fetch to pick the character's row in the ROM. Two sets of resistors make this possible: the ULA's address pins are on the ROM and RAM side of 1K resistors (A0'–A8', a line of their own apart from the Z80's A0–A8), and its data pins are on the Z80's side of 470 ohm resistors (D0–D7, apart from the ROM's and RAM's D0'–D7'). The Z80's INT pin is wired to A6. The ULA's pinout is from Sinclair's circuit diagram; Ferranti published no data sheet, so what happens inside it is a model of its behaviour, and the moment of each change within a character is approximate. TV/TAPE shows S for sync, B for black and W for white. The ZX80 has no ULA (its video is built from logic chips that are not drawn here), so only the Z80 is shown for it.</p>
+
       </section>
+      <section class="panel" id="pMemChips">
+        <h2>Memory chips <span class="aside" id="mcInfo">live pins · click a pin for its fault menu</span></h2>
+        <div class="mcwrap">
+          <div class="mctiles" id="mcTiles"></div>
+          <figure class="mcfig" id="mcFig">
+            <svg class="chip" id="mcChip" role="group" aria-label="Selected memory chip pinout"></svg>
+            <figcaption id="mcCap"></figcaption>
+            <div class="mcfaults mono" id="mcFaults"></div>
+            <div class="row mcbtns"><button id="mcClear" type="button">Clear this chip's faults</button><button id="mcClearAll" type="button">Clear all faults</button></div>
+          </figure>
+        </div>
+        <p class="hint">The machine's memory chips: the ROM (IC2: the 4K 2332 of the ZX80, or the 8K 2364), the two 2114s of the built-in 1K (IC3 and IC4 on the ZX80, IC4a and IC4b on the ZX81), the single 2K 4016 that a Timex Sinclair 1000 has in position IC4 instead (read from a real board) or, with a RAM pack, its 4116 dynamic RAMs, one per data bit in each 16K. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the bus on every clock. Assumed: the first 2114 holds data bits 0–3, and the RAM pack is wired in the usual way (its chips have no board numbers here). The 8K of the hi-res board is not included.</p>
+        <p class="hint">To simulate a fault, click a pin for its menu. On the ZX81, hold the whole line high or low and every pin on that line is affected, on every chip: the ROM and the built-in RAM share the address lines A0'–A8' with the ULA, their data pins share D0'–D7', and each has its select line from the ULA. Or tick "Disconnected from the line" for a fault on this chip's pin alone. On the ZX80, and on a RAM pack's chips, every pin counts as a line of its own: Disconnected lifts it (an input then floats high), High and Low hold it at that level. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. A chip with a fault is marked in red, and every fault is listed in the Debug panel, where it can be removed. The memory view and the disassembly show what the CPU reads through the faults.</p>
+      </section>
+  </div>
+
+  <div class="grid">
+    <div class="col">
 
       <section class="panel">
         <h2>Program
@@ -627,11 +642,11 @@ const PINS = [
 const ACTIVE_LOW = new Set(['INT','NMI','HALT','MREQ','IORQ','RD','WR','BUSACK','WAIT','BUSREQ','RESET','M1','RFSH']);
 const PIN_TITLE = {
   CLK: 'Clock input. Click to pulse one clock (one T-state).',
-  INT: 'Maskable interrupt request, active low, level-sensitive. Click to toggle.',
-  NMI: 'Non-maskable interrupt, active low, triggers on the falling edge. Click to toggle.',
-  WAIT: 'Wait, active low. While low, memory and I/O cycles are stretched with wait states. Click to toggle.',
-  BUSREQ: 'Bus request, active low. The CPU floats its buses and asserts /BUSACK. Click to toggle.',
-  RESET: 'Reset, active low. Holds the CPU in reset; it restarts at 0000h when released. Click to toggle.'
+  INT: 'Maskable interrupt request, active low, level-sensitive. Click for its fault menu.',
+  NMI: 'Non-maskable interrupt, active low, triggers on the falling edge. Click for its fault menu.',
+  WAIT: 'Wait, active low. While low, memory and I/O cycles are stretched with wait states. Click for its fault menu.',
+  BUSREQ: 'Bus request, active low. The CPU floats its buses and asserts /BUSACK. Click for its fault menu.',
+  RESET: 'Reset, active low. Holds the CPU in reset; it restarts at 0000h when released. Click for its fault menu.'
 };
 const pinEls = {};
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -670,6 +685,7 @@ function buildChip() {
 }
 function pinClick(name) {
   if (name === 'CLK') { pulseClock(); return; }
+  return;   // the other inputs open the fault menu (zxZ80Faults)
   const k = name.toLowerCase();
   const was = pins[k];
   pins[k] = was ? 0 : 1; pinSync();
@@ -735,6 +751,11 @@ function expand(cycles) {
         break;
     }
   }
+  let i = 0;
+  cycles.forEach((c, n) => {
+    let j = 0;
+    while (i < T.length && T[i].mc === n + 1) { const s = T[i++]; if (c.t0 !== undefined) s.at = c.t0 + j; if (c.fa !== undefined && s.rfsh === 0) { s.fa = c.fa; s.ch = c.ch; } j++; }
+  });
   return T;
 }
 function cycleT(cycles) { let n = 0; for (const c of cycles) n += c.k === 'M1' ? 4 : c.k === 'MR' || c.k === 'MW' ? 3 : c.k === 'IR' || c.k === 'IW' ? 4 : c.k === 'IA' ? 6 : c.n; return n; }
@@ -745,6 +766,7 @@ curT = Object.assign({}, BASE, { a: 0, t: '–' });
 function describe(c0, pc) {
   if (cpu.lastEvent === 'NMI') return 'NMI response → 0066h';
   if (cpu.lastEvent === 'INT') return 'Interrupt response (IM ' + cpu.im + ')';
+  if (c0 && c0.held) return 'Processor held (' + c0.held + ')';
   if (c0 && c0.halt) return 'HALT (executing NOPs)';
   return disasm(bus.read, pc).text;
 }
@@ -757,7 +779,7 @@ function beginInstruction() {
   zx.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(); zx.afterStep(cyc);
   timeline = expand(cyc); ti = 0; lastTimeline = timeline;
   lastWrites = new Set(cyc.filter(c => c.k === 'MW').map(c => c.a));
-  curInstr = { pc, text: cpu.lastEvent === 'NMI' ? 'NMI response → 0066h' : cpu.lastEvent === 'INT' ? 'Interrupt response (IM ' + pre.im + ')' : (cyc[0] && cyc[0].halt) ? 'HALT state (NOP fetch)' : text, tlen: timeline.length };
+  curInstr = { pc, text: cpu.lastEvent === 'NMI' ? 'NMI response → 0066h' : cpu.lastEvent === 'INT' ? 'Interrupt response (IM ' + pre.im + ')' : (cyc[0] && cyc[0].held) ? 'Processor held (' + cyc[0].held + ')' : (cyc[0] && cyc[0].halt) ? 'HALT state (NOP fetch)' : text, tlen: timeline.length };
 }
 // one clock: returns 'mid' | 'done' | 'wait' | 'busreq' | 'reset'
 function tick() { const r = tick0(); if (pinWatches.size || busWatches.size) pinCheck(); return r; }
@@ -802,6 +824,7 @@ function haltMsg() {
   return `Halted at ${at} with interrupts disabled (DI): /INT is ignored, so only /NMI or /RESET can wake the CPU`;
 }
 function describeInputs() {
+  if (zx.held()) return setStatus('Processor held: ' + zx.held(), true);
   if (pins.reset === 0) return setStatus('Held in reset (/RESET low)', true);
   if (busReleased) return setStatus('Bus released to another device (/BUSREQ low)', true);
   if (waitT && pins.wait === 0) return setStatus('Wait state: /WAIT is low', true);
@@ -935,14 +958,16 @@ function pinValue(name) {
   const T = curT;
   if (name === '+5V') return 'p';
   if (name === 'GND') return 'g';
-  if (name === 'CLK') return clk;
+  if (name === 'CLK') return 'CLK' in zx.z80c.f ? zx.z80c.f.CLK : clk;
+  if (name in zx.z80c.f) return zx.z80c.f[name];
   if (/^A\d+$/.test(name)) { if (T.a === null || T.a === 'z') return 'z'; return (T.a >> +name.slice(1)) & 1; }
   if (/^D\d$/.test(name)) { if (T.d === null || T.d === undefined) return 'z'; return (T.d >> +name.slice(1)) & 1; }
   switch (name) {
     case 'M1': return T.m1; case 'MREQ': return T.mreq; case 'IORQ': return T.iorq; case 'RD': return T.rd; case 'WR': return T.wr; case 'RFSH': return T.rfsh;
     case 'HALT': return inReset ? 1 : (regsView().halted ? 0 : 1);
-    case 'BUSACK': return busReleased ? 0 : 1;
+    case 'BUSACK': return busReleased || zx.z80c.lv.BUSREQ === 0 ? 0 : 1;
     case 'INT': return pins.int === 0 || zx.intLevel ? 0 : 1;
+    case 'NMI': return zx.ula && zx.nmiGen && zx.hsyncAt(curT.at === undefined ? zx.t : curT.at) ? 0 : 1;
     default: return pins[name.toLowerCase()];
   }
 }
@@ -1624,7 +1649,7 @@ $('dbgType').onchange = dbgFields; $('dbgMemCond').onchange = dbgFields;
 $('dbgAdd').onclick = dbgAdd;
 for (const id of ['dbgAddr', 'dbgMemVal', 'dbgBusVal']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); dbgAdd(); } });
 $('dbgList').addEventListener('click', e => { const b = e.target.closest('button[data-key]'); if (!b) return; b.classList.contains('x') ? dbgRemove(b.dataset.key) : dbgGo(b.dataset.key); });
-$('dbgClear').onclick = () => { if (mcReady) { memClearFaults(MC.m); disDirty = true; } breakpoints.clear(); afterBps.clear(); watches.clear(); memWatches.clear(); pinWatches.clear(); busWatches.clear(); hitReg = null; dbgHit = null; render(); };
+$('dbgClear').onclick = () => { if (mcReady) { zx.clearFaults(); disDirty = true; } breakpoints.clear(); afterBps.clear(); watches.clear(); memWatches.clear(); pinWatches.clear(); busWatches.clear(); hitReg = null; dbgHit = null; render(); };
 // ---------- master reset: memory, ROM, every debug point and the input pins ----------
 function masterReset() {
   if (running) stopRun();
@@ -1671,7 +1696,7 @@ function renderZxState() {
     <div class="blk"><div class="hd">Keyboard and memory</div><div class="kv">Keys down <b>${keys.join(' ') || 'none'}</b> · RAM <b>${zx.ramSize / 1024}K</b> · ROM <b>${zxRom ? (zx.rom8k ? '8K' : '4K') + ' loaded' : 'none'}</b></div></div>`;
   if (html !== zxSig) { zxSig = html; $('zxState').innerHTML = html; }
 }
-function renderZx() { drawZx(); renderZxState(); }
+function renderZx() { drawZx(); renderZxState(); if (typeof mcReady !== 'undefined' && mcReady) zxSideRender(); }
 // keyboard: PC keys and the on-screen ZX80 keyboard
 // legends from each ROM's own tables. ZX80: keyword at the K cursor (letter code + C0h) and SHIFT symbol (table at
 // 006Ch). ZX81: keyword (letter code + C0h), SHIFT symbol or keyword (table at 00A5h) and FUNCTION word (table at 00CCh).
@@ -1856,7 +1881,7 @@ const MM = {
 };
 function zxApplyRom() { const r = zxRoms[zxSlot(zx.machine)]; zx.rom.fill(0); if (r) zx.rom.set(r); zxRom = !!r; disDirty = true; }
 function zxSetMachine(m, quiet) {
-  zx.setMachine(m); $('zxMachine').value = m; zxApplyRom(); zxRenderKb(); zxHintText();
+  zx.setMachine(m); mcClosePop(); $('zxMachine').value = m; zxApplyRom(); zxRenderKb(); zxHintText();
   $('zxLogicKind').textContent = zx.ula ? 'ZX81 ULA' : 'ZX80 TTL';
   try { localStorage.setItem(ZX_MACHINE_KEY, m); } catch (e) {}
   if (!quiet) { if (zxRom) zxPowerOn(); else { if (running) stopRun(); resetCPU(); setStatus(`Load the ${zx.rom8k ? 'ZX81 (8K)' : 'ZX80 (4K)'} ROM to switch on the ${zxName()}`); render(); } }
@@ -1944,7 +1969,7 @@ $('zxTapeFile').onchange = () => {
     }
     const need = isP ? ZX80.tapeNeeds81(bytes) : ZX80.tapeNeeds(bytes);
     if (need > zx.ramSize && need <= 0x4000 && zxRom) {   // plug in the RAM pack first: a LOAD would replace the RAM anyway
-      zx.ramSize = 0x4000; $('zxRam').value = '16384'; disDirty = true; zxPowerOn();
+      zx.ramSize = 0x4000; zx.applyFaults(); $('zxRam').value = '16384'; disDirty = true; zxPowerOn();
       note += ` It needs ${Math.ceil(need / 1024)}K, so the 16K RAM pack has been plugged in and the ${zxName()} restarted.`;
     }
     zx.insertTape(bytes); zxTapeName = f.name; zxTapeShow();
@@ -1956,7 +1981,7 @@ $('zxTapeFile').onchange = () => {
 $('zxDumpBin').onclick = () => { const sz = zx.ramSize; zxSaved(zxDownload(`${zx.rom8k ? 'zx81' : 'zx80'}-ram-${sz / 1024}k-${zxStamp()}.bin`, zx.ram.slice(0, sz), 'application/octet-stream'), f => `RAM dumped to ${f}: ${sz} bytes, 4000h-${(0x3FFF + sz).toString(16).toUpperCase()}h (byte 0 of the file is address 4000h).`); };
 $('zxDumpTxt').onclick = () => zxSaved(zxDownload(`${zx.rom8k ? 'zx81' : 'zx80'}-ram-${zxStamp()}.txt`, zx.ramReport(), 'text/plain;charset=utf-8'), f => `RAM listing saved to ${f}: system variables, memory areas, the BASIC program and a hex dump.`);
 $('zxRam').onchange = () => {
-  zx.ramSize = +$('zxRam').value; disDirty = true; if (zxRom) zxPowerOn(); else render();
+  zx.ramSize = +$('zxRam').value; zx.applyFaults(); mcClosePop(); disDirty = true; if (zxRom) zxPowerOn(); else render();
   if (zx.ramSize === 0x800) { $('zxMsg').className = 'msg'; $('zxMsg').textContent = '2K fitted: one 2K static RAM (NEC µPD4016) in position IC4 in place of the two 2114s, as on the Timex Sinclair 1000, which is a ZX81 issue 3 board built for the US market. The American 60 Hz picture is not emulated: the machine still runs as a 50 Hz ZX81.'; }
   if (zx.ramSize > 0x4000) {   // the ROMs only look for RAM up to 7FFFh, as on the real machines
     const hi = zx.ramSize === 0x8000 ? 192 : 255;
@@ -1985,13 +2010,31 @@ const MC = {
   tile(c, i) { return i === MC2K ? ['IC4', '4016 · D0–7'] : i < 2 ? ['IC2', c.part + ' · ROM'] : i < 4 ? [zx.machine === 'zx81' ? 'IC4' + 'ab'[i - 2] : c.id, '2114 · D' + (c.nib ? '4–7' : '0–3')] : ['D' + c.bit, '4116']; },
   acc(i) { return i < 2 ? 0 : i < 4 || i === MC2K ? 1 : 2 + ((i - 4) >> 3); },
   bus() {
-    const T = curT, A = T.a === null || T.a === 'z' ? null : T.a, mem = T.mreq === 0 && T.rfsh !== 0 && A !== null;
+    const T = curT, A = T.a === null || T.a === 'z' ? null : zx.busA(T.a), mem = T.mreq === 0 && T.rfsh !== 0 && A !== null;
     const ri = mem ? zx.ramAt(A, T.m1 === 0) : -1, low = mem && ri < 0 && zx.hires && (A & 0x7FFF) >= 0x2000;
     return { T, A, mem, rd: mem && T.rd === 0, wr: mem && T.wr === 0, ri, rom: mem && ri < 0 && !low };
   },
   net(c, i, name, B) {
     const A = B.A, D = n => pinValue('D' + n); let m = /^A(\d+)$/.exec(name), d;
-    if (i < 2) {                        // the ROM: selected whenever the RAM is not
+    if (i === MCULA) {                  // the ULA
+      const T = B.T, at = T.at === undefined ? zx.t : T.at, u = zx.uv, mq = T.mreq === 0 && A !== null && u.MREQ !== 1, a14 = A === null ? 1 : u.A14 !== undefined ? u.A14 : A >> 14 & 1;
+      if ((d = /^A(\d)'$/.exec(name))) return T.fa !== undefined ? T.fa >> +d[1] & 1 : A === null ? 'z' : A >> +d[1] & 1;
+      if ((d = /^D(\d)$/.exec(name))) return T.fa !== undefined ? zx.romGet(T.fa & zx.romMask, true) >> +d[1] & 1 : T.d === null || T.d === undefined ? 'z' : T.d >> +d[1] & 1;
+      if ((d = /^KBD(\d)$/.exec(name))) { if (A === null) return 1; let k = 0; for (let r = 0; r < 8; r++) if (!(A & (0x100 << r))) k |= zx.keys[r]; return k >> +d[1] & 1 ? 0 : 1; }
+      switch (name) {
+        case 'A14': return A === null ? 'z' : A >> 14 & 1; case 'A15': return A === null ? 'z' : A >> 15 & 1;
+        case 'MREQ': return T.mreq; case 'IORQ': return T.iorq; case 'RD': return T.rd; case 'WR': return T.wr; case 'M1': return T.m1; case 'HALT': return pinValue('HALT');
+        case 'RAMCS': return mq && T.rfsh !== 0 && a14 && zx.ramSize < 0x4000 ? 0 : 1;      // a RAM pack holds the line high
+        case 'ROMCS': return mq && !a14 ? 0 : 1;
+        case 'CLK': return clk ? 0 : 1; case 'OSC': return clk;
+        case 'NMI': return zx.nmiGen && zx.hsyncAt(at) ? 0 : 1;
+        case 'TV/TAPE': { if (zx.vsync || zx.hsyncAt(at)) return 'S'; const x = (at - zx.lineStart) * 2, o = zx.line * ZX.W + x; return x >= 0 && x + 1 < ZX.W && zx.line >= 0 && zx.line < ZX.H && (zx.fb[o] || zx.fb[o + 1]) ? 'B' : 'W'; }
+        case 'TAPE IN': return 0; case 'USA/UK': return 1;
+      }
+      return 'z';
+    }
+    if (i < 2) {                        // the ROM: selected whenever the RAM is not; in the refresh half of a character fetch the ULA sets A0-A8 and reads the character's row
+      if (B.T.fa !== undefined) { const F = B.T.fa; if (m) return (F >> +m[1]) & 1; if ((d = /^D(\d)$/.exec(name))) return zx.romGet(F & zx.romMask, true) >> +d[1] & 1; return name === 'CS' ? (F & 0x4000 ? 1 : 0) : 1; }
       if (m) return A === null ? 'z' : (A >> +m[1]) & 1;
       if ((d = /^D(\d)$/.exec(name))) return B.rom && B.rd ? D(+d[1]) : 'z';
       return name === 'CS' ? (B.rom ? 0 : 1) : 1;
@@ -2019,17 +2062,89 @@ const MC = {
     }
   }
 };
+// ---------- the ULA beside the Z80: live pins, and the fault menu on every ringed pin ----------
+const MCULA = zx.chips.indexOf(zx.ulaC), MCCPU = zx.chips.indexOf(zx.z80c);
+const zxSide = { ci: MCULA, s: $('zxChipUla'), fig: $('zxFigUla'), cap: $('zxCapUla'), els: {}, drawn: '' };
+const ZX_ULA_TITLE = { CLK: 'clock to the Z80, through transistor TR2', OSC: '6.5 MHz ceramic resonator', 'TV/TAPE': 'picture and sync to the modulator, and the tape output: S = sync, B = black, W = white',
+  'TAPE IN': 'tape input (EAR socket)', 'USA/UK': 'high = 50 Hz picture (UK), low = 60 Hz (USA)', RAMCS: 'RAM select, through R2 (680 ohms) so a RAM pack can overrule it', ROMCS: 'ROM select, through R28 (680 ohms)' };
+function zxSideDraw(S) {
+  const c = zx.chips[S.ci], list = MEM_PINOUTS[c.part], half = list.length / 2, s = S.s;
+  const top = 26, pitch = 24, bx = 128, bw = 124, bh = half * pitch + 12;
+  s.innerHTML = ''; s.setAttribute('viewBox', `0 0 380 ${bh + 34}`); S.els = {}; S.drawn = c.part;
+  svg('rect', { class: 'body-rect', x: bx, y: top - 6, width: bw, height: bh, rx: 5 }, s);
+  svg('path', { d: `M ${bx + bw / 2 - 12} ${top - 6} a 12 12 0 0 0 24 0`, fill: 'var(--bg)' }, s);
+  const t1 = svg('text', { class: 'chiptitle', x: bx + bw / 2, y: top + bh / 2 - 8, 'text-anchor': 'middle', 'font-size': 24 }, s); t1.textContent = c.part;
+  const t2 = svg('text', { class: 'chipsub', x: bx + bw / 2, y: top + bh / 2 + 12, 'text-anchor': 'middle' }, s); t2.textContent = c.label || c.id;
+  for (const [n, name, kind] of list) {
+    const left = n <= half, idx = left ? n - 1 : list.length - n, y = top + idx * pitch + 6, sx = left ? bx - 30 : bx + bw + 4;
+    const g = svg('g', { class: 'pin' + (kind === 'i' ? ' input' : ''), 'data-pin': name }, s);
+    if (kind === 'i') { svg('rect', { x: left ? sx - 70 : sx - 4, y: y - 11, width: 104, height: 22, fill: 'transparent' }, g); svg('rect', { class: 'ring', x: sx - 3, y: y - 9, width: 32, height: 18, rx: 3 }, g); }
+    svg('rect', { class: 'stub', x: sx, y: y - 6, width: 26, height: 12, rx: 2 }, g);
+    const sv = svg('text', { class: 'sv', x: sx + 13, y: y + 0.5 }, g);
+    const num = svg('text', { class: 'num', x: left ? bx + 7 : bx + bw - 7, y, 'text-anchor': left ? 'start' : 'end' }, g); num.textContent = n;
+    const nm = svg('text', { class: 'nm', x: left ? sx - 8 : sx + 34, y, 'text-anchor': left ? 'end' : 'start' }, g);
+    if (MEM_ACTIVE_LOW.has(name) || name === 'CLK') { const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = name; } else nm.textContent = name;
+    const title = svg('title', {}, g); title.textContent = `${c.label || c.id} pin ${n}, ${name}` + (ZX_ULA_TITLE[name] ? ': ' + ZX_ULA_TITLE[name] : '') + (kind === 'i' ? '. Click for its fault menu.' : '');
+    if (kind === 'i') {
+      g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
+      g.addEventListener('click', ev => { ev.stopPropagation(); mcMenu(name, ev, S.ci, S.fig); });
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const r = g.getBoundingClientRect(); mcMenu(name, { clientX: r.left, clientY: r.top }, S.ci, S.fig); } });
+    }
+    S.els[name] = { g, sv, prev: null };
+  }
+}
+// the Z80's pins open the same fault menu as every other chip's (CLK: on a right-click, since a click pulses one clock)
+const ZX_Z80_FAULT_PINS = [...Array(16).keys()].map(n => 'A' + n).concat([...Array(8).keys()].map(n => 'D' + n), ['MREQ', 'IORQ', 'RD', 'WR', 'M1', 'HALT', 'INT', 'NMI', 'WAIT', 'BUSREQ', 'RESET']);
+let zxZ80Done = false;
+function zxZ80Faults() {
+  zxZ80Done = true; const fig = $('zxFigZ80');
+  for (const name of ZX_Z80_FAULT_PINS) {
+    const g = pinEls[name].g;
+    if (!g.querySelector('.ring')) {
+      const stub = g.querySelector('.stub'), x = +stub.getAttribute('x'), y = +stub.getAttribute('y') + 6, left = x < 128;
+      const hit = svg('rect', { x: left ? x - 70 : x - 4, y: y - 11, width: 104, height: 22, fill: 'transparent' }), ring = svg('rect', { class: 'ring', x: x - 3, y: y - 9, width: 32, height: 18, rx: 3 });
+      g.insertBefore(ring, g.firstChild); g.insertBefore(hit, g.firstChild);
+      g.classList.add('input'); g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
+    }
+    g.querySelector('title').textContent = `Z80 pin ${name}: click for its fault menu`;
+    g.addEventListener('click', ev => { ev.stopPropagation(); mcMenu(name, ev, MCCPU, fig); });
+    g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const r = g.getBoundingClientRect(); mcMenu(name, { clientX: r.left, clientY: r.top }, MCCPU, fig); } });
+  }
+  const clkPin = pinEls.CLK.g; clkPin.querySelector('title').textContent += ' Right-click for its fault menu.';
+  clkPin.addEventListener('contextmenu', ev => { ev.preventDefault(); mcMenu('CLK', ev, MCCPU, fig); });
+}
+function zxSideRender() {
+  if (!zxZ80Done && pinEls.A0) zxZ80Faults();
+  const is81 = zx.machine === 'zx81';
+  if (zxZ80Done) {
+    const zf = zx.z80c.f; for (const name of ZX_Z80_FAULT_PINS.concat(['CLK'])) { const g = pinEls[name].g, f = name in zf; g.classList.toggle('forced', f); g.classList.toggle('fz', f && zf[name] === 'z'); }
+    const fl = zx.chipFaults('CPU'), sig = zx.machine + fl.join();
+    if (zxSideRender.z !== sig) { zxSideRender.z = sig; $('zxCapZ80').innerHTML = `<b>${is81 ? 'IC3 · ' : ''}Z80A</b><br>processor, 3.25 MHz` + (fl.length ? `<br><span class="mcfaults mono">${esc(fl.join(' · '))}</span>` : ''); }
+  }
+  const S = zxSide; S.fig.hidden = !is81; $('zxPinTitle').textContent = is81 ? 'Processor and ULA' : 'Processor';
+  if (!is81) return;
+  const c = zx.chips[S.ci], B = MC.bus(); if (S.drawn !== c.part) zxSideDraw(S);
+  for (const [, name, kind] of MEM_PINOUTS[c.part]) {
+    const el = S.els[name], f = name in c.f, v = kind === 'p' ? 'p' : kind === 'g' ? 'g' : f ? c.f[name] : MC.net(c, S.ci, name, B);
+    const cls = v === 'z' || v === 'B' ? 'vz' : v === 'p' ? 'vp' : v === 'g' ? 'vg' : v && v !== 'S' ? 'v1' : 'v0', changed = el.prev !== null && el.prev !== v && v !== 'p' && v !== 'g';
+    el.g.classList.remove('v1', 'v0', 'vz', 'vp', 'vg', 'changed'); el.g.classList.add(cls); if (changed && !running) el.g.classList.add('changed');
+    el.g.classList.toggle('forced', f); el.g.classList.toggle('fz', f && c.f[name] === 'z');
+    el.sv.textContent = v === 'z' ? 'Z' : v === 'p' ? '+' : v === 'g' ? '⏚' : v; el.prev = v;
+  }
+  const fl = zx.chipFaults(c.id), sig = fl.join();
+  if (S.capSig !== sig) { S.capSig = sig; S.cap.innerHTML = `<b>IC1 · Sinclair computer logic</b><br>Ferranti ULA: clock, memory selects, keyboard, tape, NMI and video` + (fl.length ? `<br><span class="mcfaults mono">${esc(fl.join(' · '))}</span>` : ''); }
+}
 // ---------- memory chips: tiles, a live pinout of the selected chip, and pin faults ----------
 // The page supplies MC: { m (the machine: chips, acc, faulty), groups(), tile(c, i), acc(i), bus(), net(c, i, name, B) }.
 let mcSel = 0, mcEls = {}, mcDrawn = '', mcPrevAcc = null, mcSeen = null, mcTileSig = '', mcPop = null;
 const mcFaultText = v => v === 'z' ? 'disconnected' : v ? 'stuck high' : 'stuck low';
-function mcSetFault(id, pin, v) { memSetFault(MC.m, id, pin, v); disDirty = true; }
+function mcSetFault(id, pin, v) { zx.setPinFault(id, pin, v); disDirty = true; }
 function mcClosePop() { if (mcPop) { mcPop.remove(); mcPop = null; } }
-document.addEventListener('click', e => { if (mcPop && !mcPop.contains(e.target) && !e.target.closest('#mcChip .pin.input')) mcClosePop(); });
+document.addEventListener('click', e => { if (mcPop && !mcPop.contains(e.target) && !e.target.closest('.pin.input') && !e.target.closest('.mcpop')) mcClosePop(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') mcClosePop(); });
 // debug-pane entries for the faults
-function mcDebugItems() { return memFaultList(MC.m).map(([id, pin, v]) => ['mfault:' + id + ':' + pin, 'chip fault', `${MC.m.chipById[id].label || id} (${MC.m.chipById[id].part}) pin ${pin} ${mcFaultText(v)}`]); }
-function mcDebugRemove(t, v) { if (t !== 'mfault') return false; const i = v.lastIndexOf(':'); mcSetFault(v.slice(0, i), v.slice(i + 1), null); return true; }
+function mcDebugItems() { return zx.faultList().map(([id, pin, text]) => ['mfault:' + id + ':' + pin, id === 'net' ? 'line fault' : 'pin fault', text]); }
+function mcDebugRemove(t, v) { if (t !== 'mfault') return false; const i = v.indexOf(':'); mcSetFault(v.slice(0, i), v.slice(i + 1), null); return true; }
 // a DIP of any size, drawn the same way as the CPU
 function mcDraw() {
   const ch = MC.m.chips; if (mcSel >= ch.length) mcSel = 0;
@@ -2049,7 +2164,7 @@ function mcDraw() {
     const num = svg('text', { class: 'num', x: left ? bx + 7 : bx + bw - 7, y, 'text-anchor': left ? 'start' : 'end' }, g); num.textContent = n;
     const nm = svg('text', { class: 'nm', x: left ? sx - 8 : sx + 34, y, 'text-anchor': left ? 'end' : 'start' }, g);
     if (MEM_ACTIVE_LOW.has(name)) { const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = name; } else nm.textContent = name;
-    const title = svg('title', {}, g); title.textContent = kind === 'i' ? `${c.id} pin ${n}, ${name}: click to disconnect it or hold it high or low` : `${c.id} pin ${n}, ${name}`;
+    const title = svg('title', {}, g); title.textContent = kind === 'i' ? `${zx.chipName(c.id)} pin ${n}, ${name}: click for its fault menu` : `${zx.chipName(c.id)} pin ${n}, ${name}`;
     if (kind === 'i') {
       g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
       g.addEventListener('click', ev => mcMenu(name, ev));
@@ -2059,17 +2174,43 @@ function mcDraw() {
   }
   $('mcCap').innerHTML = `<b>${esc(c.label || c.id)} · ${esc(c.part)}</b><br>${esc(c.what)}<br>${esc(c.range)}`;
 }
-function mcMenu(name, ev) {
+// The fault menu of a pin. A pin on a shared line gets a tick box, "disconnected from the line (this pin only)":
+// without the tick the level buttons hold the whole line (every pin on it, on every chip); with it they set what
+// this pin alone sees. A pin with a line of its own keeps the plain choices.
+function mcMenu(name, ev, ci, host) {
   mcClosePop();
-  const c = MC.m.chips[mcSel], f = name in c.f ? c.f[name] : null, fig = $('mcFig'), r = fig.getBoundingClientRect();
-  const el = document.createElement('div'); el.className = 'mcpop';
-  el.innerHTML = `<div class="ttl">${esc(c.id)} · ${esc(name)}</div><div class="sub">${f === null ? 'normal: connected to the board' : mcFaultText(f)}</div><div class="btns">` +
-    `<button type="button" data-a="z"${f === 'z' ? ' disabled' : ''}>Disconnected</button><button type="button" data-a="1"${f === 1 ? ' disabled' : ''}>Stuck high</button><button type="button" data-a="0"${f === 0 ? ' disabled' : ''}>Stuck low</button>` +
-    (f !== null ? '<button type="button" class="primary" data-a="r">Normal</button>' : '') + '</div>';
-  fig.appendChild(el); mcPop = el;
+  const c = MC.m.chips[ci === undefined ? mcSel : ci], fig = host || $('mcFig'), r = fig.getBoundingClientRect(), key = c.id + '.' + name;
+  const net = zx.netOf(c.id, name), N = net && zx.nets()[net], shared = !!N && N.pins.length > 1, out = zx.isDriver(c.id, name);
+  const el = document.createElement('div'); el.className = 'mcpop'; fig.appendChild(el); mcPop = el;
+  const lv = v => v ? 'high' : 'low', btn = (a, label, on) => `<button type="button" data-a="${a}"${on ? ' class="primary" aria-pressed="true"' : ''}>${label}</button>`;
+  const draw = () => {
+    const own = key in zx.pinF ? zx.pinF[key] : null, line = shared && net in zx.netF ? zx.netF[net] : null, cut = own !== null;
+    let h = `<div class="ttl">${esc(zx.chipName(c.id))} · ${esc(name)}</div>`;
+    if (shared) {
+      const others = N.pins.filter(([i2, p2]) => i2 !== c.id || p2 !== name).map(([i2, p2]) => zx.chipName(i2) + ' ' + p2), ids = [...new Set(others.map(o => o.split(' ')[0]))];
+      h += `<div class="sub">${esc(N.label)}: shared with ${others.length > 4 ? ids.length + ' chips (' + esc(ids[0]) + '…' + esc(ids[ids.length - 1]) + ')' : esc(others.join(', '))}</div>`;
+      h += `<label class="cut"><input type="checkbox" data-a="cut"${cut ? ' checked' : ''}> Disconnected from the line (this pin only)</label>`;
+      if (!cut) h += `<div class="cap">Hold the whole line:</div><div class="btns">${btn('n', 'Normal', line === null)}${btn('1', 'High', line === 1)}${btn('0', 'Low', line === 0)}</div><div class="note">${line === null ? 'No fault on the line.' : `Every pin on this line sees it ${lv(line)}.`}</div>`;
+      else if (out) h += `<div class="note">This pin no longer drives the line, which floats high for the other pins${line !== null ? ' (but the line is held ' + lv(line) + ')' : ''}.</div>`;
+      else h += `<div class="cap">This pin then sees:</div><div class="btns">${btn('z', 'Floating', own === 'z')}${btn('1', 'High', own === 1)}${btn('0', 'Low', own === 0)}</div><div class="note">Only ${esc(zx.chipName(c.id))} is affected${line !== null ? '; the rest of the line is held ' + lv(line) : ''}. A floating input reads high.</div>`;
+    } else {
+      h += `<div class="sub">a line of its own on this board</div><div class="btns">${btn('n', 'Normal', own === null)}${btn('z', 'Disconnected', own === 'z')}${btn('1', 'High', own === 1)}${btn('0', 'Low', own === 0)}</div>`;
+    }
+    el.innerHTML = h;
+  };
+  const act = a => {
+    const cut = key in zx.pinF;
+    if (a === 'cut') { zx.setPinFault(c.id, name, cut ? null : 'z'); }
+    else if (!shared || cut) zx.setPinFault(c.id, name, a === 'n' ? null : a === 'z' ? 'z' : +a);
+    else zx.setNetFault(net, a === 'n' ? null : +a);
+    disDirty = true; draw(); render();
+  };
+  draw();
   el.style.left = Math.max(4, Math.min(ev.clientX - r.left, r.width - el.offsetWidth - 4)) + 'px'; el.style.top = (ev.clientY - r.top + 10) + 'px';
-  el.addEventListener('click', e2 => { e2.stopPropagation(); const a = e2.target.dataset.a; if (!a) return; mcSetFault(c.id, name, a === 'r' ? null : a === 'z' ? 'z' : +a); mcClosePop(); render(); });
-  const b0 = el.querySelector('button:not([disabled])'); if (b0) b0.focus();
+  el.addEventListener('click', e2 => { e2.stopPropagation(); const b = e2.target.closest('button'); if (b && b.dataset.a) act(b.dataset.a); });
+  el.addEventListener('change', e2 => { if (e2.target.dataset.a === 'cut') act('cut'); });
+  el.addEventListener('keydown', e2 => { if (e2.key === 'Escape') mcClosePop(); });
+  const b0 = el.querySelector('input, button'); if (b0) b0.focus();
 }
 function mcTiles() {
   const ch = MC.m.chips, groups = MC.groups();
@@ -2080,8 +2221,8 @@ function mcTiles() {
   $('mcTiles').innerHTML = groups.map(([title, idx]) => `<div><h3>${esc(title)}</h3><div class="grp">${idx.map(tile).join('')}</div></div>`).join('');
 }
 $('mcTiles').addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (!b) return; mcSel = +b.dataset.i; mcClosePop(); mcDraw(); render(); });
-$('mcClear').onclick = () => { const c = MC.m.chips[mcSel]; for (const k of Object.keys(c.f)) mcSetFault(c.id, k, null); render(); };
-$('mcClearAll').onclick = () => { memClearFaults(MC.m); disDirty = true; render(); };
+$('mcClear').onclick = () => { zx.clearChip(MC.m.chips[mcSel].id); disDirty = true; render(); };
+$('mcClearAll').onclick = () => { zx.clearFaults(); disDirty = true; render(); };
 function renderMemChips() {
   const ch = MC.m.chips; if (mcSel >= ch.length) mcSel = 0;
   if (mcDrawn !== ch[mcSel].id + '/' + ch[mcSel].part) mcDraw();
@@ -2101,10 +2242,10 @@ function renderMemChips() {
     el.g.classList.toggle('forced', f); el.g.classList.toggle('fz', f && c.f[name] === 'z');
     el.sv.textContent = v === 'z' ? 'Z' : v === 'p' ? '+' : v === 'g' ? '⏚' : v; el.prev = v;
   }
-  const fl = Object.entries(c.f), total = memFaultList(MC.m).length;
-  $('mcFaults').textContent = fl.length ? fl.map(([k, v]) => `${k} ${mcFaultText(v)}`).join(' · ') : '';
+  const fl = zx.chipFaults(c.id), total = zx.faultList().length;
+  $('mcFaults').textContent = fl.join(' · ');
   $('mcClear').disabled = !fl.length; $('mcClearAll').disabled = !total;
-  $('mcInfo').textContent = total ? `${total} pin fault${total === 1 ? '' : 's'} set` : 'live pins · click a pin to disconnect it or hold it high or low';
+  $('mcInfo').textContent = total ? `${total} fault${total === 1 ? '' : 's'} set` : 'live pins · click a pin for its fault menu';
 }
 mcDraw();
 var mcReady = true;      // (var: render can run before this point)

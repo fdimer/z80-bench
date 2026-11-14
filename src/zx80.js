@@ -76,6 +76,30 @@ function zx81Text(v) {
 }
 const ZX_CYC_T = { M1: 4, MR: 3, MW: 3, IR: 4, IW: 4, IA: 6 };
 
+// ---- the ZX81's ULA (IC1) and the Z80 as chips with pins ----
+// The ULA's pinout is read from Sinclair's circuit diagram SRC 049. Ferranti published no data sheet, so what the chip does
+// with its pins is a model of its behaviour: the ZX80's video logic in one package, plus the NMI generator.
+// A0'-A8' are the ROM and RAM side of the 1K resistors R18-R26 (the ULA drives them during a refresh cycle to pick a
+// character's row in the ROM); D0-D7 are the Z80's side of the 470 ohm resistors R7-R14 (the ULA pulls them low to feed
+// the Z80 a NOP, and puts the keyboard on them for a port read). Pin 14 clocks the Z80 through TR2.
+const ZX_ULA_PINS = [[1, "A7'"], [2, "A8'"], [3, "A2'"], [4, "A1'"], [5, "A0'"], [6, 'RD'], [7, 'IORQ'], [8, 'WR'], [9, 'MREQ'], [10, 'M1'], [11, 'A14'], [12, 'RAMCS'], [13, 'ROMCS'], [14, 'CLK'], [15, 'NMI'],
+  [16, 'TV/TAPE'], [17, 'HALT'], [18, 'A15'], [19, 'D7'], [20, 'TAPE IN'], [21, 'D6'], [22, 'USA/UK'], [23, 'D5'], [24, 'D4'], [25, 'KBD4'], [26, 'D3'], [27, 'KBD3'], [28, 'D2'], [29, 'KBD2'], [30, 'D1'],
+  [31, 'KBD1'], [32, 'D0'], [33, 'KBD0'], [34, '0V', 'g'], [35, 'OSC'], [36, "A3'"], [37, "A4'"], [38, "A5'"], [39, "A6'"], [40, '+5V', 'p']].map(([n, name, k]) => [n, name, k || 'i']);
+const ZX_Z80_PINS = [[1, 'A11'], [2, 'A12'], [3, 'A13'], [4, 'A14'], [5, 'A15'], [6, 'CLK'], [7, 'D4'], [8, 'D3'], [9, 'D5'], [10, 'D6'], [11, '+5V', 'p'], [12, 'D2'], [13, 'D7'], [14, 'D0'], [15, 'D1'],
+  [16, 'INT'], [17, 'NMI'], [18, 'HALT'], [19, 'MREQ'], [20, 'IORQ'], [21, 'RD'], [22, 'WR'], [23, 'BUSACK', 'o'], [24, 'WAIT'], [25, 'BUSREQ'], [26, 'RESET'], [27, 'M1'], [28, 'RFSH', 'o'], [29, 'GND', 'g'],
+  ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => [30 + n, 'A' + n])].map(([n, name, k]) => [n, name, k || 'i']);
+if (typeof MEM_PINOUTS !== 'undefined') { MEM_PINOUTS.ULA = ZX_ULA_PINS; MEM_PINOUTS.Z80 = ZX_Z80_PINS; for (const n of ['RAMCS', 'ROMCS', 'NMI', 'HALT', 'MREQ', 'IORQ', 'RD', 'WR', 'M1']) MEM_ACTIVE_LOW.add(n); }
+// A chip that is not memory, with pin faults in the same shape as a MemChip: f[pin] is 'z' (disconnected), 0 or 1.
+// lv[pin] is the level a faulty pin sits at (a disconnected pin floats high); undefined = no fault.
+class ZXChip {
+  constructor(id, part, what, range, extra) { Object.assign(this, { id, part, what, range, f: {} }, extra || {}); this.recalc(); }
+  setFault(pin, v) { if (v === null || v === undefined) delete this.f[pin]; else this.f[pin] = v; this.recalc(); }
+  recalc() {
+    this.lv = {}; let n = 0, dAnd = 0xFF, dOr = 0, m;
+    for (const k in this.f) { n++; const v = this.lv[k] = this.f[k] === 'z' ? 1 : this.f[k]; if ((m = /^D(\d)$/.exec(k))) { if (v) dOr |= 1 << +m[1]; else dAnd &= ~(1 << +m[1]); } }
+    Object.assign(this, { dAnd, dOr, faulty: n > 0 });
+  }
+}
 class ZX80 {
   constructor(rom, machine) {
     this.rom = new Uint8Array(0x2000); if (rom) this.rom.set(rom.subarray(0, 0x2000));
@@ -97,6 +121,12 @@ class ZX80 {
     this.packs = [0, 1, 2].map(k => [0, 1, 2, 3, 4, 5, 6, 7].map(bit => C(`PACK${k + 1}.D${bit}`, '4116', `RAM pack: ${k ? ['', 'second', 'third'][k] + ' 16K' : '16K'}, data bit ${bit}`, `${(0x4000 + k * 0x4000).toString(16).toUpperCase()}h-${(0x7FFF + k * 0x4000).toString(16).toUpperCase()}h`, this.ram, k * 0x4000, 14, { dram: true, bit, mux: 7, pack: k })));
     this.chips = [...this.romChips, ...this.ram1k, ...this.packs[0], ...this.packs[1], ...this.packs[2], ...this.ram2k];   // the 2K chip is last so the other indexes stay put
     this.banks = [[this.romChips[0]], [this.romChips[1]], this.ram1k, ...this.packs, this.ram2k];
+    // the ULA and the Z80, last so the other indexes stay put. Faults are kept as lines held at a level (netF) and
+    // pins disconnected from their line (pinF); applyFaults() turns the two into each chip's own fault table.
+    this.ulaC = new ZXChip('ULA', 'ULA', 'Sinclair computer logic (Ferranti ULA): clock, memory selects, keyboard, tape, NMI and video', 'ports with A0 low (read: keyboard; write: NMI on) and A1 low (write: NMI off)', { label: 'IC1' });
+    this.z80c = new ZXChip('CPU', 'Z80', 'processor', 'address, data and control lines', { label: 'IC3' });
+    this.chips.push(this.ulaC, this.z80c);
+    this.pinF = {}; this.netF = {}; this.uv = {}; this.fx = false; this.heldWhy = null;
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
     this.acc = new Uint32Array(5);             // accesses: 0 the ROM, 1 the built-in RAM (1K or 2K), 2-4 the RAM pack's 16K banks
     this.faulty = false;
@@ -110,6 +140,13 @@ class ZX80 {
     };
     this.cpu = new Z80(this.bus);
     this.cpu.intVector = 0xFF;
+    // a held processor (no clock, or RESET, BUSREQ or WAIT low at its pin) does nothing for four clocks at a time
+    const run = this.cpu.step.bind(this.cpu);
+    this.cpu.step = () => {
+      const why = this.heldWhy; if (!why) { this.zr = false; return run(); }
+      if (!this.zr && this.z80c.lv.RESET === 0) { this.cpu.reset(); this.zr = true; }     // held in reset by its own pin
+      this.cpu.lastEvent = null; return [{ k: 'ID', n: 4, held: why }];
+    };
     this.tape = null; this.onTape = () => {};
     this.reset();
   }
@@ -118,6 +155,115 @@ class ZX80 {
     this.rom8k = m !== 'zx80';          // ZX81 BASIC in an 8K ROM
     this.ula = m === 'zx81';            // NMI generator, free-running sync
     this.romMask = this.rom8k ? 0x1FFF : 0x0FFF;
+    if (this.pinF) this.applyFaults();
+  }
+  // ---- lines and faults ----
+  // Which pins share a line on the ZX81 board, for the memory fitted now. d: the pin that drives the line (index into
+  // pins), or -1 when several pins drive it in turn. The ZX80 (discrete logic, no diagram filed) and the RAM pack's
+  // chips have no lines here: each of their pins counts as a line of its own.
+  nets() {
+    const sig = this.machine + this.ramSize; if (this.netSig === sig) return this.NETS;
+    const N = {}, U = 'ULA', Z = 'CPU';
+    if (this.machine === 'zx81') {
+      const rom = 'IC2-8K', ram = this.ramSize <= 0x400 ? ['IC3', 'IC4'] : this.ramSize < 0x4000 ? ['IC4-2K'] : [], one = ram.length === 1;
+      for (let n = 0; n < 16; n++) {
+        const pins = [[Z, 'A' + n]];
+        if (n === 6) pins.push([Z, 'INT']);                                   // the Z80's INT pin is wired to A6
+        if (n >= 9 && n <= 12) pins.push([rom, 'A' + n]);
+        if (n === 9 || n === 10 && one) for (const r of ram) pins.push([r, 'A' + n]);
+        if (n >= 14) pins.push([U, 'A' + n]);
+        N['A' + n] = { label: n < 9 ? `address line A${n} at the Z80` + (n === 6 ? ' (also its INT pin)' : '') : `address line A${n}`, d: 0, pins };
+        if (n < 9) N[`A${n}'`] = { label: `address line A${n}' (the ROM, RAM and ULA side of the 1K resistor)`, d: -1, pins: [[U, `A${n}'`], [rom, 'A' + n], ...ram.map(r => [r, 'A' + n])] };
+      }
+      for (let n = 0; n < 8; n++) {
+        N['D' + n] = { label: `data line D${n} (the Z80 and ULA side of the 470 ohm resistor)`, d: -1, pins: [[Z, 'D' + n], [U, 'D' + n]] };
+        N[`D${n}'`] = { label: `data line D${n}' (the ROM and RAM side)`, d: -1, pins: [[rom, 'D' + n], ...(one ? [[ram[0], 'D' + n]] : ram.length ? [[ram[n >> 2], 'I/O' + ((n & 3) + 1)]] : [])] };
+      }
+      for (const k of ['MREQ', 'IORQ', 'RD', 'M1', 'HALT']) N[k] = { label: k + ' line', d: 0, pins: [[Z, k], [U, k]] };
+      N.WR = { label: 'WR line', d: 0, pins: [[Z, 'WR'], [U, 'WR'], ...ram.map(r => [r, 'WE'])] };
+      N.NMI = { label: 'NMI line', d: 0, pins: [[U, 'NMI'], [Z, 'NMI']] };
+      N.CLK = { label: 'clock from the ULA to the Z80 (through TR2)', d: 0, pins: [[U, 'CLK'], [Z, 'CLK']] };
+      N.ROMCS = { label: 'ROM select ROMCS', d: 0, pins: [[U, 'ROMCS'], [rom, 'CS']] };
+      N.RAMCS = { label: 'RAM select RAMCS', d: 0, pins: [[U, 'RAMCS'], ...(one ? [[ram[0], 'CE'], [ram[0], 'OE']] : ram.map(r => [r, 'CS']))] };
+    }
+    const O = {}; for (const k in N) for (const [id, pin] of N[k].pins) O[id + '.' + pin] = k;
+    this.NETS = N; this.NET_OF = O; this.netSig = sig; return N;
+  }
+  netOf(id, pin) { this.nets(); return this.NET_OF[id + '.' + pin] || null; }
+  isDriver(id, pin) { const n = this.nets()[this.netOf(id, pin)]; return !!n && n.d >= 0 && n.pins[n.d][0] === id && n.pins[n.d][1] === pin; }
+  chipName(id) { return id === 'IC2-8K' ? 'IC2' : this.machine === 'zx81' && id === 'IC3' ? 'IC4a' : this.machine === 'zx81' && id === 'IC4' ? 'IC4b' : this.machine !== 'zx81' && id === 'CPU' ? 'Z80' : this.chipById[id].label || id; }
+  // v: 'z' disconnected from its line (floating), 0 or 1 disconnected and at that level, null to reconnect. id 'net' sets a line.
+  setPinFault(id, pin, v) { if (id === 'net') return this.setNetFault(pin, v); const k = id + '.' + pin; if (v === null || v === undefined) delete this.pinF[k]; else this.pinF[k] = v; this.applyFaults(); }
+  // a whole line held at 0 or 1 (null to release it)
+  setNetFault(net, v) { if (v === null || v === undefined) delete this.netF[net]; else this.netF[net] = v; this.applyFaults(); }
+  clearFaults() { this.pinF = {}; this.netF = {}; this.applyFaults(); }
+  // one chip back to normal: its disconnected pins, and (unless pinsOnly) the held lines its pins are on
+  clearChip(id, pinsOnly) {
+    const N = this.nets();
+    for (const k of Object.keys(this.pinF)) if (k.startsWith(id + '.')) delete this.pinF[k];
+    if (!pinsOnly) for (const net of Object.keys(this.netF)) if (!N[net] || N[net].pins.some(p => p[0] === id)) delete this.netF[net];
+    this.applyFaults();
+  }
+  applyFaults() {
+    const N = this.nets(), O = this.NET_OF, f = {}; for (const c of this.chips) f[c.id] = {};
+    for (const net in this.netF) if (N[net]) for (const [id, pin] of N[net].pins) f[id][pin] = this.netF[net];
+    for (const k in this.pinF) {                                                 // an output cut off from its line: the pins that listen see the line float, or the level
+      const i = k.indexOf('.'), id = k.slice(0, i), pin = k.slice(i + 1), net = O[k], L = net && N[net];
+      if (L && !(net in this.netF) && L.d >= 0 && L.pins[L.d][0] === id && L.pins[L.d][1] === pin) for (const [i2, p2] of L.pins) if (i2 !== id || p2 !== pin) f[i2][p2] = this.pinF[k];
+    }
+    for (const k in this.pinF) { const i = k.indexOf('.'); if (f[k.slice(0, i)]) f[k.slice(0, i)][k.slice(i + 1)] = this.pinF[k]; }
+    if (this.machine !== 'zx81') f.ULA = {};                                     // no ULA on a ZX80
+    for (const c of this.chips) { c.f = f[c.id]; c.recalc(); }
+    for (const b of this.banks) memBankFlag(b);
+    this.faulty = this.chips.some(c => c.faulty);
+    this.refault();
+  }
+  // the faults as set, for lists: [id, pin, text]; a line has id 'net'
+  faultList() {
+    const N = this.nets(), out = [];
+    for (const net in this.netF) if (N[net]) out.push(['net', net, `${N[net].label} held ${this.netF[net] ? 'high' : 'low'} (${N[net].pins.length} pin${N[net].pins.length === 1 ? '' : 's'})`]);
+    for (const k in this.pinF) {
+      const i = k.indexOf('.'), id = k.slice(0, i), pin = k.slice(i + 1), v = this.pinF[k], shared = this.NET_OF[k] && N[this.NET_OF[k]].pins.length > 1;
+      if (id === 'ULA' && this.machine !== 'zx81') continue;
+      out.push([id, pin, `${this.chipName(id)} pin ${pin} ${shared ? 'disconnected from its line' + (v === 'z' ? '' : v ? ', at high' : ', at low') : v === 'z' ? 'disconnected' : v ? 'stuck high' : 'stuck low'}`]);
+    }
+    return out;
+  }
+  // the same for one chip's caption
+  chipFaults(id) {
+    const N = this.nets(), out = [];
+    for (const k in this.pinF) if (k.startsWith(id + '.')) { const v = this.pinF[k], shared = this.NET_OF[k] && N[this.NET_OF[k]].pins.length > 1; out.push(k.slice(id.length + 1) + (shared ? (v === 'z' ? ' disconnected' : v ? ' disconnected, high' : ' disconnected, low') : v === 'z' ? ' disconnected' : v ? ' stuck high' : ' stuck low')); }
+    for (const net in this.netF) if (N[net]) for (const [i2, pin] of N[net].pins) if (i2 === id && !((id + '.' + pin) in this.pinF)) out.push(`${pin}: line held ${this.netF[net] ? 'high' : 'low'}`);
+    return out;
+  }
+  // Faults changed: work out what they mean for the buses and for the ULA.
+  //   the Z80's pins: an address or data pin at a level changes the bus for everything; INT, NMI, WAIT, RESET, BUSREQ and CLK act on the Z80
+  //   uv: the levels the ULA sees on its faulty pins (its own, and those of the lines they are on)
+  refault() {
+    const z = this.z80c.lv, u = this.uv = this.machine === 'zx81' ? this.ulaC.lv : {}; let aAnd = 0xFFFF, aOr = 0, m, cutD = 0, cutA = 0;
+    for (const k in z) if ((m = /^A(\d+)$/.exec(k))) { if (z[k]) aOr |= 1 << +m[1]; else aAnd &= ~(1 << +m[1]); }
+    if (this.machine === 'zx81') for (const k in this.pinF) { if ((m = /^ULA\.D(\d)$/.exec(k))) cutD |= 1 << +m[1]; else if ((m = /^ULA\.A(\d)'$/.exec(k))) cutA |= 1 << +m[1]; }
+    const uf = Object.keys(u).length > 0;
+    Object.assign(this, { bAAnd: aAnd, bAOr: aOr, bDAnd: this.z80c.dAnd, bDOr: this.z80c.dOr, busF: this.z80c.faulty, uCutD: cutD, uCutA: cutA,
+      uDAnd: uf ? this.ulaC.dAnd : 0xFF, uDOr: uf ? this.ulaC.dOr : 0, fx: this.z80c.faulty || uf,
+      memDead: z.MREQ === 1, wrDead: z.WR === 1, nmiCut: z.NMI !== undefined, ackLost: u.IORQ === 1 || u.M1 === 1,
+      oscDead: 'OSC' in u, tvDead: 'TV/TAPE' in u || 'OSC' in u });
+    this.heldWhy = 'OSC' in u ? 'no clock: the ULA\'s oscillator is stopped' : 'CLK' in u ? 'no clock: the ULA\'s clock does not reach the Z80' : 'CLK' in z ? 'no clock at the Z80\'s CLK pin'
+      : z.RESET === 0 ? 'RESET is low at the Z80: it is held in reset' : z.BUSREQ === 0 ? 'BUSREQ is low at the Z80: it has released the bus' : z.WAIT === 0 ? 'WAIT is low at the Z80: it waits' : null;
+    if (z.NMI === 0 && !this.nmiLow) this.cpu.nmiPending = true;                 // the pin going low is one falling edge
+    this.nmiLow = z.NMI === 0;
+  }
+  held() { return this.heldWhy; }
+  // an address or data byte as it stands on the Z80's side of the bus
+  busA(a) { return this.busF ? a & this.bAAnd | this.bAOr : a; }
+  busD(v) { return this.busF ? v & this.bDAnd | this.bDOr : v; }
+  // Does the ULA take the byte of this opcode fetch as a character? It does when it sees A15 high, M1 low, HALT high
+  // and bit 6 of the data low. Returns the byte as the ULA reads it on its data pins, or -1.
+  ulaChar(a, halted) {
+    const u = this.uv, A = this.busA(a);
+    if (!(u.A15 !== undefined ? u.A15 : A >> 15) || u.M1 === 1 || u.HALT === 0 || halted && u.HALT !== 1) return -1;
+    const d = this.mreadF(a, true, true) & this.uDAnd | this.uDOr;
+    return d & 0x40 ? -1 : d;
   }
   reset() {
     this.cpu.reset();
@@ -157,13 +303,37 @@ class ZX80 {
     const r = this.romChips[this.rom8k ? 1 : 0];
     return this.faulty && r.faulty ? memBankRead([r], o, quiet) : this.rom[o];
   }
-  read(a, m1, quiet) {
+  // read: what the Z80 gets. mread: the board with no faults on the Z80's or the ULA's pins (chip faults included).
+  read(a, m1, quiet) { return this.fx ? this.busD(this.mreadF(a, m1, quiet)) : this.mread(a, m1, quiet); }
+  // with faults: the address as it leaves the Z80, and the ROM and the built-in RAM selected by what the ULA sees on
+  // MREQ and A14. A RAM pack decodes the address itself and is not misled; an unselected bus reads FFh (pull-ups).
+  mreadF(a, m1, quiet) {
+    const A = this.busA(a), u = this.uv;
+    if (this.memDead) return 0xFF;
+    const dead = u.MREQ === 1;
+    if (!dead && u.A14 === undefined) return this.mread(A, m1, quiet);
+    const i = this.ramAt(A, m1), low = i < 0 && this.hires && (A & 0x7FFF) >= 0x2000 && (A & 0x7FFF) < 0x4000;
+    if (low) return this.lowRam[(A & 0x7FFF) - 0x2000];
+    if (this.ramSize >= 0x4000) {
+      if (i >= 0) { const v = this.ramGet(i, quiet); return !dead && !u.A14 ? v & this.romGet(A & this.romMask, true) : v; }
+      return dead || u.A14 ? 0xFF : this.romGet(A & this.romMask, quiet);
+    }
+    if (dead) return 0xFF;
+    return u.A14 ? this.ramGet(A & (this.ramSize - 1), quiet) : this.romGet(A & this.romMask, quiet);
+  }
+  mread(a, m1, quiet) {
     const i = this.ramAt(a, m1); if (i >= 0) return this.ramGet(i, quiet);
     a &= 0x7FFF;
     return this.hires && a >= 0x2000 ? this.lowRam[a - 0x2000] : this.romGet(a & this.romMask, quiet);
   }
   peek(a) { return this.read(a, false, true); }
   write(a, v) {
+    if (this.fx) {
+      if (this.memDead || this.wrDead) return;
+      a = this.busA(a); v = this.busD(v);
+      const u = this.uv;
+      if (this.ramSize < 0x4000 && (u.MREQ === 1 || u.A14 !== undefined)) { if (u.MREQ === 1 || !u.A14) return; a = 0x4000 | a & 0x3FFF; }
+    }
     const i = this.ramAt(a, false);
     if (i >= 0) { this.acc[this.ramSize < 0x4000 ? 1 : 2 + (i >> 14)]++; const bank = this.faulty ? this.ramBank(i) : null; if (bank && bank.faulty) memBankWrite(bank, i & 0x3FFF, v); else this.ram[i] = v; return; }
     a &= 0x7FFF; if (this.hires && a >= 0x2000) this.lowRam[a - 0x2000] = v;
@@ -178,12 +348,26 @@ class ZX80 {
   }
   // opcode fetch: above 8000h a byte with bit 6 clear is a character; the CPU is given a NOP
   fetch(a) {
+    if (this.fx) {                        // with faults: what the ULA sees decides, and it can only pull down the data pins it still has
+      const ch = this.ulaChar(a, false); if (ch < 0) return this.read(a, true);
+      this.latch = ch; this.acc[this.ramAt(this.busA(a), true) >= 0 ? (this.ramSize < 0x4000 ? 1 : 2) : 0]++;
+      return this.busD(this.mreadF(a, true, true) & this.uCutD);
+    }
     const v = this.read(a, true);
     if ((a & 0x8000) && !(v & 0x40)) { this.latch = v; return 0x00; }
     return v;
   }
   // ---- I/O: only A0 is decoded ----
   input(p) {
+    if (this.fx) {                        // the ULA answers when it sees IORQ, RD and A0' low; a data pin it has lost floats high
+      const u = this.uv; p = this.busA(p);
+      if (u.IORQ === 1 || u.RD === 1 || (u["A0'"] !== undefined ? u["A0'"] : p & 1)) return this.busD(0xFF);
+      if (!this.vsync && !(this.ula && this.nmiGen)) { this.vsync = true; this.vsyncStart = this.t; }
+      let d = 0x1F; for (let r = 0; r < 8; r++) if (!(p & (0x100 << r))) d &= ~this.keys[r];
+      for (let n = 0; n < 5; n++) if (u['KBD' + n] !== undefined) d = u['KBD' + n] ? d | 1 << n : d & ~(1 << n);
+      const tape = u['TAPE IN'] !== undefined ? u['TAPE IN'] : this.rom8k ? 0 : 1;
+      return this.busD(d | 0x20 | (u['USA/UK'] === 0 ? 0 : 0x40) | tape << 7 | this.uCutD);
+    }
     if (p & 1) return 0xFF;
     if (!this.vsync && !(this.ula && this.nmiGen)) { this.vsync = true; this.vsyncStart = this.t; }   // a read with A0 low starts vertical sync (not while the ZX81's NMIs run)
     let d = 0x1F;
@@ -193,6 +377,10 @@ class ZX80 {
     return (d & 0x1F) | 0x60 | (this.rom8k ? 0 : 0x80);
   }
   output(p) {
+    if (this.fx) {                        // the ULA acts when it sees IORQ and WR low, on what it sees on A0' and A1'
+      const u = this.uv; if (u.IORQ === 1 || u.WR === 1) return;
+      p = this.busA(p); for (const n of [0, 1]) if (u[`A${n}'`] !== undefined) p = u[`A${n}'`] ? p | 1 << n : p & ~(1 << n);
+    }
     if (this.ula) {                       // ZX81: A0 low (OUT FEh) starts the NMI generator, A1 low (OUT FDh) stops it
       if (!(p & 1)) { if (!this.nmiGen) { this.nmiGen = true; if (this.nextH === Infinity) this.nextH = this.t + ZX.LINE_T; } }
       else if (!(p & 2)) this.nmiGen = false;
@@ -219,21 +407,24 @@ class ZX80 {
   }
   // ZX81: the ULA's horizontal syncs, every 207 T-states; each one is an NMI while the generator is on
   hsyncs() {
+    if (this.oscDead) { while (this.nextH <= this.t) this.nextH += ZX.LINE_T; return; }     // no oscillator: no sync, no NMI
     while (this.nextH <= this.t) {
       this.newLine(this.nextH + ZX.HSYNC_LEN);
-      if (this.nmiGen) { this.cpu.nmiPending = true; this.nmis++; }
+      if (this.nmiGen && !this.nmiCut) { this.cpu.nmiPending = true; this.nmis++; }
+      if (this.ackLost) this.lcntr = (this.lcntr + 1) & 7;
       this.nextH += ZX.LINE_T;
     }
   }
   // ZX81 /WAIT: an NMI arriving while the CPU is halted is taken exactly at the sync, not at the end of a HALT cycle
   waitSync() {
-    if (this.ula && this.nmiGen && this.cpu.halted && !this.cpu.nmiPending && this.nextH < this.t + 4) { this.t = Math.max(this.t, this.nextH); this.hsyncs(); }
+    if (this.z80c.lv.WAIT === undefined && this.ula && this.nmiGen && this.cpu.halted && !this.cpu.nmiPending && this.nextH < this.t + 4) { this.t = Math.max(this.t, this.nextH); this.hsyncs(); }
   }
   preStep() { this.tapeTrap(); this.waitSync(); }
   freeRun() {   // without horizontal sync the TV's own oscillator starts new lines
     while (this.t - this.lineStart > ZX.LINE_T * 1.25) this.newLine(this.lineStart + ZX.LINE_T);
   }
   plot(at, bits) {
+    if (this.tvDead) return;
     const x0 = (at - this.lineStart) * 2;
     if (this.line < 0 || this.line >= ZX.H || x0 < 0 || x0 + 8 > ZX.W) return;
     const o = this.line * ZX.W + x0;
@@ -352,31 +543,36 @@ class ZX80 {
     return out.join('\n') + '\n';
   }
   // ---- per instruction: interrupts, video, sync ----
-  syncInt() { this.cpu.intLine = this.intLevel; }
+  syncInt() { const i = this.z80c.lv.INT; this.cpu.intLine = i !== undefined ? i === 0 : this.intLevel; }
   afterStep(cyc) {
     const t0 = this.t; let off = 0, last = null;
     for (const c of cyc) {
       const n = ZX_CYC_T[c.k] || c.n || 0;
-      if (c.k === 'M1' && !c.halt && (c.a & 0x8000) && c.d === 0x00) {
-        const v = this.read(c.a, true);
-        if (!(v & 0x40)) {   // a character: font byte from I:R with the character code and line counter
-          const fa = (c.rf & 0xFE00) | ((v & 0x3F) << 3) | this.lcntr, hr = this.refreshRam(c.rf);
+      c.t0 = t0 + off;                    // when the cycle began, for the clock-by-clock view
+      if (this.fx ? c.k === 'M1' : c.k === 'M1' && !c.halt && (c.a & 0x8000) && c.d === 0x00) {
+        const v = this.fx ? this.ulaChar(c.a, c.halt) : this.read(c.a, true);
+        if (v >= 0 && !(v & 0x40)) {   // a character: font byte from I:R with the character code and line counter
+          let rf = c.rf, fa = (rf & 0xFE00) | ((v & 0x3F) << 3) | this.lcntr;
+          if (this.fx) { rf = this.busA(rf); fa = (rf & 0xFE00) | (fa & ~this.uCutA | rf & this.uCutA) & 0x1FF; }   // an address pin the ULA has lost keeps the refresh address
+          const hr = this.refreshRam(rf);
           let bits = hr >= 0 ? hr : fa & 0x4000 ? 0 : this.romGet(fa & this.romMask, true);
+          if (this.fx) bits = bits & this.uDAnd | this.uDOr;
           if (hr >= 0) this.hiresBytes++;
           if (v & 0x80) bits ^= 0xFF;
-          this.plot(t0 + off + 4, bits); this.lastChar = v;
+          this.plot(t0 + off + 4, bits); this.lastChar = v; c.ch = v; c.fa = fa;
         }
       }
       off += n; last = c;
     }
     this.t = t0 + off;
-    if (this.cpu.lastEvent === 'INT') {   // acknowledge: next character row line, then horizontal sync
+    if (this.cpu.lastEvent === 'INT' && this.ackLost) { if (this.nextH === Infinity) this.nextH = t0 + ZX.LINE_T; }      // the ULA misses the acknowledge: its sync counter runs free
+    else if (this.cpu.lastEvent === 'INT') {   // acknowledge: next character row line, then horizontal sync
       this.lcntr = (this.lcntr + 1) & 7;
       if (this.ula) this.nextH = t0 + ZX.HSYNC_DELAY;          // ZX81: the acknowledge re-phases the ULA's sync counter
       else this.newLine(t0 + ZX.HSYNC_DELAY + ZX.HSYNC_LEN);
     }
     if (this.ula) this.hsyncs();
-    this.intLevel = !!(last && last.k === 'M1' && !(last.rf & 0x40));
+    this.intLevel = !!(last && last.k === 'M1' && !(this.busA(last.rf) & 0x40));
     this.freeRun();
   }
   step() {
@@ -387,6 +583,8 @@ class ZX80 {
     return t;
   }
   run(tStates) { let t = 0; while (t < tStates) t += this.step(); return t; }
+  // is the ULA's horizontal sync pulse on at T-state at? (ZX81; worked out from the next pulse, so approximate just after an interrupt acknowledge)
+  hsyncAt(at) { if (!this.ula || this.oscDead || !isFinite(this.nextH)) return false; let d = (at - this.nextH) % ZX.LINE_T; if (d < 0) d += ZX.LINE_T; return d < ZX.HSYNC_LEN; }
   beam() { return { line: this.line, x: Math.max(0, (this.t - this.lineStart) * 2) }; }
 }
-if (typeof module !== 'undefined') module.exports = { ZX80, ZX, ZX_KEYS, ZX_TOKENS, zxText, ZX81_TOKENS, zx81Text };
+if (typeof module !== 'undefined') module.exports = { ZX80, ZXChip, ZX_ULA_PINS, ZX, ZX_KEYS, ZX_TOKENS, zxText, ZX81_TOKENS, zx81Text };
