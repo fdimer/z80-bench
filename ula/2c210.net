@@ -140,41 +140,42 @@ vor     or2      N.VIDEO?       Q8 Q32        @13AX  (to be confirmed)
 
 # ---- line counter Q21-Q28 (rows 4-6, columns AN-BB): ripple toggle stages, each clocked on the falling edge of
 # the previous stage's true output; all reset together by CRES (row 6.5). Inverted outputs marked n.
-Q21     tff      Q21 Q21n       ~CCLK CRES    @5AN   clock source to be traced (rows 6-8, columns AL-AN: two inverter pairs)
-Q22     tff      Q22 Q22n       ~Q21 CRES     @5AQ
-Q23     tff      Q23 Q23n       ~Q22 CRES     @5AS
-Q24     tff      Q24 Q24n       ~Q23 CRES     @5AV
-Q25     tff      Q25 Q25n       ~Q24 CRES     @5AX
-Q26     tff      Q26 Q26n       ~Q25 CRES     @5AZ
-Q27     tff      Q27 Q27n       ~Q26 CRES     @5BB
-Q28     tff      Q28 Q28n       ~Q27 CRES     @5BD
+Q21     tff      Q21 Q21n       ~CCLK CRES    @5AN   clock source to be traced (rows 6-8, columns AL-AN: two inverter pairs)  ok210
+Q22     tff      Q22 Q22n       ~Q21 CRES     @5AQ  ok210
+Q23     tff      Q23 Q23n       ~Q22 CRES     @5AS  ok210
+Q24     tff      Q24 Q24n       ~Q23 CRES     @5AV  ok210
+Q25     tff      Q25 Q25n       ~Q24 CRES     @5AX  ok210
+Q26     tff      Q26 Q26n       ~Q25 CRES     @5AZ  ok210
+Q27     tff      Q27 Q27n       ~Q26 CRES     @5BB  ok210
+Q28     tff      Q28 Q28n       ~Q27 CRES     @5BD  ok210
 # count 207 = Q28 Q27 Q24 Q23 Q22 Q21 high, Q26 Q25 low: the 8-input NOR goes high and resets the counter,
 # so a line is 207 counts (checked against the known 207 T-state line).
-c207    nor8     T207           Q28n Q27n Q26 Q25 Q21n Q22n Q23n Q24n   @8BB
+c207    nor8     T207           Q28n Q27n Q26 Q25 Q21n Q22n Q23n Q24n   @8BB  ok210
 # CRES from T207: path rows 8-10, column BE, to be traced
-LS      nor4     LINE-SYNC      Q25n Q26 Q27 Q28   @3BE   high for counts 16-31: 16 counts of horizontal sync
+LS      nor4     LINE-SYNC      Q25n Q26 Q27 Q28   @3BE   high for counts 16-31: 16 counts of horizontal sync  ok210
 
 # ---- NMI, sync and clock outputs (rows 2-10, columns BE-BJ) ----
-nm1     inv      n_5BG          LINE-SYNC     @5BG
-nm2     nor2     n_5BI          n_5BG NMIOFF  @5BI   NMIOFF from the NMI flip-flop (row 7, to be traced)
-nm3     inv      n_5BL          n_5BI         @5BL
-nm4     pin_oc   N.NMI          n_5BL         @5BN   PN15, 5K pull-up to VCC on chip
-fs1     nor2     SYNCn          LINE-SYNC FRAME-SYNC   @8BG
-fs2     inv      N.SYNC         SYNCn         @8BJ   R/2
-tv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BL   PN16, "3 level output" (circuit not on this drawing)
-ck1     inv      n_2BH          CLKSRC        @2BH   R/2; CLKSRC: the long line at row 2 (to be traced to Q19)
-ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output
+nm1     inv      n_5BG          LINE-SYNC     @5BG  ok210
+nm2     nor2     n_5BI          n_5BG NMIOFF  @5BI   NMIOFF from the NMI flip-flop (row 7, to be traced)  ok210
+nm3     inv      n_5BL          n_5BI         @5BL  ok210
+nm4     pin_oc   N.NMI          n_5BL         @5BN   PN15, 5K pull-up to VCC on chip  ok210
+fs1     nor2     SYNCn          LINE-SYNC FRAME-SYNC   @8BG  ok210
+fs2     inv      N.SYNC         SYNCn         @8BJ   R/2  ok210
+tv      out3     TV/TAPE        N.SYNC N.VIDEO   @10BL   PN16, "3 level output" (circuit not on this drawing)  ok210
+ck1     inv      n_2BH          CLKSRC        @2BH   R/2; CLKSRC: the long line at row 2 (to be traced to Q19)  ok210
+ck2     pin_tp   N.PHI          n_2BH         @2BL   PN14, totem-pole output  ok210
 
 # ---- clock: oscillator, Q19, the counter clock (rows 17-25, columns N-AL) ----
 oscb    inv      OSCn           OSC           @21E   inverter after the oscillator cell and a cross-under
 Q19     tff      Q19 Q19n       ~OSCn VCC     @21R   R/2 cell; no reset drawn (to be confirmed); Q19 = 3.25 MHz
 # CLKSRC (the line that goes up column AK to row 2 and right to the N.PHI output) is Q19's true output (row 21).
 alias   CLKSRC   Q19
-cc1     inv      n_cc1          Q19           @9AL   four inverters in series delay Q19 into the counter clock
-cc2     inv      n_cc2          n_cc1         @9AN
-cc3     inv      n_cc3          n_cc2         @8AN
-cc4     inv      CCLK           n_cc3         @8AL
-cr      inv      CRES           CRESn         @11AT  R/3; CRESn from the right (to be traced: includes T207)
+cc1     inv      n_cc1          Q19           @9AL   four inverters in series delay Q19 into the counter clock  ok210
+cc2     inv      n_cc2          n_cc1         @9AN  ok210
+cc3     inv      n_cc3          n_cc2         @8AN  ok210
+cc4     inv      CCLK           n_cc3         @8AL  ok210
+cr      inv      CRES           CRESn         @11AT  R/3
+crn     nor2     CRESn          T207 CRX      @11AW  ok210; drawn pointing left; CRX: the second input, from the right (to be traced)  ok210
 
 # ---- delay chains (rows 17-24) ----
 # Chain A (row 17): R/? inverter output up at 17N, then three NOR2 gates with both inputs tied (inverters).
@@ -245,6 +246,13 @@ iosel   nor2     IOSEL          N.IORQ X35    @35K   X35: from above (column L, 
 fsl     nor3     FRAME-SYNC     FSA IOWR FSL  @33N   R/2; FSA: the long row 31.6 line (to be traced)
 fsr     nor2     FSL            FRAME-SYNC FSS   @36N   cross-coupled with fsl: FSS sets vertical sync (row 31.8 line from column M)
 
+# ---- 2C210 only: blanking (rows 1-2, columns AU-BB) ----
+bl1     inv      n_bl1          Q25           @1AU   ok210
+bl2     inv      n_bl2          n_bl1         @1AW   ok210
+bl3     inv      Q25nd          n_bl2         @1BA   ok210; Q25 inverted and delayed by three gates
+blank   nor4     BLANK          Q25nd Q26 Q27 Q28   @1BD   ok210; LINE-SYNC with its start delayed by the three inverters
+vb      nor2     n_vb           BLANK VID     @10BA  ok210; VID: the video from the row 13 logic (to be traced)
+vbi     inv      N.VIDEO        n_vb          @10BC  ok210; R/2. The 2C210 blanks the picture during line sync
 # ---- differences from the 2C184 seen so far (to be transcribed in full) ----
 # 1. Rows 1-2, columns AT-BA: a new chain of three inverters fed from Q25 (vertical at column AU) into a NOR at
 #    row 1, column BA; it feeds the LINE-SYNC / NMI area. The 2C184 has nothing here.
