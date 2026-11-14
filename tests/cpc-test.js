@@ -42,6 +42,28 @@ for (const [name, bytes, want, setup] of [
   memSetFault(m, 'IC118', 'A6', null);
   memSetFault(m, 'IC103', 'O0', 0); const lo = new Uint8Array(0x4000).fill(0xFF); m.loadRom(lo, 'lo'); m.gaMode = 0; ok('ROM data pin fault', m.read(0x0010) === 0xFE);
 }
+{ // bus faults (on the Z80's pins) and the chip pins that override them
+  const lo = new Uint8Array(0x4000).fill(0xFF); for (let i = 0; i < 0x4000; i++) lo[i] = i & 0xFF; lo[0] = 0x01;
+  const m = new CPCMachine(); m.loadRom(lo, 'lo'); m.gaMode = 0x08;                 // lower ROM on, upper off
+  memSetFault(m, 'IC111', 'A3', 0); m.ram[0x4000] = 0x5A; m.ram[0x4008] = 0xA5;
+  ok('bus A3 low: every chip sees A3 low', m.read(0x4008) === 0x5A && m.read(0x0018) === 0x10);
+  memSetFault(m, 'IC103', 'A3', 1); ok('the ROM\'s own A3 pin overrides the bus fault', m.read(0x0010) === 0x18 && m.read(0x4008) === 0x5A);
+  memSetFault(m, 'IC103', 'A3', null); memSetFault(m, 'IC111', 'A3', null); ok('cleared', m.read(0x4008) === 0xA5 && !m.faulty);
+  memSetFault(m, 'IC111', 'D0', 0); m.write(0x5000, 0xFF); ok('bus D0 low: written and read with bit 0 low', m.ram[0x5000] === 0xFE && m.read(0x5000) === 0xFE);
+  memSetFault(m, 'IC120', 'DIN', 1); m.write(0x5001, 0x00); ok('the RAM chip\'s own data-in pin overrides it; the CPU still reads the stuck line', (m.ram[0x5001] & 1) === 1 && m.read(0x5001) === 0x00);
+  memSetFault(m, 'IC120', 'DIN', null); memSetFault(m, 'IC111', 'D0', null);
+  memSetFault(m, 'IC111', 'IORQ', 1); ok('bus IORQ high: the gate array sees it', m.gv.IORQ === 1); m.output(0x7F00, 0x8D); ok('no I/O reaches the gate array', m.gaMode === 0x08);
+  memSetFault(m, 'IC116', 'IORQ', 0); ok('the gate array\'s own IORQ pin overrides it', m.gv.IORQ === 0); memSetFault(m, 'IC116', 'IORQ', null); memSetFault(m, 'IC111', 'IORQ', null);
+  const reg = (r, v) => { m.output(0xBC00, r); m.output(0xBD00, v); };
+  reg(2, 41); ok('6845 written', m.crtc[2] === 41);
+  memSetFault(m, 'IC108', 'D0', 0); reg(2, 43); ok('6845 D0 pin low: it stores 42', m.crtc[2] === 42); memSetFault(m, 'IC108', 'D0', null);
+  memSetFault(m, 'IC108', 'CS', 1); reg(2, 33); ok('6845 CS pin high: not written', m.crtc[2] === 42); memSetFault(m, 'IC108', 'CS', null);
+  memSetFault(m, 'IC111', 'A14', 1); reg(2, 34); ok('bus A14 high: the 6845 is never selected', m.crtc[2] === 42);
+  memSetFault(m, 'IC108', 'CS', 0); reg(2, 35); ok('the 6845\'s own CS pin overrides it', m.crtc[2] === 35); memSetFault(m, 'IC108', 'CS', null); memSetFault(m, 'IC111', 'A14', null);
+  memSetFault(m, 'IC111', 'WR', 1); m.output(0xF600, 0x05); m.write(0x5002, 0x77); ok('bus WR high: the 8255 is not written, the RAM still is (the gate array makes MWE from MREQ and RD)', m.ppiC === 0 && m.ram[0x5002] === 0x77); memSetFault(m, 'IC111', 'WR', null);
+  memSetFault(m, 'IC111', 'CLK', 0); const pc = m.cpu.pc; m.run(400); ok('Z80 CLK pin fault: the Z80 alone stops', m.cpu.pc === pc && /CLK/.test(m.held())); memSetFault(m, 'IC111', 'CLK', null);
+  ok('all cleared', !m.faulty && !m.gf && !m.busF && m.held() === null);
+}
 { // interrupt counter: 52 HSYNCs, and VSYNC resynchronisation
   const m = new CPCMachine(); m.gaMode = 0x0C; [63, 40, 46, 0x8E, 38, 0, 25, 30, 0, 7].forEach((v, r) => { m.output(0xBC00, r); m.output(0xBD00, v); });
   ok('line is 256 clocks', m.lineT() === 256); ok('frame is 312 lines', m.frameLines() === 312);
