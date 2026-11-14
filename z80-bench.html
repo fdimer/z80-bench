@@ -2197,7 +2197,7 @@ function renderMemChips() {
   const fl = cpc.chipFaults(c.id), total = cpc.faultList().length;
   $('mcFaults').textContent = fl.join(' · ');
   $('mcClear').disabled = !fl.length; $('mcClearAll').disabled = !total;
-  $('mcInfo').textContent = total ? `${total} pin fault${total === 1 ? '' : 's'} set` : 'live pins · click a pin to disconnect it or hold it high or low';
+  $('mcInfo').textContent = total ? `${total} fault${total === 1 ? '' : 's'} set` : 'live pins · click a pin for its fault menu';
 }
 mcDraw();
 var mcReady = true;      // (var: render can run before this point)

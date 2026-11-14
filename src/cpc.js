@@ -212,7 +212,12 @@ class CPCMachine {
   // a whole line held at 0 or 1 (null to release it)
   setNetFault(net, v) { if (v === null || v === undefined) delete this.netF[net]; else this.netF[net] = v; this.applyFaults(); }
   clearFaults() { this.pinF = {}; this.netF = {}; this.applyFaults(); }
-  clearChip(id) { for (const k of Object.keys(this.pinF)) if (k.startsWith(id + '.')) delete this.pinF[k]; this.applyFaults(); }
+  // one chip back to normal: its disconnected pins, and (unless pinsOnly) the held lines its pins are on
+  clearChip(id, pinsOnly) {
+    for (const k of Object.keys(this.pinF)) if (k.startsWith(id + '.')) delete this.pinF[k];
+    if (!pinsOnly) for (const net of Object.keys(this.netF)) if (CPC_NETS[net].pins.some(p => p[0] === id)) delete this.netF[net];
+    this.applyFaults();
+  }
   applyFaults() {
     const f = {}; for (const c of this.chips) f[c.id] = {};
     for (const net in this.netF) for (const [id, pin] of CPC_NETS[net].pins) f[id][pin] = this.netF[net];
@@ -385,7 +390,7 @@ class CPCMachine {
   // ---- the 6845, one character (four CPU clocks) at a time ----
   lineT() { return (this.crtc[0] + 1) * 4; }
   frameLines() { return (this.crtc[4] + 1) * (this.crtc[9] + 1) + this.crtc[5]; }
-  setGateArray(part) { if (!CPC_GA_PINS[part]) return; this.ga.part = part; this.clearChip('IC116'); }
+  setGateArray(part) { if (!CPC_GA_PINS[part]) return; this.ga.part = part; this.clearChip('IC116', true); }
   // the 6845's VSYNC pin, through any fault on it (it also goes to the 8255)
   vsOut() { const f = this.vdu.lv.VSYNC; return f === undefined ? this.vsync : !!f; }
   char() {
