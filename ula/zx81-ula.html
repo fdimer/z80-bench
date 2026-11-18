@@ -75,7 +75,7 @@ footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; fl
     <section class="panel" aria-label="The machine">
       <div class="row">
         <label class="filebtn" for="romFile">Load ROM…<input type="file" id="romFile"></label>
-        <label class="filebtn" for="pFile">Load program (.p)…<input type="file" id="pFile" accept=".p,.P,.81"></label>
+        <label class="filebtn" for="pFile">Load program (.p, .zip)…<input type="file" id="pFile"></label>
         <button id="btnRun" class="primary" type="button" disabled>Run</button>
         <button id="btnReset" type="button" disabled>Reset</button>
       </div>
@@ -130,7 +130,7 @@ footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; fl
   </section>
 
   <footer>
-    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6679/ULA2C210/1 (12 January 1982) and the cell circuits ULA 2C158/2, from the Ferranti archive catalogued in 2026 by Happy Little Diodes (<a href="https://youtu.be/jiW3P1rJRMc">watch the video about the archive</a>). The netlist, the Verilog and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/zx81-ULA/ula">zx81-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">f491cf9 2026-11-15</span>.</p>
+    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6679/ULA2C210/1 (12 January 1982) and the cell circuits ULA 2C158/2, from the Ferranti archive catalogued in 2026 by Happy Little Diodes (<a href="https://youtu.be/jiW3P1rJRMc">watch the video about the archive</a>). The netlist, the Verilog and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/zx81-ULA/ula">zx81-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">bef0ef3 2026-11-18</span>.</p>
     <p class="small"><b>Terms of use.</b> The archive's documents are for preserving material of historical interest and for non-commercial, educational and archival research only; commercial use of them or their contents, including in connection with the manufacture, marketing or sale of goods, is prohibited by Sky UK Limited. This page, the netlist and the Verilog are made from those contents and carry the same terms: strictly not for commercial use of any kind. The code is under the PolyForm Noncommercial License 1.0.0.</p>
     <p class="small"><b>Not modelled.</b> The tape (LOAD is done by putting the program straight into RAM), a RAM pack's own address decoding (the 16K is one block on the ULA's RAM CS), and the analogue side of the pins. The Z80's timing follows the data sheet's shape with fixed delays.</p>
   </footer>
@@ -1326,10 +1326,34 @@ const ULA_NET = "# ZX81 ULA 2C210, gate-level netlist transcribed from Ferranti 
     build(); say(`ROM loaded (CRC32 ${crc32(u)}). Running: the cursor appears after about 3 seconds of ZX81 time` + (engine === 'net' ? ', which the gate-level netlist takes some minutes to reach.' : '.'), 'ok'); setRunning(true);
   }
   $('romFile').addEventListener('change', e => { const f = e.target.files[0]; if (f) f.arrayBuffer().then(b => gotRom(new Uint8Array(b), f.name, true)); e.target.value = ''; });
+  // ---------- files in a .zip ----------
+  // Program, tape and disk files are often kept zipped. The pickers take no file-type filter (phones grey out types they do not
+  // know), so a chosen file is checked here: a .zip is opened with the browser's own decompressor, and the
+  // first file in it with one of the wanted extensions is used.
+  async function unzipFirst(file, exts) {
+    const b = new Uint8Array(await file.arrayBuffer());
+    if (!(b[0] === 0x50 && b[1] === 0x4B && b[2] === 3 && b[3] === 4)) return { bytes: b, name: file.name };
+    const dv = new DataView(b.buffer), found = [];
+    // the central directory has the true sizes (a local header may leave them 0)
+    let e = b.length - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054B50) e--;
+    if (e < 0) throw new Error('the .zip file is damaged (no central directory)');
+    for (let i = dv.getUint32(e + 16, true), n = dv.getUint16(e + 10, true); n > 0; n--) {
+      const method = dv.getUint16(i + 10, true), csize = dv.getUint32(i + 20, true), nlen = dv.getUint16(i + 28, true), xlen = dv.getUint16(i + 30, true), clen = dv.getUint16(i + 32, true), local = dv.getUint32(i + 42, true);
+      const name = new TextDecoder().decode(b.subarray(i + 46, i + 46 + nlen)); i += 46 + nlen + xlen + clen;
+      const ext = (name.match(/\.([a-z0-9]+)$/i) || [])[1]; if (!ext || !exts.includes(ext.toLowerCase()) || /(^|\/)__MACOSX\//.test(name)) continue;
+      const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true), data = b.subarray(start, start + csize);
+      if (method === 0) return { bytes: data.slice(), name: name.split('/').pop(), zip: file.name };
+      if (method !== 8) throw new Error(`${name} in the .zip uses a compression this page cannot open`);
+      if (typeof DecompressionStream === 'undefined') throw new Error('this browser cannot open .zip files: unzip it first');
+      const out = new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+      return { bytes: out, name: name.split('/').pop(), zip: file.name };
+    }
+    throw new Error(`no ${exts.map(x => '.' + x).join(', ')} file was found in ${file.name}`);
+  }
   $('pFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; if (!m) { say('Load the ROM first.', 'err'); return; }
-    f.arrayBuffer().then(b => { const u = new Uint8Array(b), need = (u[0x0B] | u[0x0C] << 8) - 0x4000; if (u.length < 0x74 || need < 0x7D || need - 9 > u.length) { say(`${f.name} does not look like a ZX81 .p file.`, 'err'); return; }
+    unzipFirst(f, ['p', '81']).then(z => { const u = z.bytes, f = { name: z.name }, need = (u[0x0B] | u[0x0C] << 8) - 0x4000; if (u.length < 0x74 || need < 0x7D || need - 9 > u.length) { say(`${f.name} does not look like a ZX81 .p file.`, 'err'); return; }
       if (need > 0x4000) { say(`${f.name} needs more than the 16K this bench has.`, 'err'); return; }
-      m.tape = u; progName = f.name + ' (' + u.length + ' bytes, CRC32 ' + crc32(u) + ')'; typeKeys([['J'], ['Shift', 'P'], ['Shift', 'P'], ['NewLine']]); say(`${f.name} is in the tape player; typing LOAD "" (at the K cursor). Then type RUN.`, 'ok'); if (!running) setRunning(true); $('tv').focus(); }); });
+      m.tape = u; progName = f.name + ' (' + u.length + ' bytes, CRC32 ' + crc32(u) + ')'; typeKeys([['J'], ['Shift', 'P'], ['Shift', 'P'], ['NewLine']]); say(`${f.name} is in the tape player; typing LOAD "" (at the K cursor). Then type RUN.`, 'ok'); if (!running) setRunning(true); $('tv').focus(); }).catch(err => say(`${f.name} could not be read: ${err.message}.`, 'err')); });
   $('btnRun').onclick = () => { setRunning(!running); $('tv').focus(); };
   $('btnReset').onclick = () => { build(); say('Reset. The ROM starts again from power-on.'); if (!running) setRunning(true); };
   $('engine').onchange = () => { if (rom) { build(); say('Logic changed; the machine starts again from power-on.'); if (!running) setRunning(true); } };
