@@ -19,6 +19,15 @@
 //            RAM pin   A0   A1   A2   A3   A4   A5   A6   A7
 //            row       A2   A1   A4   A3   A6   A5   A8   A7
 //            column    A9   A0   A11  A10  A13  A12  A15  A14
+//          Each is a chip with pin faults: B is the gate array's CPU (low for a CPU access), A its CAS ADDR (low for
+//          the column); inputs 0-1 are the CPU's column and row bits, 2-3 the display's (6845 MA/RA lines, and CCLK
+//          for the byte's half). A fault on an input, a select or an enable changes the RAM address the CPU or the
+//          display uses (selMap); a fault on an output reaches the RAM's address pins.
+//   IC107  8255 (M5L8255AP): port A the sound chip's data; PC0-PC3 the keyboard row (to IC101, a 74LS145), PC4 the
+//          cassette motor, PC5 the tape output, PC6-PC7 the sound chip's BC1 and BDIR; PB0 VSYNC, PB1-PB4 the links,
+//          PB5 EXP, PB6 the printer's BUSY, PB7 the tape input. CS is A11, A1 is A9, A0 is A8. A chip with pin faults.
+//   IC102  AY-3-8912 sound chip: CLOCK is CCLK (1 MHz), BC2 and A8 tied high, IO0-IO7 read the keyboard's columns.
+//          A chip with pin faults.
 //   IC115  74LS244: CPU data bus to the gate array's data pins (244EN).
 //   IC114  74LS373: latches the RAM's data outputs (gate on READY) and drives the CPU data bus while RAMRD is low.
 // I/O is decoded from single address bits: A15 low + A14 high gate array, A14 low 6845, A13 low upper ROM number,
@@ -44,7 +53,7 @@
 // CPC_NETS lists which pins share each line. applyFaults() turns the two lists into each chip's own fault table
 // (chip.f), which is what the chip models and the pin display use. The Z80 (IC111) is a chip object too: a level on
 // one of its address, data or control pins acts on the bus for every device, whether or not it is drawn as a chip.
-// RESET is one line for the whole board: chipReset() resets the Z80, the gate array, the 6845 and the 8255, each
+// RESET is one line for the board: chipReset() resets the Z80, the gate array, the 6845, the sound chip and the 8255 (on its own active-high line), each
 // unless its own RESET pin is held high or disconnected; a chip whose RESET pin is low stays in reset.
 // Clocks: the 16 MHz oscillator feeds the gate array (CK16), which makes PHI (4 MHz, to the Z80) and CCLK (1 MHz, to
 // the 6845 and the sound chip). Without CK16 the gate array and everything it times stop. Without PHI, or with READY
@@ -89,10 +98,10 @@ if (typeof MEM_PINOUTS !== 'undefined' && !MEM_PINOUTS['23256'])
 // 40010 (and 40008) from the pin list in the Amstrad hardware notes; 40007 from the CPC 464 circuit diagram.
 const CPC_GA_PINS = {
   '40010': [[1, 'D5', 'i'], [2, 'D6', 'i'], [3, 'D7', 'i'], [4, 'CCLK', 'i'], [5, 'SYNC', 'i'], [6, 'VDD1', 'p'], [7, 'RESET', 'i'], [8, 'B', 'i'], [9, 'DISPEN', 'i'], [10, 'G', 'i'],
-    [11, 'HSYNC', 'i'], [12, 'R', 'i'], [13, 'VSYNC', 'i'], [14, 'CPU', 'o'], [15, 'VSS1', 'g'], [16, 'CAS', 'i'], [17, 'MREQ', 'i'], [18, 'IORQ', 'i'], [19, 'PHI', 'i'], [20, 'M1', 'i'],
+    [11, 'HSYNC', 'i'], [12, 'R', 'i'], [13, 'VSYNC', 'i'], [14, 'CPU', 'i'], [15, 'VSS1', 'g'], [16, 'CAS', 'i'], [17, 'MREQ', 'i'], [18, 'IORQ', 'i'], [19, 'PHI', 'i'], [20, 'M1', 'i'],
     [21, 'RD', 'i'], [22, 'READY', 'i'], [23, '244EN', 'o'], [24, 'CK16', 'i'], [25, 'VDD2', 'p'], [26, 'VSS2', 'g'], [27, 'ROMEN', 'i'], [28, 'A15', 'i'], [29, 'RAMRD', 'i'], [30, 'A14', 'i'],
-    [31, 'CASAD', 'o'], [32, 'INT', 'i'], [33, 'MWE', 'i'], [34, 'RAS', 'i'], [35, 'D0', 'i'], [36, 'VSS3', 'g'], [37, 'D1', 'i'], [38, 'D2', 'i'], [39, 'D3', 'i'], [40, 'D4', 'i']],
-  '40007': [[1, 'CPU', 'o'], [2, 'READY', 'i'], [3, 'CAS', 'i'], [4, '244EN', 'o'], [5, 'MWE', 'i'], [6, 'CASAD', 'o'], [7, 'RAS', 'i'], [8, 'CK16', 'i'], [9, 'VCC2', 'p'], [10, 'INT', 'i'],
+    [31, 'CASAD', 'i'], [32, 'INT', 'i'], [33, 'MWE', 'i'], [34, 'RAS', 'i'], [35, 'D0', 'i'], [36, 'VSS3', 'g'], [37, 'D1', 'i'], [38, 'D2', 'i'], [39, 'D3', 'i'], [40, 'D4', 'i']],
+  '40007': [[1, 'CPU', 'i'], [2, 'READY', 'i'], [3, 'CAS', 'i'], [4, '244EN', 'o'], [5, 'MWE', 'i'], [6, 'CASAD', 'i'], [7, 'RAS', 'i'], [8, 'CK16', 'i'], [9, 'VCC2', 'p'], [10, 'INT', 'i'],
     [11, 'SYNC', 'i'], [12, 'ROMEN', 'i'], [13, 'RAMRD', 'i'], [14, 'HSYNC', 'i'], [15, 'VSYNC', 'i'], [16, 'IORQ', 'i'], [17, 'M1', 'i'], [18, 'MREQ', 'i'], [19, 'RD', 'i'], [20, 'A15', 'i'],
     [21, 'A14', 'i'], [22, 'VCC1', 'p'], [23, 'DISPEN', 'i'], [24, 'D0', 'i'], [25, 'D1', 'i'], [26, 'D2', 'i'], [27, 'D3', 'i'], [28, 'D4', 'i'], [29, 'D5', 'i'], [30, 'D6', 'i'],
     [31, 'D7', 'i'], [32, 'B', 'i'], [33, 'VCC2', 'p'], [34, 'G', 'i'], [35, 'GND', 'g'], [36, 'R', 'i'], [37, 'RESET', 'i'], [38, 'VCC1', 'p'], [39, 'PHI', 'i'], [40, 'CCLK', 'i']]
@@ -105,26 +114,59 @@ const CPC_Z80_PINS = [[1, 'A11'], [2, 'A12'], [3, 'A13'], [4, 'A14'], [5, 'A15']
   [16, 'INT'], [17, 'NMI'], [18, 'HALT', 'o'], [19, 'MREQ'], [20, 'IORQ'], [21, 'RD'], [22, 'WR'], [23, 'BUSACK', 'o'], [24, 'WAIT'], [25, 'BUSREQ'], [26, 'RESET'], [27, 'M1'], [28, 'RFSH', 'o'], [29, 'GND', 'g'],
   ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => [30 + n, 'A' + n])].map(([n, name, k]) => [n, name, k || 'i']);
 if (typeof MEM_PINOUTS !== 'undefined') { Object.assign(MEM_PINOUTS, CPC_GA_PINS); MEM_PINOUTS.HD6845 = CPC_CRTC_PINS; MEM_PINOUTS.Z80 = CPC_Z80_PINS; for (const n of ['SYNC', 'RESET', 'CPU', 'MREQ', 'IORQ', 'M1', 'RD', '244EN', 'ROMEN', 'RAMRD', 'CASAD', 'INT', 'MWE']) MEM_ACTIVE_LOW.add(n); }
+// The 74LS153 address selectors (IC109, IC104, IC113, IC105): two 4-to-1 selectors each, sharing the select inputs
+// B (the gate array's CPU, low for a CPU access) and A (CAS ADDR, low for the column). Inputs 0 and 1 take the CPU's
+// column and row address bits, 2 and 3 the display address's; 1G and 2G are tied to ground (a high G turns its
+// output low). CPC_SEL gives each RAM address pin its selector and half.
+const CPC_SEL_PINS = [[1, '1G'], [2, 'B'], [3, '1C3'], [4, '1C2'], [5, '1C1'], [6, '1C0'], [7, '1Y'], [8, 'GND', 'g'], [9, '2Y'], [10, '2C0'], [11, '2C1'], [12, '2C2'], [13, '2C3'], [14, 'A'], [15, '2G'], [16, 'VCC', 'p']].map(([n, name, k]) => [n, name, k || 'i']);
+const CPC_SEL = [['IC105', '2'], ['IC105', '1'], ['IC113', '2'], ['IC113', '1'], ['IC104', '2'], ['IC104', '1'], ['IC109', '2'], ['IC109', '1']];   // by RAM address pin
+// each selector input's source: the display address's row and column bits, by RAM pin (the same bit numbers as the CPU's)
+const CPC_VID_SRC = ['MA1', 'MA0', 'MA3', 'MA2', 'MA5', 'MA4', 'MA7', 'MA6'].map((r, p) => [r, ['MA8', 'CCLK', 'RA0', 'MA9', 'RA2', 'RA1', 'MA13', 'MA12'][p]]);
+// The 8255 (IC107, M5L8255AP). Port A is the sound chip's data bus; port B reads VSYNC (PB0), the links (PB1-PB4),
+// EXP (PB5), the printer's BUSY (PB6) and the cassette (PB7); port C selects the keyboard row (PC0-PC3, to the
+// 74LS145), runs the cassette motor (PC4) and writes to the tape (PC5), and drives the sound chip's BC1 (PC6) and
+// BDIR (PC7). CS is A11, A1 is A9, A0 is A8. Its RESET is active high, from the reset circuit (the inverse of the
+// board's RESET line).
+const CPC_PPI_PINS = [[1, 'PA3'], [2, 'PA2'], [3, 'PA1'], [4, 'PA0'], [5, 'RD'], [6, 'CS'], [7, 'GND', 'g'], [8, 'A1'], [9, 'A0'], [10, 'PC7'], [11, 'PC6'], [12, 'PC5'], [13, 'PC4'], [14, 'PC0'], [15, 'PC1'], [16, 'PC2'], [17, 'PC3'],
+  [18, 'PB0'], [19, 'PB1'], [20, 'PB2'], [21, 'PB3'], [22, 'PB4'], [23, 'PB5'], [24, 'PB6'], [25, 'PB7'], [26, 'VCC', 'p'], [27, 'D7'], [28, 'D6'], [29, 'D5'], [30, 'D4'], [31, 'D3'], [32, 'D2'], [33, 'D1'], [34, 'D0'],
+  [35, 'RESET'], [36, 'WR'], [37, 'PA7'], [38, 'PA6'], [39, 'PA5'], [40, 'PA4']].map(([n, name, k]) => [n, name, k || 'i']);
+// The sound chip (IC102, AY-3-8912). DA0-DA7 to the 8255's port A; BDIR and BC1 from PC7 and PC6; BC2 and A8 tied
+// high; CLOCK is CCLK; RESET the board's RESET line; IO0-IO7 read the keyboard's columns; A, B and C to the mixer.
+const CPC_AY_PINS = [[1, 'C'], [2, 'TEST', 'o'], [3, 'VCC', 'p'], [4, 'B'], [5, 'A'], [6, 'GND', 'g'], [7, 'IO7'], [8, 'IO6'], [9, 'IO5'], [10, 'IO4'], [11, 'IO3'], [12, 'IO2'], [13, 'IO1'], [14, 'IO0'],
+  [15, 'CLOCK'], [16, 'RESET'], [17, 'A8'], [18, 'BDIR'], [19, 'BC2'], [20, 'BC1'], [21, 'DA7'], [22, 'DA6'], [23, 'DA5'], [24, 'DA4'], [25, 'DA3'], [26, 'DA2'], [27, 'DA1'], [28, 'DA0']].map(([n, name, k]) => [n, name, k || 'i']);
+if (typeof MEM_PINOUTS !== 'undefined') { MEM_PINOUTS['74LS153'] = CPC_SEL_PINS; MEM_PINOUTS.M5L8255AP = CPC_PPI_PINS; MEM_PINOUTS['AY-3-8912'] = CPC_AY_PINS; for (const n of ['1G', '2G', 'WR']) MEM_ACTIVE_LOW.add(n); }
 // Which pins share a line. d: the pin that drives it (index into pins), or -1 when the driver is not drawn as a chip
 // or several pins drive it in turn (the data bus).
 const CPC_NETS = (() => {
   const N = {}, ram = n => 'IC' + CPC.RAM_ICS[n], rams = pin => CPC.RAM_ICS.map(ic => ['IC' + ic, pin]);
   for (let n = 0; n < 16; n++) N['A' + n] = { label: `address line A${n}`, d: 0, pins: [['IC111', 'A' + n], ...(n < 15 ? [['IC103', 'A' + n]] : []), ...(n >= 14 ? [['IC116', 'A' + n]] : []), ...(n === 14 ? [['IC108', 'CS']] : n === 8 ? [['IC108', 'RS']] : n === 9 ? [['IC108', 'R/W']] : [])] };
-  for (let n = 0; n < 8; n++) N['D' + n] = { label: `data line D${n}`, d: -1, pins: [['IC111', 'D' + n], ['IC103', 'O' + n], [ram(n), 'DIN'], ['IC108', 'D' + n]] };
+  for (let n = 0; n < 8; n++) N['D' + n] = { label: `data line D${n}`, d: -1, pins: [['IC111', 'D' + n], ['IC103', 'O' + n], [ram(n), 'DIN'], ['IC108', 'D' + n], ['IC107', 'D' + n]] };
+  // the selectors' inputs, the 8255's CS, A1 and A0
+  CPC.RAM_PINS.forEach(([r, c], p) => { const [ic, h] = CPC_SEL[p]; N['A' + c].pins.push([ic, h + 'C0']); N['A' + r].pins.push([ic, h + 'C1']); });
+  N.A11.pins.push(['IC107', 'CS']); N.A9.pins.push(['IC107', 'A1']); N.A8.pins.push(['IC107', 'A0']);
+  // the 6845's display address, to the selectors
+  const vn = {}; CPC_VID_SRC.forEach(([r, c], p) => { const [ic, h] = CPC_SEL[p]; (vn[c] = vn[c] || []).push([ic, h + 'C2']); (vn[r] = vn[r] || []).push([ic, h + 'C3']); });
+  for (const k in vn) if (k !== 'CCLK') N['V' + k] = { label: `display address ${k} (6845)`, d: 0, pins: [['IC108', k], ...vn[k]] };
+  N.CPUAD = { label: 'CPU line (CPU ADDR, the selectors\' B)', d: 0, pins: [['IC116', 'CPU'], ...['IC109', 'IC104', 'IC113', 'IC105'].map(ic => [ic, 'B'])] };
+  N.CASAD = { label: 'CAS ADDR line (the selectors\' A)', d: 0, pins: [['IC116', 'CASAD'], ...['IC109', 'IC104', 'IC113', 'IC105'].map(ic => [ic, 'A'])] };
+  // the sound chip's bus, from the 8255
+  for (let n = 0; n < 8; n++) N['PA' + n] = { label: `sound chip data line ${n} (8255 port A)`, d: -1, pins: [['IC107', 'PA' + n], ['IC102', 'DA' + n]] };
+  N.BDIR = { label: 'BDIR line (8255 PC7)', d: 0, pins: [['IC107', 'PC7'], ['IC102', 'BDIR']] };
+  N.BC1 = { label: 'BC1 line (8255 PC6)', d: 0, pins: [['IC107', 'PC6'], ['IC102', 'BC1']] };
   for (const k of ['MREQ', 'IORQ', 'M1', 'RD']) N[k] = { label: k + ' line', d: 0, pins: [['IC111', k], ['IC116', k]] };
-  N.RESET = { label: 'RESET line', d: -1, pins: [['IC111', 'RESET'], ['IC116', 'RESET'], ['IC108', 'RESET']] };
+  N.RESET = { label: 'RESET line', d: -1, pins: [['IC111', 'RESET'], ['IC116', 'RESET'], ['IC108', 'RESET'], ['IC102', 'RESET']] };
   N.INT = { label: 'INT line', d: 0, pins: [['IC116', 'INT'], ['IC111', 'INT']] };
   N.READY = { label: 'READY line (the Z80\'s WAIT)', d: 0, pins: [['IC116', 'READY'], ['IC111', 'WAIT']] };
   N.PHI = { label: '4 MHz clock PHI', d: 0, pins: [['IC116', 'PHI'], ['IC111', 'CLK']] };
-  N.CCLK = { label: '1 MHz clock CCLK', d: 0, pins: [['IC116', 'CCLK'], ['IC108', 'CLK']] };
+  N.CCLK = { label: '1 MHz clock CCLK', d: 0, pins: [['IC116', 'CCLK'], ['IC108', 'CLK'], ['IC102', 'CLOCK'], ['IC105', '1C2']] };
   N.HSYNC = { label: 'HSYNC line', d: 0, pins: [['IC108', 'HSYNC'], ['IC116', 'HSYNC']] };
-  N.VSYNC = { label: 'VSYNC line', d: 0, pins: [['IC108', 'VSYNC'], ['IC116', 'VSYNC']] };
+  N.VSYNC = { label: 'VSYNC line', d: 0, pins: [['IC108', 'VSYNC'], ['IC116', 'VSYNC'], ['IC107', 'PB0']] };
   N.DISPEN = { label: 'DISPEN line', d: 0, pins: [['IC108', 'DE'], ['IC116', 'DISPEN']] };
   N.ROMEN = { label: 'ROMEN line', d: 0, pins: [['IC116', 'ROMEN'], ['IC103', 'CE']] };
   N.RAS = { label: 'RAS line', d: 0, pins: [['IC116', 'RAS'], ...rams('RAS')] };
   N.CAS = { label: 'CAS line', d: 0, pins: [['IC116', 'CAS'], ...rams('CAS')] };
   N.MWE = { label: 'RAM write enable MWE', d: 0, pins: [['IC116', 'MWE'], ...rams('WE')] };
-  for (let n = 0; n < 8; n++) N['RA' + n] = { label: `RAM address line ${n} (from the address selectors)`, d: -1, pins: rams('A' + n) };
+  for (let n = 0; n < 8; n++) N['RA' + n] = { label: `RAM address line ${n} (from ${CPC_SEL[n][0]})`, d: 0, pins: [[CPC_SEL[n][0], CPC_SEL[n][1] + 'Y'], ...rams('A' + n)] };
   for (let n = 0; n < 8; n++) N['RD' + n] = { label: `RAM data out, bit ${n}`, d: 0, pins: [[ram(n), 'DOUT'], ['IC116', 'D' + n]] };
   return N;
 })();
@@ -134,7 +176,7 @@ const CPC_NET_OF = {}; for (const k in CPC_NETS) for (const [id, pin] of CPC_NET
 class CPCChip {
   constructor(id, part, what, range) { Object.assign(this, { id, part, what, range, f: {} }); this.recalc(); }
   setFault(pin, v) { if (v === null || v === undefined) delete this.f[pin]; else this.f[pin] = v; this.recalc(); }
-  recalc() { this.lv = {}; let n = 0; for (const k in this.f) { n++; this.lv[k] = this.f[k] === 'z' ? (k === 'R' || k === 'G' || k === 'B' ? 0 : 1) : this.f[k]; } this.faulty = n > 0; this.ramDead = 'RAS' in this.f || 'CAS' in this.f;
+  recalc() { this.lv = {}; let n = 0; for (const k in this.f) { n++; this.lv[k] = this.f[k] === 'z' ? (this.id === 'IC116' && (k === 'R' || k === 'G' || k === 'B') ? 0 : 1) : this.f[k]; } this.faulty = n > 0; this.ramDead = 'RAS' in this.f || 'CAS' in this.f;
     // 6845 address lines held at a level
     let maAnd = 0x3FFF, maOr = 0, raAnd = 31, raOr = 0, m;
     for (const k in this.lv) { if ((m = /^MA(\d+)$/.exec(k))) { if (this.lv[k]) maOr |= 1 << +m[1]; else maAnd &= ~(1 << +m[1]); } else if ((m = /^RA(\d)$/.exec(k))) { if (this.lv[k]) raOr |= 1 << +m[1]; else raAnd &= ~(1 << +m[1]); } }
@@ -287,13 +329,18 @@ class CPCMachine {
     this.ga = new CPCChip('IC116', '40010', 'gate array: clocks, memory control, interrupts and video', 'port 7Fxxh (write only)');
     this.vdu = new CPCChip('IC108', 'HD6845', '6845 video controller: display address and sync timing', 'ports BCxxh-BFxxh');
     this.z80 = new CPCChip('IC111', 'Z80', 'processor: a fault on a bus pin here is a fault on that line, for every chip', 'address, data and control lines');
-    this.chips = [this.romChip, ...this.ramBank, this.ga, this.vdu, this.z80];
+    const selWhat = p => { const [r1, c1] = CPC.RAM_PINS[p], [r2, c2] = CPC.RAM_PINS[p - 1]; return `RAM address selector: RAM A${p} (A${r1}/A${c1}) and A${p - 1} (A${r2}/A${c2}), or the display address`; };
+    this.sel = [['IC109', 7], ['IC104', 5], ['IC113', 3], ['IC105', 1]].map(([ic, p]) => new CPCChip(ic, '74LS153', selWhat(p), 'RAM address lines A' + (p - 1) + ' and A' + p));
+    this.ppi = new CPCChip('IC107', 'M5L8255AP', '8255 I/O: keyboard row, cassette, the sound chip\'s bus, and VSYNC and the links', 'ports F4xxh-F7xxh');
+    this.ay = new CPCChip('IC102', 'AY-3-8912', 'sound chip: three channels, noise and envelope; its I/O port reads the keyboard', 'through the 8255 (port A, PC6 and PC7)');
+    this.chips = [this.romChip, ...this.ramBank, this.ga, this.vdu, this.z80, ...this.sel, this.ppi, this.ay];
     this.pinF = {}; this.netF = {};
-    this.ga.onChange = this.vdu.onChange = this.z80.onChange = () => this.refault(); this.refault();
+    for (const c of [this.ga, this.vdu, this.z80, ...this.sel, this.ppi, this.ay]) c.onChange = () => this.refault();
+    this.refault();
     this.banks = [[this.romChip], this.ramBank];
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
     this.faulty = false;
-    this.acc = new Uint32Array(3);                    // accesses: 0 ROM, 1 RAM, 2 writes to the gate array
+    this.acc = new Uint32Array(5);                    // accesses: 0 ROM, 1 RAM, 2 writes to the gate array, 3 the 8255, 4 the sound chip
     this.crtc = new Uint8Array(18); this.crtcSel = 0;
     this.psg = new Uint8Array(16); this.keys = new Uint8Array(10);      // keys: bit set = key down
     this.rec = null; this.instant = false;     // instant: records the firmware reads come straight from the tape file (see casTrap)
@@ -329,8 +376,9 @@ class CPCMachine {
     if (this.z80.lv.RESET !== 1) this.cpu.reset();
     if (this.ga.lv.RESET !== 1) { this.gaMode = 0; this.gaPen = 0; this.intCnt = 0; this.intReq = false; this.vsDelay = 0; }
     if (this.vdu.lv.RESET !== 1) { this.hcc = 0; this.vcc = 0; this.vlc = 0; this.adj = -1; this.maRow = 0; this.vde = true; this.hs = false; this.hsw = 0; this.vsw = 0; this.de = false; this.vsync = false; this.line = 0; }
-    this.ppiA = 0; this.ppiC = 0; this.ppiCtl = 0x9B; this.psgSel = 0; this.printer = 0; this.romSel = 0;
-    this.psg.fill(0); this.toneCnt = [0, 0, 0]; this.toneOut = [0, 0, 0]; this.noiseCnt = 0; this.lfsr = 1; this.envCnt = 0; this.envPos = 0;   // the sound chip's RESET is on the line too
+    if (!('RESET' in this.ppi.lv)) { this.ppiA = 0; this.ppiC = 0; this.ppiCtl = 0x9B; }    // the 8255's own (active-high) reset, unless its pin has a fault
+    this.printer = 0; this.romSel = 0;
+    if (this.ay.lv.RESET !== 1) { this.psg.fill(0); this.psgSel = 0; this.toneCnt = [0, 0, 0]; this.toneOut = [0, 0, 0]; this.noiseCnt = 0; this.lfsr = 1; this.envCnt = 0; this.envPos = 0; }   // the sound chip's RESET is on the line too
     this.cpu.intLine = false;
   }
   // a reset from the bench: the RESET line, and the bench's own clocks and counters back to zero
@@ -396,6 +444,15 @@ class CPCMachine {
     this.heldWhy = 'CK16' in gv ? 'no clock: the gate array has no 16 MHz' : 'PHI' in gv ? 'no clock: PHI does not reach the Z80' : 'CLK' in z ? 'no clock at the Z80\'s CLK pin'
       : z.RESET === 0 ? 'RESET is low at the Z80: it is held in reset' : z.BUSREQ === 0 ? 'BUSREQ is low at the Z80: it has released the bus'
       : this.rdy === 0 ? (g.READY === 0 ? 'READY is low: the Z80 waits' : 'WAIT is low at the Z80: it waits') : null;
+    // the selectors: any fault but on an output (those reach the RAM's address pins, which handle them)
+    this.selF = this.sel.some(c => Object.keys(c.lv).some(k => k !== '1Y' && k !== '2Y'));
+    // the 8255 and the sound chip: masks for their port and data pins
+    const mask = (L, pre, n = 8) => { let and = 0xFF, or = 0; for (let i = 0; i < n; i++) { const v = L[pre + i]; if (v === 1) or |= 1 << i; else if (v === 0) and &= ~(1 << i); } return [and, or]; };
+    const P = this.ppi.lv, Y = this.ay.lv;
+    this.ppiF = this.ppi.faulty; this.ppiHeld = P.RESET === 1;                 // RESET high (or floating): the 8255 is held in reset
+    [this.paAnd, this.paOr] = mask(P, 'PA'); [this.pbAnd, this.pbOr] = mask(P, 'PB'); [this.pcAnd, this.pcOr] = mask(P, 'PC');
+    this.ayF = this.ay.faulty; [this.daAnd, this.daOr] = mask(Y, 'DA'); [this.ioAnd, this.ioOr] = mask(Y, 'IO');
+    if (this.ayF && Y.RESET === 0) { this.psg.fill(0); this.psgSel = 0; }    // held in reset
     if (z.NMI === 0 && !this.nmiLow) this.cpu.nmiPending = true;                 // the pin going low is one falling edge
     this.nmiLow = z.NMI === 0;
   }
@@ -424,7 +481,8 @@ class CPCMachine {
         return f && this.romChip.faulty ? memBankRead(this.banks[0], this.romAddr(a), quiet) : this.rom[this.romAddr(a)];
       }
       if (!quiet) this.acc[1]++;
-      let v = f && this.ramBank.faulty ? memBankRead(this.ramBank, a, quiet) : this.ram[a];
+      const ra = f && this.selF ? this.selCpu(a, quiet) : a;
+      let v = f && this.ramBank.faulty ? memBankRead(this.ramBank, ra, quiet) : this.ram[ra];
       // a ROM whose chip enable is stuck low drives the bus during RAM reads too: the lines carry the AND of the two
       if (f && this.romChip.always) v &= memBankRead(this.banks[0], this.romAddr(a), true);
       return v;
@@ -436,7 +494,7 @@ class CPCMachine {
     const romDrive = g.ROMEN === undefined ? seen && romSel : g.ROMEN === 0, ramDrive = g.RAMRD === undefined ? seen && !romSel : g.RAMRD === 0;
     let v = 0xFF;
     if (romDrive || this.romChip.always) { if (!quiet) this.acc[0]++; const ra = this.romAddr(a); if (ra & 0x4000 ? this.hasHi : this.hasLo) v &= this.romChip.faulty ? memBankRead(this.banks[0], ra, quiet) : this.rom[ra]; }
-    if (ramDrive) { if (!quiet) this.acc[1]++; if (!quiet && this.outOfStep()) v &= this.ramBus; else { const r = this.ramRead(a, quiet); if (!quiet) this.ramBus = r; v &= r; } }
+    if (ramDrive) { if (!quiet) this.acc[1]++; if (!quiet && this.outOfStep()) v &= this.ramBus; else { const r = this.ramRead(this.selF ? this.selCpu(a, quiet) : a, quiet); if (!quiet) this.ramBus = r; v &= r; } }
     if (!quiet && g.IORQ === 0 && (this.gaView(a) & 0xC000) === 0x4000) this.gaWrite(v);   // IORQ seen low all the time: memory cycles at 4000h-7FFFh look like writes to the gate array
     return v;
   }
@@ -445,7 +503,25 @@ class CPCMachine {
     if (this.gf) { if (this.ga.ramDead) return 0xFF; if (this.gv.MWE === 0) { if (!quiet) this.ram[a] = 0xFF; return 0xFF; } }   // write enable held low: every access is a write
     return this.ramBank.faulty ? memBankRead(this.ramBank, a, quiet) : this.ram[a];
   }
-  read(a) { return this.busF ? this.busD(this.mem(this.busA(a), false)) : this.mem(a, false); }
+  // ---- the address selectors with faults: the row and column each RAM address pin gets, from the CPU's address and
+  // the display address (the last one of each, for a select input held the wrong way)
+  selCpu(a, quiet) { if (!quiet) this.lastCpuA = a; return this.selMap(a, this.lastVid || 0, 0); }
+  selVid(v) { this.lastVid = v; return this.selMap(this.lastCpuA || 0, v, 1); }
+  selMap(cpuA, vidA, video) {
+    let out = 0;
+    for (let p = 0; p < 8; p++) {
+      const [ic, h] = CPC_SEL[p], [r, c] = CPC.RAM_PINS[p], L = this.chipById[ic].lv;
+      if (L[h + 'G'] === 1) continue;                                             // enable high: the output is low
+      const B = L.B !== undefined ? L.B : video;
+      for (const [ph, bit] of [[1, r], [0, c]]) {                                 // row (CAS ADDR high), then column
+        const k = B * 2 + (L.A !== undefined ? L.A : ph), f = L[h + 'C' + k];
+        const v = f !== undefined ? f : ((k < 2 ? cpuA : vidA) >> (k & 1 ? r : c)) & 1;
+        out |= v << bit;
+      }
+    }
+    return out;
+  }
+  read(a) { const v = this.busF ? this.busD(this.mem(this.busA(a), false)) : this.mem(a, false); return this.ppiF && this.ppi.lv.RD === 0 && this.ppiCS(this.busA(a)) ? v & this.ppiRead(this.busA(a), true) : v; }   // the 8255's RD held low: it drives the bus on every read while selected
   peek(a) { return this.busF ? this.busD(this.mem(this.busA(a), true)) : this.mem(a, true); }
   peekW(a) { return this.peek(a) | this.peek((a + 1) & 0xFFFF) << 8; }
   write(a, v) {
@@ -457,17 +533,71 @@ class CPCMachine {
       // no write enable: the gate array is stopped, never sees MREQ, sees RD low all the time, or the cycle is out of step
       if (this.ga.ramDead || g.MWE === 1 || 'CK16' in g || g.MREQ === 1 || g.RD === 0 || this.outOfStep()) return;
     }
-    if (this.faulty) { if (this.ramBank.faulty) { memBankWrite(this.ramBank, a, v); return; } }
+    if (this.faulty) {
+      if (this.ppiF && this.ppi.lv.WR === 0 && this.ppiCS(a)) this.ppiWrite(a, v);          // the 8255's WR held low: it takes every write while it is selected
+      if (this.selF) a = this.selCpu(a, false);
+      if (this.ramBank.faulty) { memBankWrite(this.ramBank, a, v); return; }
+    }
     this.ram[a] = v;
   }
   // ---- I/O ----
+  // the 8255's port C and port A as they stand on its pins: the latches, through any pin faults; held in reset, its
+  // ports are inputs and the lines float high. Port A drives the sound chip's bus only while it is an output.
+  ppiCout() { return this.ppiF ? (this.ppiHeld ? 0xFF : this.ppiC) & this.pcAnd | this.pcOr : this.ppiC; }
+  ppiAout() { const v = this.ppiHeld || this.ppiCtl & 0x10 ? 0xFF : this.ppiA; return this.ppiF ? v & this.paAnd | this.paOr : v; }
+  // the sound chip's bus control (BDIR, BC2, BC1): 'addr', 'write', 'read' or null. BC2 and A8 are tied high.
+  ayMode() {
+    if (!this.ayF) { const m = this.ppiCout() >> 6; return m === 3 ? 'addr' : m === 2 ? 'write' : m === 1 ? 'read' : null; }
+    const Y = this.ay.lv, pc = this.ppiCout();
+    if (Y.A8 === 0 || Y.RESET === 0) return null;                                 // not selected, or held in reset
+    const m = (Y.BDIR !== undefined ? Y.BDIR : pc >> 7 & 1) << 2 | (Y.BC2 !== undefined ? Y.BC2 : 1) << 1 | (Y.BC1 !== undefined ? Y.BC1 : pc >> 6 & 1);
+    return m === 1 || m === 4 || m === 7 ? 'addr' : m === 6 ? 'write' : m === 3 ? 'read' : null;
+  }
   psgBus() {                                           // PPI port C bits 7-6 are the sound chip's BDIR and BC1
-    switch (this.ppiC >> 6) {
-      case 3: this.psgSel = this.ppiA & 15; break;                               // latch address
-      case 2: this.psg[this.psgSel] = this.ppiA; if (this.psgSel === 13) { this.envPos = 0; this.envCnt = 0; } break;   // write; writing the envelope shape restarts it
+    const mode = this.ayMode(); if (!mode || mode === 'read') return;
+    let d = this.ppiAout(); if (this.ayF) d = d & this.daAnd | this.daOr;
+    this.acc[4]++;
+    if (mode === 'addr') this.psgSel = d & 15;                                    // latch address
+    else { this.psg[this.psgSel] = d; if (this.psgSel === 13) { this.envPos = 0; this.envCnt = 0; } }   // write; writing the envelope shape restarts it
+  }
+  // what the sound chip puts on its bus while BDIR, BC2, BC1 say read: a register, or (14) its I/O port, the keyboard's columns
+  psgRead() {
+    if (this.ayMode() !== 'read') return 0xFF;
+    let v = this.psgSel === 14 ? this.keyRow() : this.psg[this.psgSel];
+    if (this.ayF) { if (this.psgSel === 14) v = v & this.ioAnd | this.ioOr; v = v & this.daAnd | this.daOr; }
+    return v;
+  }
+  keyRow() { const r = this.ppiCout() & 15; return r < 10 ? ~this.keys[r] & 0xFF : 0xFF; }
+  // ---- the 8255. Selected by A11 low; A9 and A8 pick the port. Its CS, A1 and A0 pins can carry faults.
+  ppiCS(p) { const P = this.ppi.lv; return (P.CS !== undefined ? P.CS : p >> 11 & 1) === 0; }
+  ppiPort(p) { if (!this.ppiF) return p >> 8 & 3; const P = this.ppi.lv; return (P.A1 !== undefined ? P.A1 : p >> 9 & 1) << 1 | (P.A0 !== undefined ? P.A0 : p >> 8 & 1); }
+  ppiRead(p, quiet) {
+    if (this.ppiHeld || (this.ppiF && this.ppi.lv.RD === 1)) return 0xFF;
+    if (!quiet) this.acc[3]++;
+    let v = 0xFF;
+    switch (this.ppiPort(p)) {
+      case 0: v = this.ppiCtl & 0x10 ? this.psgRead() : this.ppiA; if (this.ppiF) v = v & this.paAnd | this.paOr; break;
+      // port B: bit 0 VSYNC, bits 3-1 maker links (111 Amstrad), bit 4 50 Hz link, bit 5 expansion (high: none),
+      // bit 6 printer busy (high: no printer), bit 7 cassette data in
+      case 1: v = 0x7E | (this.vsOut() ? 1 : 0) | (this.tapeIn() ? 0x80 : 0); if (this.ppiF) v = v & this.pbAnd | this.pbOr; break;
+      case 2: v = this.ppiC; break;
+    }
+    return this.ppiF ? v & this.ppi.dAnd | this.ppi.dOr : v;
+  }
+  ppiWrite(p, v) {
+    if (this.ppiHeld || (this.ppiF && this.ppi.lv.WR === 1)) return;
+    this.acc[3]++; if (this.ppiF) v = v & this.ppi.dAnd | this.ppi.dOr;
+    switch (this.ppiPort(p)) {
+      case 0: this.ppiA = v; this.psgBus(); break;
+      case 1: break;                                                              // port B is an input
+      case 2: this.ppiC = v; this.psgBus(); this.recEdge(); break;
+      case 3:
+        if (v & 0x80) { this.ppiCtl = v; this.ppiA = 0; this.ppiC = 0; }
+        else { const b = 1 << (v >> 1 & 7); this.ppiC = v & 1 ? this.ppiC | b : this.ppiC & ~b; this.psgBus(); }
+        this.recEdge();
+        break;
     }
   }
-  keyRow() { const r = this.ppiC & 15; return r < 10 ? ~this.keys[r] & 0xFF : 0xFF; }
   // the 6845's select pins: CS is A14, RS is A8, R/W is A9, E follows IORQ; its own pin faults override the bus
   vduBus(p) {
     const c = this.vdu.lv; if ('E' in c || this.z80.lv.IORQ === 1) return null;
@@ -480,15 +610,7 @@ class CPCMachine {
     if (z.IORQ === 1) return this.busD(v);                                        // IORQ never goes low: no device answers
     const s = this.vduBus(p);
     if (s && s.rw && s.rs) v &= (this.crtcSel < 18 && this.crtcSel >= 12 ? this.crtc[this.crtcSel] : 0) & this.vdu.dAnd | this.vdu.dOr;   // 6845 read: only R12-R17 read back
-    if (!(p & 0x0800) && z.RD !== 1) {
-      switch (p >> 8 & 3) {
-        case 0: v &= this.ppiCtl & 0x10 ? ((this.ppiC >> 6) === 1 ? (this.psgSel === 14 ? this.keyRow() : this.psg[this.psgSel]) : 0xFF) : this.ppiA; break;
-        // port B: bit 0 VSYNC, bits 3-1 maker links (111 Amstrad), bit 4 50 Hz link, bit 5 expansion (high: none),
-        // bit 6 printer busy (high: no printer), bit 7 cassette data in
-        case 1: v &= 0x7E | (this.vsOut() ? 1 : 0) | (this.tapeIn() ? 0x80 : 0); break;
-        case 2: v &= this.ppiC; break;
-      }
-    }
+    if (z.RD !== 1 && (this.ppiF ? this.ppiCS(p) : !(p & 0x0800))) v &= this.ppiRead(p);
     return this.busD(v);
   }
   output(p, v) {
@@ -503,17 +625,7 @@ class CPCMachine {
     if (z.IORQ === 1 || z.WR === 1) return;            // the other devices are written through IOWR (IORQ and WR)
     if (!(p & 0x2000)) this.romSel = v;                // upper ROM number: with no expansion ROMs every number gives BASIC
     if (!(p & 0x1000)) this.printer = v;
-    if (!(p & 0x0800)) {
-      switch (p >> 8 & 3) {
-        case 0: this.ppiA = v; this.psgBus(); break;
-        case 2: this.ppiC = v; this.psgBus(); this.recEdge(); break;
-        case 3:
-          if (v & 0x80) { this.ppiCtl = v; this.ppiA = 0; this.ppiC = 0; }
-          else { const b = 1 << (v >> 1 & 7); this.ppiC = v & 1 ? this.ppiC | b : this.ppiC & ~b; this.psgBus(); }
-          this.recEdge();
-          break;
-      }
-    }
+    if (this.ppiF ? this.ppiCS(p) : !(p & 0x0800)) this.ppiWrite(p, v);
   }
   // a byte arriving at the gate array's data pins while its port is addressed
   gaWrite(v) {
@@ -530,7 +642,7 @@ class CPCMachine {
   frameLines() { return (this.crtc[4] + 1) * (this.crtc[9] + 1) + this.crtc[5]; }
   setGateArray(part) { if (!CPC_GA_PINS[part]) return; this.ga.part = part; this.clearChip('IC116', true); }
   // the 6845's VSYNC pin, through any fault on it (it also goes to the 8255)
-  vsOut() { const f = this.vdu.lv.VSYNC; return f === undefined ? this.vsync : !!f; }
+  vsOut() { const f = this.vdu.lv.VSYNC; return f === undefined ? this.vsync : !!f; }   // (the 8255's PB0 pin fault is in pbAnd/pbOr)
   char() {
     const R = this.crtc, g = this.gf ? this.gv : null, c = this.vdu.faulty ? this.vdu.lv : null;
     if (c && c.RESET === 0) { this.hcc = 0; this.vcc = 0; this.vlc = 0; this.hs = false; this.vsync = false; this.vde = false; }   // the 6845 held in reset: no sync, no display
@@ -561,7 +673,8 @@ class CPCMachine {
         let ma = this.maRow + this.hcc, ra = this.vlc; if (c) { ma = ma & this.vdu.maAnd | this.vdu.maOr; ra = ra & this.vdu.raAnd | this.vdu.raOr; }
         const a = (ma & 0x3000) << 2 | (ra & 7) << 11 | (ma & 0x3FF) << 1, slow = this.faulty && (this.ramBank.faulty || this.gf);
         for (let half = 0, p = o; half < 2; half++) {
-          let v = slow ? this.ramRead(a | half, true) : this.ram[a | half]; this.ramBus = v; if (g) v = v & this.gDAnd | this.gDOr;
+          const va = this.selF ? this.selVid(a | half) : a | half;
+          let v = slow || this.selF ? this.ramRead(va, true) : this.ram[va]; this.ramBus = v; if (g) v = v & this.gDAnd | this.gDOr;
           if (this.vmode === 1) for (let i = 0; i < 4; i++) { const c = pens[v >> (7 - i) & 1 | (v >> (3 - i) & 1) << 1]; fb[p++] = c; fb[p++] = c; }
           else if (this.vmode === 2) for (let i = 7; i >= 0; i--) fb[p++] = pens[v >> i & 1];
           else {
@@ -662,7 +775,7 @@ class CPCMachine {
   insertTape(bytes) { this.tape = new CPCTape(bytes); this.tapePlay = false; this.tapeSeek(0); return this.tape; }
   ejectTape() { this.tape = null; this.tapePlay = false; this.tapeLevel = 0; }
   tapeSeek(seg) { const tp = this.tape; if (!tp) return; this.tapeIdx = Math.min(seg, tp.n); this.tapeRem = tp.dur[this.tapeIdx] || 0; this.tapeLevel = tp.lvl[this.tapeIdx] || 0; this.tapePos = 0; for (let q = 0; q < this.tapeIdx; q++) this.tapePos += tp.dur[q]; }
-  motorOn() { return !!(this.ppiC & 0x10); }
+  motorOn() { return !!(this.ppiCout() & 0x10); }
   tapeIn() { return this.tape && this.tapeIdx < this.tape.n ? this.tapeLevel : 0; }     // port B bit 7
   tapeMove(t) {
     const tp = this.tape; if (!tp || !this.motorOn()) return;
@@ -676,16 +789,16 @@ class CPCMachine {
   }
   // ---- recording: REC and PLAY down. The cassette output (port C bit 5) is recorded while the motor is on, as the
   // times between its edges; the tape does not move while the motor is off.
-  recStart() { this.tapePlay = false; this.rec = { pulses: [], clock: 0, last: 0, level: (this.ppiC >> 5) & 1 }; }
+  recStart() { this.tapePlay = false; this.rec = { pulses: [], clock: 0, last: 0, level: (this.ppiCout() >> 5) & 1 }; }
   recEdge() {
     const r = this.rec; if (!r || !this.motorOn()) return;
-    const l = (this.ppiC >> 5) & 1; if (l === r.level) return;
+    const l = (this.ppiCout() >> 5) & 1; if (l === r.level) return;
     r.level = l; r.pulses.push(r.clock - r.last); r.last = r.clock;
   }
   recStop() { const r = this.rec; this.rec = null; if (!r) return null; if (r.clock > r.last) r.pulses.push(r.clock - r.last); return CPCTape.fromPulses(r.pulses); }
   tapeBlock() { const tp = this.tape; if (!tp) return -1; let k = -1; for (let q = 0; q < tp.blocks.length && tp.blocks[q].seg <= this.tapeIdx; q++) k = q; return k; }
   // ---- sound ----
-  soundClock() { return !(this.gaDead() || (this.gf && 'CCLK' in this.gv)); }     // does CCLK reach the sound chip?
+  soundClock() { return !(this.gaDead() || (this.gf && 'CCLK' in this.gv) || (this.ayF && ('CLOCK' in this.ay.lv || this.ay.lv.RESET === 0))); }     // does CCLK reach the sound chip?
   envLevel() {      // 0-15 from the envelope shape (register 13: continue, attack, alternate, hold) and position
     const sh = this.psg[13], cyc = this.envPos >> 4, i = this.envPos & 15, up0 = !!(sh & 4), alt = !!(sh & 2);
     if (cyc >= 1) { if (!(sh & 8)) return 0; if (sh & 1) return up0 !== alt ? 15 : 0; }
@@ -705,7 +818,7 @@ class CPCMachine {
       this.toneCnt[ch] += ticks;
       if (this.toneCnt[ch] >= p) { const n = Math.floor(this.toneCnt[ch] / p); this.toneCnt[ch] -= n * p; if (n & 1) this.toneOut[ch] ^= 1; }
       const on = (this.toneOut[ch] | ((mix >> ch) & 1)) & (noise | ((mix >> (ch + 3)) & 1));
-      if (on) { const v = g[8 + ch]; lv[ch] = CPC_PSG_VOL[v & 16 ? this.envLevel() : v & 15]; }
+      if (on && !(this.ayF && 'ABC'[ch] in this.ay.lv)) { const v = g[8 + ch]; lv[ch] = CPC_PSG_VOL[v & 16 ? this.envLevel() : v & 15]; }   // an output with a fault is silent
     }
     const i = this.aw++ & 32767; this.abufL[i] = (lv[0] + lv[1] / 2) / 1.5; this.abufR[i] = (lv[2] + lv[1] / 2) / 1.5;
   }

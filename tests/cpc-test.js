@@ -2,8 +2,8 @@
 //   CPC_ROMS=/folder/with/OS_464.ROM/and/BASIC_1.0.ROM node tests/cpc-test.js
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = { console }; vm.createContext(ctx);
-for (const f of ['z80core.js', 'memchips.js', 'cpc.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', f), 'utf8') + '\nthis.Z80 = Z80; this.CPCMachine = typeof CPCMachine !== "undefined" ? CPCMachine : undefined; this.CPC = typeof CPC !== "undefined" ? CPC : undefined; this.CPCTape = typeof CPCTape !== "undefined" ? CPCTape : undefined; this.memSetFault = typeof memSetFault !== "undefined" ? memSetFault : undefined;', ctx);
-const { CPCMachine, CPC } = ctx;
+for (const f of ['z80core.js', 'memchips.js', 'cpc.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', f), 'utf8') + '\nthis.Z80 = Z80; this.CPCMachine = typeof CPCMachine !== "undefined" ? CPCMachine : undefined; this.CPC = typeof CPC !== "undefined" ? CPC : undefined; this.CPCTape = typeof CPCTape !== "undefined" ? CPCTape : undefined; this.CPC_NETS = typeof CPC_NETS !== "undefined" ? CPC_NETS : undefined; this.memSetFault = typeof memSetFault !== "undefined" ? memSetFault : undefined;', ctx);
+const { CPCMachine, CPC, CPC_NETS } = ctx;
 // a fault on one pin: the pin disconnected from its line ('z': floating; 0 or 1: at that level), or an output stuck at a level
 const memSetFault = (m, id, pin, v) => m.setPinFault(id, pin, v);
 let pass = 0, fail = 0;
@@ -29,6 +29,60 @@ for (const [name, bytes, want, setup] of [
   m.output(0x7F00, 0x88); ok('upper ROM off', m.read(0x0001) === 0x11 && m.read(0xC001) === 0x88);
   m.output(0x7F00, 0x8C); ok('both off', m.read(0x0001) === 0x77 && m.read(0xC001) === 0x88);
   m.reset(); ok('reset switches both on', m.read(0x0001) === 0x11 && m.read(0xC001) === 0x22);
+}
+{ // the address selectors (74LS153) as chips with faults
+  const m = new CPCMachine(); m.gaMode = 0x0C;
+  for (let a = 0; a < 0x10000; a += 0x101) m.write(a, a >> 8 ^ a & 255);
+  const ident = () => { for (let a = 0; a < 0x10000; a += 0x101) if (m.read(a) !== (a >> 8 ^ a & 255)) return false; return true; };
+  ok('selectors: four chips, each RAM address line driven by one', ['IC109', 'IC104', 'IC113', 'IC105'].every(id => m.chipById[id].part === '74LS153') && CPC_NETS.RA0.pins[0].join() === 'IC105,2Y' && CPC_NETS.RA7.pins[0].join() === 'IC109,1Y');
+  ok('selectors: their inputs are on the CPU address lines and the 6845\'s', CPC_NETS.A15.pins.some(p => p.join() === 'IC109,2C0') && CPC_NETS.A8.pins.some(p => p.join() === 'IC109,2C1') && CPC_NETS.VMA13.pins.some(p => p.join() === 'IC109,2C2') && CPC_NETS.CCLK.pins.some(p => p.join() === 'IC105,1C2'));
+  ok('selectors: no fault, the CPU reads back what it wrote', ident());
+  m.setPinFault('IC109', '2C0', 0);                                              // A15's column input low: the top half folds onto the bottom
+  m.write(0x8000, 0x5A); ok('selector input (A15, column) held low: 8000h and 0000h are one byte', m.read(0x0000) === 0x5A && m.ram[0x0000] === 0x5A, m.read(0));
+  m.clearFaults(); m.ram.fill(0);
+  m.setPinFault('IC105', '1C1', 1);                                              // A1's row input high
+  m.write(0x0000, 0x11); ok('selector input (A1, row) held high: 0000h lands on 0002h', m.ram[0x0002] === 0x11 && m.read(0x0002) === 0x11 && m.ram[0] === 0, m.ram[2]);
+  m.clearFaults(); m.ram.fill(0);
+  m.setPinFault('IC113', 'A', 1);                                                // CAS ADDR high at one selector: the column gets the row bits too
+  m.write(0x0400, 0x22); ok('selector A (CAS ADDR) cut at IC113: its columns (A10, A11) copy its rows (A3, A4), so 0400h lands on 0000h', m.ram[0x0000] === 0x22 && m.ram[0x0400] === 0 && m.read(0x0400) === 0x22, m.ram[0]);
+  m.clearFaults(); m.ram.fill(0);
+  m.setPinFault('IC109', '1G', 1);                                               // enable high: RAM A7 low for row and column
+  m.write(0xC080, 0x33); ok('selector enable (1G) high: RAM A7 is low, A7 and A14 lost', m.ram[0x8000] === 0x33 && m.read(0x8000) === 0x33, m.ram[0x8000]);
+  m.clearFaults(); m.ram.fill(0);
+  m.setPinFault('IC116', 'CPU', 1);                                              // the gate array's CPU output cut: the selectors' B floats high, the CPU gets the display address
+  ok('CPU line cut at the gate array: all four selectors see B high', ['IC109', 'IC104', 'IC113', 'IC105'].every(id => m.chipById[id].f.B === 1));
+  m.lastVid = 0xC000; m.write(0x4000, 0x44); ok('...so a CPU write goes to the display address', m.ram[0xC000] === 0x44 && m.ram[0x4000] === 0, m.ram[0xC000]);
+  m.clearFaults();
+  m.setPinFault('IC104', '2Y', 'z');                                             // an output cut: RAM A4 floats high (handled by the RAM chips)
+  m.write(0x0000, 0x55); ok('selector output (2Y) disconnected: RAM A4 floats high (A6 and A13)', CPC.RAM_ICS.every(ic => m.chipById['IC' + ic].f.A4 === 'z') && m.read(0x2040) === 0x55 && m.ram[0x2040] === 0x55);
+  m.clearFaults();
+}
+{ // the 8255 (IC107) and the sound chip (IC102) as chips with faults
+  const m = new CPCMachine(); m.gaMode = 0x0C;
+  const reg = (r, v) => { m.output(0xF400, r); m.output(0xF600, 0xC0); m.output(0xF600, 0); m.output(0xF400, v); m.output(0xF600, 0x80); m.output(0xF600, 0); };
+  const readReg = (r, row = 0) => { m.output(0xF400, r); m.output(0xF600, 0xC0 | row); m.output(0xF600, row); m.output(0xF700, 0x92); m.output(0xF600, 0x40 | row); const v = m.input(0xF400); m.output(0xF600, row); m.output(0xF700, 0x82); return v; };
+  m.output(0xF700, 0x82);
+  ok('8255 and sound chip: chips on the bus and on their own lines', m.chipById.IC107.part === 'M5L8255AP' && m.chipById.IC102.part === 'AY-3-8912' && CPC_NETS.D3.pins.some(p => p.join() === 'IC107,D3') && CPC_NETS.BDIR.pins.map(p => p.join()).join() === 'IC107,PC7,IC102,BDIR' && CPC_NETS.VSYNC.pins.some(p => p.join() === 'IC107,PB0'));
+  reg(0, 142); ok('no fault: a register written and read back through the 8255', readReg(0) === 142, readReg(0));
+  m.keys[4] = 1; ok('no fault: the keyboard row through port C and the sound chip\'s port', readReg(14, 4) === 0xFE && readReg(14, 3) === 0xFF, readReg(14, 4));
+  m.setPinFault('IC102', 'IO0', 1); ok('sound chip IO0 held high: that key column always reads up', readReg(14, 4) === 0xFF); m.clearFaults();
+  m.setPinFault('IC107', 'PC0', 0); m.output(0xF600, 0x05); ok('8255 PC0 stuck low: row 5 asked for, row 4 read', m.keyRow() === 0xFE, m.keyRow()); m.clearFaults();
+  m.setPinFault('IC102', 'A8', 0); reg(0, 99); ok('sound chip A8 low: not selected, writes lost', m.psg[0] === 142); m.clearFaults();
+  m.setNetFault('BDIR', 0); reg(1, 7); ok('BDIR line held low: nothing written', m.psg[1] === 0); m.clearFaults();
+  m.setPinFault('IC102', 'DA0', 1); reg(2, 0x10); ok('sound chip DA0 held high: register 2 arrives as 3, and 10h as 11h', m.psg[3] === 0x11 && m.psg[2] === 0, m.psg[2] + ' ' + m.psg[3]); m.clearFaults();
+  m.setPinFault('IC107', 'PC4', 1); ok('8255 PC4 held high: the cassette motor runs', m.motorOn()); m.clearFaults();
+  m.setPinFault('IC107', 'WR', 1); m.output(0xF600, 0x10); ok('8255 WR held high: port C not written', !m.motorOn()); m.clearFaults();
+  m.setPinFault('IC107', 'CS', 1); ok('8255 CS held high: never selected, reads float', m.input(0xF500) === 0xFF); m.clearFaults();
+  m.setPinFault('IC107', 'PB0', 0); m.vsync = true; ok('8255 PB0 cut from VSYNC and low: port B bit 0 reads 0 during VSYNC', (m.input(0xF500) & 1) === 0); m.clearFaults();
+  m.vsync = true; ok('...and back to 1 without the fault', (m.input(0xF500) & 1) === 1); m.vsync = false;
+  m.setPinFault('IC107', 'RESET', 1); m.output(0xF600, 0x00); ok('8255 RESET held high: held in reset, its outputs float high (motor on, sound chip bus latching)', m.motorOn() && m.ayMode() === 'addr'); m.clearFaults();
+  m.setPinFault('IC107', 'D0', 0); m.output(0xF700, 0x09); ok('8255 D0 stuck low: "set PC4" (09h) arrives as "clear PC4" (08h)', !m.motorOn()); m.clearFaults();
+  m.audioRate = 48000; reg(7, 0x3E); reg(8, 15); m.run(400000);
+  const peak = () => { let x = 0; for (let i = m.aw - 4000; i < m.aw; i++) x = Math.max(x, m.abufL[i & 32767]); return x; };
+  ok('sound chip: channel A sounds', peak() > 0.5);
+  m.setPinFault('IC102', 'A', 'z'); m.run(400000); ok('sound chip output A disconnected: silent', peak() === 0); m.clearFaults();
+  m.setPinFault('IC102', 'CLOCK', 'z'); ok('sound chip CLOCK disconnected: it stands still', !m.soundClock()); m.clearFaults();
+  m.setPinFault('IC102', 'RESET', 0); ok('sound chip RESET held low: registers cleared', m.psg.every(v => v === 0)); m.clearFaults();
 }
 { // sound: registers written through the 8255 (port A data, port C bits 7-6 the bus control), 1 MHz clock
   const m = new CPCMachine(); m.gaMode = 0x0C; m.audioRate = 48000;     // NOPs in RAM
@@ -146,7 +200,7 @@ for (const [name, bytes, want, setup] of [
   m.setPinFault('IC120', 'A6', 0);                                                  // this one chip's pin cut from the line and low
   ok('one pin disconnected from the held line keeps its own level', m.chipById.IC120.f.A6 === 0 && m.chipById.IC119.f.A6 === 1);
   m.write(0x0000, 0x01); ok('only that chip (bit 0) addresses differently', (m.ram[0x0000] & 1) === 1 && (m.ram[0x8100] & 0xFE) === 0x00, m.ram[0x0000] + ' ' + m.ram[0x8100]);
-  ok('listed once each', m.faultList().length === 2 && /held high \(8 pins\)/.test(m.faultList()[0][2]) && /IC120 pin A6 disconnected from its line, at low/.test(m.faultList()[1][2]), JSON.stringify(m.faultList()));
+  ok('listed once each', m.faultList().length === 2 && /from IC109\) held high \(9 pins\)/.test(m.faultList()[0][2]) && /IC120 pin A6 disconnected from its line, at low/.test(m.faultList()[1][2]), JSON.stringify(m.faultList()));
   m.clearFaults(); ok('cleared', !m.faulty && m.faultList().length === 0 && Object.keys(m.chipById.IC120.f).length === 0);
   m.setNetFault('RD0', 1); m.ram[0x4000] = 0x00;
   ok('RAM data-out line held high: the RAM chip and the gate array pin both show it; the CPU reads it', m.chipById.IC120.f.DOUT === 1 && m.chipById.IC116.f.D0 === 1 && m.read(0x4000) === 0x01);

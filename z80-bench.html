@@ -430,18 +430,18 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 
       </section>
       <section class="panel" id="pMemChips">
-        <h2>Memory chips <span class="aside" id="mcInfo">live pins · click a pin to disconnect it or hold it high or low</span></h2>
+        <h2>Memory and I/O chips <span class="aside" id="mcInfo">live pins · click a pin to disconnect it or hold it high or low</span></h2>
         <div class="mcwrap">
           <div class="mctiles" id="mcTiles"></div>
           <figure class="mcfig" id="mcFig">
-            <svg class="chip" id="mcChip" role="group" aria-label="Selected memory chip pinout"></svg>
+            <svg class="chip" id="mcChip" role="group" aria-label="Selected chip pinout"></svg>
             <figcaption id="mcCap"></figcaption>
             <div class="mcfaults mono" id="mcFaults"></div>
-            <div class="row mcbtns"><button id="mcClear" type="button">Clear this chip's faults</button><button id="mcClearAll" type="button">Clear all memory faults</button></div>
+            <div class="row mcbtns"><button id="mcClear" type="button">Clear this chip's faults</button><button id="mcClearAll" type="button">Clear all faults</button></div>
           </figure>
         </div>
-        <p class="hint">The machine's memory chips, from the CPC 464 circuit diagram: IC103, the 32K ROM holding the firmware and BASIC, and IC117–IC124, eight 4164 dynamic RAMs, one per data bit (IC124 is D7, IC120 is D0). Each RAM address pin is fed by a 74LS153 selector with a row bit and then a column bit of the CPU address: A0 carries A2 then A9, A1 carries A1 then A0, A2 A4/A11, A3 A3/A10, A4 A6/A13, A5 A5/A12, A6 A8/A15 and A7 A7/A14. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the CPU's bus cycles on every clock, wait states included; the display's own reads of the RAM, which share every microsecond with the CPU, are not shown on the pins. The gate array and the 6845 are shown beside the processor.</p>
-        <p class="hint">To simulate a fault, click a pin for its menu. Hold the whole line high or low and every pin on that line is affected, on every chip: the eight RAM chips share their address, RAS, CAS and write-enable lines, and each RAM chip's data output is one line with a data pin of the gate array. Or tick "Disconnected from the line" for a fault on this chip's pin alone. A chip with a fault is marked in red, and every fault is listed in the Debug panel, where it can be removed.</p>
+        <p class="hint">The machine's memory chips, from the CPC 464 circuit diagram: IC103, the 32K ROM holding the firmware and BASIC, and IC117–IC124, eight 4164 dynamic RAMs, one per data bit (IC124 is D7, IC120 is D0). Each RAM address pin is fed by one half of a 74LS153 selector (IC109, IC104, IC113, IC105) with a row bit and then a column bit of the CPU address: A0 carries A2 then A9, A1 carries A1 then A0, A2 A4/A11, A3 A3/A10, A4 A6/A13, A5 A5/A12, A6 A8/A15 and A7 A7/A14; for the display the selectors pass the 6845's address instead, chosen by the gate array's CPU line (the selectors' B) and CAS ADDR (their A). The I/O group holds the 8255 (IC107), whose port A and PC6–PC7 drive the sound chip, PC0–PC3 the keyboard row, PC4 the cassette motor and PC5 the tape, and whose port B reads VSYNC, the links and the tape; and the AY-3-8912 sound chip (IC102), whose I/O port reads the keyboard's columns. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the CPU's bus cycles on every clock, wait states included; the display's own reads of the RAM, which share every microsecond with the CPU, are not shown on the pins. The gate array and the 6845 are shown beside the processor.</p>
+        <p class="hint">To simulate a fault, click a pin for its menu. Hold the whole line high or low and every pin on that line is affected, on every chip: the eight RAM chips share their address, RAS, CAS and write-enable lines, each RAM chip's data output is one line with a data pin of the gate array, and the 8255 shares VSYNC with the 6845 and the gate array. Or tick "Disconnected from the line" for a fault on this chip's pin alone. A chip with a fault is marked in red, and every fault is listed in the Debug panel, where it can be removed.</p>
       </section>
   </div>
 
@@ -2132,9 +2132,13 @@ $('cpDumpBin').onclick = () => cpSaved(cpDownload(`cpc-ram-64k-${cpStamp()}.bin`
 // The video-side pins of the gate array and the 6845 come from the machine's record of each character (cpc.videoAt).
 const MC = {
   m: cpc,
-  groups() { return [['ROM · 32K · ' + (cpc.hasLo && cpc.hasHi ? 'firmware and BASIC' : cpc.hasLo ? 'firmware only, BASIC half empty' : cpc.hasHi ? 'BASIC only, firmware half empty' : 'empty'), [0]], ['RAM · 64K · one 4164 per data bit', [8, 7, 6, 5, 4, 3, 2, 1]]]; },
-  tile(c, i) { return i === 0 ? [c.id, '23256 · D0–D7'] : i >= 9 ? [c.id, c.part] : [c.id, '4164 · D' + c.bit]; },
-  acc(i) { return i === 0 ? 0 : i >= 9 ? 2 : 1; },
+  groups() { return [['ROM · 32K · ' + (cpc.hasLo && cpc.hasHi ? 'firmware and BASIC' : cpc.hasLo ? 'firmware only, BASIC half empty' : cpc.hasHi ? 'BASIC only, firmware half empty' : 'empty'), [0]], ['RAM · 64K · one 4164 per data bit', [8, 7, 6, 5, 4, 3, 2, 1]],
+    ['RAM address selectors · 74LS153', [12, 13, 14, 15]], ['I/O · the 8255 and the sound chip', [16, 17]]]; },
+  tile(c, i) {
+    if (i >= 12 && i <= 15) { const ps = CPC_SEL.map(([ic], p) => ic === c.id ? p : -1).filter(p => p >= 0); return [c.id, 'LS153 · RAM A' + ps.join(', A')]; }
+    return i === 0 ? [c.id, '23256 · D0–D7'] : i === 16 ? [c.id, '8255 · F4xx–F7xx'] : i === 17 ? [c.id, 'AY-3-8912 · sound'] : i >= 9 ? [c.id, c.part] : [c.id, '4164 · D' + c.bit];
+  },
+  acc(i) { return i === 0 ? 0 : i === 16 ? 3 : i === 17 ? 4 : i >= 9 && i <= 11 ? 2 : 1; },
   bus() {
     const T = curT, A = T.a === null || T.a === 'z' ? null : cpc.busA(T.a), mem = T.mreq === 0 && T.rfsh !== 0 && A !== null;
     return { T, A, mem, rd: mem && T.rd === 0, wr: mem && T.wr === 0, rom: mem && T.rd === 0 && cpc.romOn(A) };
@@ -2177,6 +2181,42 @@ const MC = {
       }
       return 'z';
     }
+    if (i >= 12 && i <= 15) {           // a selector: B is the gate array's CPU, A its CAS ADDR; inputs 0-1 the CPU's column and row bits, 2-3 the display's
+      const T = B.T, act = (B.rd || B.wr) && T.t !== 'T1', L = c.lv, V = cpc.videoAt(T.at), at = T.at === undefined ? tTotal : T.at;
+      const va = (V.ma & 0x3000) << 2 | (V.ra & 7) << 11 | (V.ma & 0x3FF) << 1 | (at >> 1 & 1);
+      const sel = name === 'B' || name === 'A' ? null : name[0], p = sel ? CPC_SEL.findIndex(([ic, h]) => ic === c.id && h === sel) : -1;
+      const inp = (k, pp) => { const f = L[sel + 'C' + k]; if (f !== undefined) return f; const [r, cl] = CPC.RAM_PINS[pp], src = k < 2 ? A : va; return src === null ? 'z' : src >> (k & 1 ? r : cl) & 1; };
+      const bv = L.B !== undefined ? L.B : act ? 0 : 1, av = L.A !== undefined ? L.A : act ? 0 : 1;
+      if (name === 'B') return act ? 0 : 1; if (name === 'A') return act ? 0 : 1;
+      if (/^\dG$/.test(name)) return 0;
+      if ((d = /^\dC(\d)$/.exec(name))) return inp(+d[1], p);
+      if (/^\dY$/.test(name)) return L[sel + 'G'] === 1 ? 0 : inp(bv * 2 + av, p);
+      return 'z';
+    }
+    if (i === 16) {                     // the 8255: CS is A11, A1 is A9, A0 is A8; RD and WR are IORQ with RD or WR; RESET is active high
+      const T = B.T, io = T.iorq === 0 && T.m1 !== 0 && A !== null, on = io && cpc.ppiCS(A);
+      if ((d = /^D(\d)$/.exec(name))) return on && (T.rd === 0 || T.wr === 0) ? D(+d[1]) : 'z';
+      if ((d = /^PA(\d)$/.exec(name))) return ((cpc.ppiCtl & 0x10 ? cpc.psgRead() : cpc.ppiAout()) >> +d[1]) & 1;
+      if ((d = /^PB(\d)$/.exec(name))) { const v = (0x7E | (cpc.vsOut() ? 1 : 0) | (cpc.tapeIn() ? 0x80 : 0)) & cpc.pbAnd | cpc.pbOr; return v >> +d[1] & 1; }
+      if ((d = /^PC(\d)$/.exec(name))) return cpc.ppiCout() >> +d[1] & 1;
+      switch (name) {
+        case 'CS': return A === null ? 'z' : A >> 11 & 1; case 'A1': return A === null ? 'z' : A >> 9 & 1; case 'A0': return A === null ? 'z' : A >> 8 & 1;
+        case 'RD': return io && T.rd === 0 ? 0 : 1; case 'WR': return io && T.wr === 0 ? 0 : 1; case 'RESET': return pins.reset ? 0 : 1;
+      }
+      return 'z';
+    }
+    if (i === 17) {                     // the sound chip: its bus from the 8255, CLOCK is CCLK, IO0-IO7 the keyboard's columns, A, B and C the channels
+      const pc = cpc.ppiCout(), g = cpc.psg, mode = cpc.ayMode();
+      if ((d = /^DA(\d)$/.exec(name))) return ((mode === 'read' ? cpc.psgRead() : cpc.ppiAout()) >> +d[1]) & 1;
+      if ((d = /^IO(\d)$/.exec(name))) return (cpc.keyRow() & cpc.ioAnd | cpc.ioOr) >> +d[1] & 1;
+      const ch = 'ABC'.indexOf(name);
+      if (ch >= 0) { const mix = g[7], on = (cpc.toneOut[ch] | (mix >> ch & 1)) & ((cpc.lfsr & 1) | (mix >> (ch + 3) & 1)); return on && (g[8 + ch] & 31) ? 1 : 0; }
+      switch (name) {
+        case 'BDIR': return pc >> 7 & 1; case 'BC1': return pc >> 6 & 1; case 'BC2': case 'A8': return 1; case 'TEST': return 0;
+        case 'RESET': return pins.reset; case 'CLOCK': return !cpc.soundClock() ? 0 : (T => (T.at === undefined ? tTotal : T.at) >> 1 & 1)(B.T);
+      }
+      return 'z';
+    }
     // RAM: the selectors give each address pin a row bit, then a column bit once CAS ADDR switches over
     const [row, col] = CPC.RAM_PINS[m ? +m[1] : 0], act = B.rd || B.wr;
     if (m) return A === null ? 'z' : (A >> (act && B.T.t !== 'T1' ? col : row)) & 1;
@@ -2209,7 +2249,8 @@ function mcDraw() {
   s.innerHTML = ''; s.setAttribute('viewBox', `0 0 380 ${bh + 34}`); mcEls = {}; mcDrawn = c.id + '/' + c.part;
   svg('rect', { class: 'body-rect', x: bx, y: top - 6, width: bw, height: bh, rx: 5 }, s);
   svg('path', { d: `M ${bx + bw / 2 - 12} ${top - 6} a 12 12 0 0 0 24 0`, fill: 'var(--bg)' }, s);
-  const t1 = svg('text', { class: 'chiptitle', x: bx + bw / 2, y: top + bh / 2 - 8, 'text-anchor': 'middle', 'font-size': 24 }, s); t1.textContent = c.part;
+  const ttl = c.part === 'M5L8255AP' ? '8255' : c.part === '74LS153' ? 'LS153' : c.part;
+  const t1 = svg('text', { class: 'chiptitle', x: bx + bw / 2, y: top + bh / 2 - 8, 'text-anchor': 'middle', 'font-size': ttl.length > 7 ? 17 : 24 }, s); t1.textContent = ttl;
   const t2 = svg('text', { class: 'chipsub', x: bx + bw / 2, y: top + bh / 2 + 12, 'text-anchor': 'middle' }, s); t2.textContent = c.id;
   for (const [n, name, kind] of list) {
     const left = n <= half, idx = left ? n - 1 : list.length - n, y = top + idx * pitch + 6, sx = left ? bx - 30 : bx + bw + 4;
@@ -2219,7 +2260,7 @@ function mcDraw() {
     const sv = svg('text', { class: 'sv', x: sx + 13, y: y + 0.5 }, g);
     const num = svg('text', { class: 'num', x: left ? bx + 7 : bx + bw - 7, y, 'text-anchor': left ? 'start' : 'end' }, g); num.textContent = n;
     const nm = svg('text', { class: 'nm', x: left ? sx - 8 : sx + 34, y, 'text-anchor': left ? 'end' : 'start' }, g);
-    if (MEM_ACTIVE_LOW.has(name)) { const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = name; } else nm.textContent = name;
+    if (MEM_ACTIVE_LOW.has(name) && !(c.part === 'M5L8255AP' && name === 'RESET')) { const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = name; } else nm.textContent = name;
     const title = svg('title', {}, g); title.textContent = kind === 'i' ? `${c.id} pin ${n}, ${name}: click to disconnect it or hold it high or low` : `${c.id} pin ${n}, ${name}`;
     if (kind === 'i') {
       g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
