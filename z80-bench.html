@@ -401,14 +401,14 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <div class="row">
           <button id="zxLoadRom" class="primary" type="button">Load ROM…</button><input type="file" id="zxRomFile" hidden>
           <button id="zxRestart" type="button">Power on / restart</button>
-          <button id="zxSnapLoad" type="button" title="A 48K snapshot: .SNA, or .Z80 (versions 1 to 3)">Load snapshot…</button><input type="file" id="zxSnapFile" accept=".sna,.z80" hidden>
+          <button id="zxSnapLoad" type="button" title="A 48K snapshot: .SNA, or .Z80 (versions 1 to 3), or a .zip holding one">Load snapshot…</button><input type="file" id="zxSnapFile" hidden>
           <button id="zxSnapSave" type="button" title="The machine as it is now, as a 48K .SNA snapshot">Save snapshot (.sna)</button>
           <label class="inline" for="zxSound" title="The beeper (port FE bit 4), played while the machine runs in real time">Sound <select id="zxSound"><option value="on" selected>On</option><option value="off">Off</option></select></label>
           <label class="inline" for="zxContend" title="The ULA holds the CPU's clock while it reads the screen, if the CPU uses 4000h-7FFFh or an even port. Untick to see the machine without it."><input type="checkbox" id="zxContend" checked> Contention</label>
           <span class="osbkeys mono" id="zxKeysDown"></span>
         </div>
         <div class="row cptape" id="zxTape">
-          <button id="zxTapeIns" type="button" title="A TAP or TZX tape file, or a WAV recording of a cassette. It is played as the signal it describes, into the EAR input.">Insert tape (.tap, .tzx, .wav)…</button><input type="file" id="zxTapeFile" accept=".tap,.tzx,.wav" hidden>
+          <button id="zxTapeIns" type="button" title="A TAP or TZX tape file, or a WAV recording of a cassette, or a .zip holding one. It is played as the signal it describes, into the EAR input.">Insert tape (.tap, .tzx, .wav, .zip)…</button><input type="file" id="zxTapeFile" hidden>
           <button id="zxTapePlay" type="button" title="Press PLAY on the cassette: the tape moves while PLAY is down" disabled>▶ Play</button>
           <button id="zxTapeRew" type="button" title="Rewind to the start of the tape" disabled>⏮ Rewind</button>
           <button id="zxTapeRec" type="button" title="Record what the computer writes to the MIC socket (SAVE). Press again to stop; the recording is then the tape in the deck, ready to load back or save as a file.">● Record</button>
@@ -1935,6 +1935,30 @@ function zxPowerOn() {
 $('zxLoadRom').onclick = () => $('zxRomFile').click();
 $('zxRomFile').onchange = () => { const f = $('zxRomFile').files[0]; $('zxRomFile').value = ''; if (!f) return; f.arrayBuffer().then(b => { if (zxUseRom(new Uint8Array(b), false)) zxPowerOn(); else render(); }); };
 $('zxRestart').onclick = zxPowerOn;
+// ---------- files in a .zip ----------
+// Tapes and snapshots are often kept zipped. The pickers take no file-type filter (phones grey out types they do not
+// know, such as .tzx), so a chosen file is checked here: a .zip is opened with the browser's own decompressor, and the
+// first file in it with one of the wanted extensions is used.
+async function zxUnzip(file, exts) {
+  const b = new Uint8Array(await file.arrayBuffer());
+  if (!(b[0] === 0x50 && b[1] === 0x4B && b[2] === 3 && b[3] === 4)) return { bytes: b, name: file.name };
+  const dv = new DataView(b.buffer), found = [];
+  // the central directory has the true sizes (a local header may leave them 0)
+  let e = b.length - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054B50) e--;
+  if (e < 0) throw new Error('the .zip file is damaged (no central directory)');
+  for (let i = dv.getUint32(e + 16, true), n = dv.getUint16(e + 10, true); n > 0; n--) {
+    const method = dv.getUint16(i + 10, true), csize = dv.getUint32(i + 20, true), nlen = dv.getUint16(i + 28, true), xlen = dv.getUint16(i + 30, true), clen = dv.getUint16(i + 32, true), local = dv.getUint32(i + 42, true);
+    const name = new TextDecoder().decode(b.subarray(i + 46, i + 46 + nlen)); i += 46 + nlen + xlen + clen;
+    const ext = (name.match(/\.([a-z0-9]+)$/i) || [])[1]; if (!ext || !exts.includes(ext.toLowerCase()) || /(^|\/)__MACOSX\//.test(name)) continue;
+    const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true), data = b.subarray(start, start + csize);
+    if (method === 0) return { bytes: data.slice(), name: name.split('/').pop(), zip: file.name };
+    if (method !== 8) throw new Error(`${name} in the .zip uses a compression this page cannot open`);
+    if (typeof DecompressionStream === 'undefined') throw new Error('this browser cannot open .zip files: unzip it first');
+    const out = new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    return { bytes: out, name: name.split('/').pop(), zip: file.name };
+  }
+  throw new Error(`no ${exts.map(x => '.' + x).join(', ')} file was found in ${file.name}`);
+}
 // ---------- snapshots ----------
 $('zxSnapLoad').onclick = () => $('zxSnapFile').click();
 $('zxSnapFile').onchange = async () => {
@@ -1942,9 +1966,11 @@ $('zxSnapFile').onchange = async () => {
   try {
     if (!zxOn()) throw new Error('load the ROM first');
     const was = running; if (running) stopRun();
-    const kind = zx.loadSnapshot(new Uint8Array(await f.arrayBuffer()), f.name);
+    const z = await zxUnzip(f, ['sna', 'z80']);
+    if (!/\.(sna|z80)$/i.test(z.name) && z.bytes.length !== 49179) throw new Error('choose a .sna or .z80 snapshot (or a .zip holding one)');
+    const kind = zx.loadSnapshot(z.bytes, z.name);
     timeline = null; pre = null; lastTimeline = null; curInstr = null; disDirty = true; disStart = cpu.pc;
-    $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = `Snapshot loaded: ${f.name} (${kind}), running from ${h4(cpu.pc)}h.`;
+    $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = `Snapshot loaded: ${z.name}${z.zip ? ' from ' + z.zip : ''} (${kind}), running from ${h4(cpu.pc)}h.`;
     if (was || true) { $('speed').value = 'real'; runRate = 'real'; startRun(); zscr.focus(); }
   } catch (e) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = 'Could not load the snapshot: ' + e.message; render(); }
 };
@@ -2064,11 +2090,12 @@ $('zxTapeFile').onchange = async () => {
   const f = $('zxTapeFile').files[0]; $('zxTapeFile').value = ''; if (!f) return;
   try {
     if (zx.rec) zx.recStop();
-    const bytes = new Uint8Array(await f.arrayBuffer()), tp = zx.insertTape(bytes, f.name);
-    zxTapeName = tp.fromWav ? f.name.replace(/\.wav$/i, '') + '.tzx' : f.name; zxTapeBytes = tp.file;
+    const z = await zxUnzip(f, ['tap', 'tzx', 'wav']), nm = z.name;
+    const tp = zx.insertTape(z.bytes, nm);
+    zxTapeName = tp.fromWav ? nm.replace(/\.wav$/i, '') + '.tzx' : nm; zxTapeBytes = tp.file;
     const found = tp.blocks.filter(b => b.data).length;
     $('zxMsg').className = 'msg ok';
-    $('zxMsg').textContent = (tp.fromWav ? `WAV recording read: ${f.name}, ${zxTime(tp.total)} of tape, ${found ? found + ' block' + (found === 1 ? '' : 's') + ' in the ROM\'s format found' : 'no blocks in the ROM\'s format found (a custom loader may still read it)'}. Save tape keeps it as a TZX file.` : `Tape inserted: ${f.name}, ${tp.blocks.length} blocks, ${zxTime(tp.total)} long.`) + ' Type LOAD "" (J, then SYMBOL SHIFT + P twice) and ENTER, then press Play.' + (tp.notes.length ? ' Notes on the tape: ' + tp.notes.join('; ') : '');
+    $('zxMsg').textContent = (tp.fromWav ? `WAV recording read: ${nm}, ${zxTime(tp.total)} of tape, ${found ? found + ' block' + (found === 1 ? '' : 's') + ' in the ROM\'s format found' : 'no blocks in the ROM\'s format found (a custom loader may still read it)'}. Save tape keeps it as a TZX file.` : `Tape inserted: ${nm}${z.zip ? ' from ' + z.zip : ''}, ${tp.blocks.length} blocks, ${zxTime(tp.total)} long.`) + ' Type LOAD "" (J, then SYMBOL SHIFT + P twice) and ENTER, then press Play.' + (tp.notes.length ? ' Notes on the tape: ' + tp.notes.join('; ') : '');
   } catch (e) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = 'Could not read the tape: ' + e.message; }
   zxTapeShow();
 };
