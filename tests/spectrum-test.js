@@ -2,7 +2,7 @@
 // Without SPEC_ROM only the checks that need no ROM run.
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const ctx = { console }; vm.createContext(ctx);
-for (const f of ['z80core.js', 'spectrum.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
+for (const f of ['z80core.js', 'memchips.js', 'spectrum.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
 vm.runInContext('this.SpecMachine = SpecMachine; this.SpecTape = SpecTape; this.SPEC = SPEC;', ctx);
 const { SpecMachine, SpecTape, SPEC } = ctx;
 let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
@@ -33,7 +33,33 @@ let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m);
   m.key('A', true); ok((m.keyRows(0xFD) & 1) === 0 && (m.keyRows(0xFE) & 1) === 1, 'a key reads low on its half-row (A on A9) only'); m.key('A', false);
   m.out = 0x10; ok(m.earBit() === 0x40, 'issue 3: bit 4 out reads back on EAR'); m.out = 0x08; ok(m.earBit() === 0, 'and bit 3 alone does not'); m.out = 0;
 }
-// ----- tapes, no ROM needed -----
+// ----- faults, no ROM needed -----
+{
+  const m = new SpecMachine(); m.rom[0] = 0xF3; m.ram[0] = 0x00; m.ram[0x4000] = 0x5A;
+  m.setNetFault('UD3', 1);
+  ok(m.memRead(0x4000) === 0x08 && m.screenByte(0) === 0x08 && m.memRead(0x8000) === 0x5A, 'the ULA side data line D3 held high: the lower RAM and the screen read bit 3 set; the upper RAM does not');
+  m.clearFaults(); m.setPinFault('IC6', 'DOUT', 'z');
+  ok(m.memRead(0x4000) === 0x01 && m.screenByte(0) === 0x01, 'IC6 (lower RAM, D0) with its output disconnected: bit 0 reads 1 on the CPU and on the screen');
+  m.clearFaults(); m.setNetFault('RA0', 1); m.memWrite(0x4000, 0x77);
+  ok(m.ram[0x81] === 0x77 && m.memRead(0x4000) === 0x77, 'lower RAM address line A0 held high: 4000h is stored at 4081h (row bit 0 and column bit 7 both set) and read back from there');
+  m.clearFaults(); m.setNetFault('ROMCS', 1);
+  ok(m.memRead(0) === 0xFF, 'ROMCS held high: the ROM is never selected and the bus reads FFh (the pull-ups R9-R16)');
+  m.clearFaults(); m.setNetFault('A15', 0);
+  ok(m.memRead(0x8000) === 0xF3, 'address line A15 held low: 8000h reads the ROM at 0000h');
+  m.clearFaults(); m.setPinFault('IC1', 'A15', 1);
+  ok(m.memRead(0x0000) === 0xFF && m.memRead(0x4000) === 0xFF && m.memRead(0x8000) === 0x5A, 'the ULA\'s A15 pin stuck high: it selects neither the ROM nor the lower RAM (they read FFh); the upper RAM still answers');
+  m.clearFaults(); m.setPinFault('IC15', 'RAS', 'z'); m.memWrite(0x8000, 0x00);
+  ok(m.memRead(0x8000) === 0x01, 'IC15 (upper RAM, D0) with RAS disconnected: the chip is out, bit 0 reads 1 (the zero written to it is lost)');
+  m.clearFaults(); m.setPinFault('IC1', 'KB0', 0);
+  ok((m.keyRows(0x7F) & 1) === 0 && (m.keyRows(0xFF) & 1) === 0, 'the ULA\'s KB0 held low: bit 0 reads as a key down on every half-row');
+  m.clearFaults(); m.setNetFault('INT', 1); m.ft = 0; m.syncInt();
+  ok(!m.cpu.intLine && !m.intOut(), 'INT held high: no interrupt at the start of the frame');
+  m.clearFaults(); m.setNetFault('CLK', 0); m.poke(0x8000, 0x3C); m.cpu.pc = 0x8000; const ft0 = m.ft;
+  for (let k = 0; k < 100; k++) m.step();
+  ok(m.cpu.pc === 0x8000 && m.ft === ft0 + 400, 'the CPU clock held low: the Z80 stands still while the ULA keeps time');
+  m.clearFaults(); ok(!m.faulty && m.memRead(0) === 0xF3 && m.memRead(0x4000) === m.ram[0] && m.memRead(0x8000) === m.ram[0x4000], 'clearing the faults puts everything back');
+}
+
 const tapBlock = bytes => { let x = 0; for (const v of bytes) x ^= v; const b = [...bytes, x]; return [b.length & 255, b.length >> 8, ...b]; };
 const prog = [0, 10, 9, 0, 0xF5, 0x22, ...[...'HELLO'].map(c => c.charCodeAt(0)), 0x22, 0x0D];           // 10 PRINT "HELLO"
 const header = [0, 0, ...[...'hello     '].map(c => c.charCodeAt(0)), prog.length, 0, 10, 0, prog.length, 0];   // a program, autostart line 10
