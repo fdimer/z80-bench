@@ -338,6 +338,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .mcpop label.cut { display: flex; gap: 6px; align-items: center; margin: 2px 0 8px; font-weight: 600; cursor: pointer; }
 .mcpop .cap { color: var(--muted); margin-bottom: 4px; }
 .mcpop .note { color: var(--muted); margin-top: 6px; font-size: 11.5px; line-height: 1.35; }
+.dumprow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 </style>
 
 <div class="wrap">
@@ -475,6 +476,11 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         </div>
         <div class="vscroll" id="memView" tabindex="0" aria-label="Memory"><div class="vspace"><table class="mem vrows" id="mem"></table></div></div>
         <p class="hint">Scroll through all 64 KB. Click a byte to edit it. Blue marks the instruction being executed, amber marks bytes written by the last instruction, underline marks the top of the stack. With Follow PC ticked, each step brings the current instruction back into view; untick it to keep watching another area.</p>
+        <div class="dumprow">
+          <button id="memDumpBin" type="button" title="All 64 KB as the CPU sees it now, as one binary file (byte 0 is address 0000h)">Dump memory (.bin)</button>
+          <button id="memDumpTxt" type="button" title="A readable listing: the registers and a hex dump with characters, repeated rows collapsed">Memory listing (.txt)</button>
+        </div>
+        <div class="msg" id="memDumpMsg"></div>
       </section>
 
       <section class="panel" id="pMemMap">
@@ -1650,6 +1656,51 @@ $('dbgAdd').onclick = dbgAdd;
 for (const id of ['dbgAddr', 'dbgMemVal', 'dbgBusVal']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); dbgAdd(); } });
 $('dbgList').addEventListener('click', e => { const b = e.target.closest('button[data-key]'); if (!b) return; b.classList.contains('x') ? dbgRemove(b.dataset.key) : dbgGo(b.dataset.key); });
 $('dbgClear').onclick = () => { if (mcReady) { zx.clearFaults(); disDirty = true; } breakpoints.clear(); afterBps.clear(); watches.clear(); memWatches.clear(); pinWatches.clear(); busWatches.clear(); hitReg = null; dbgHit = null; render(); };
+// ---------- dump memory to a file ----------
+// Files leave through the claude.ai viewer's save prompt when this page runs there (it accepts .txt and .zip, so the
+// binary dump goes inside a .zip); anywhere else, through an ordinary browser download.
+const benchSaver = window.claude && typeof window.claude.use === 'function' ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+function benchCrc(b) { let c = ~0; for (const x of b) { c ^= x; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xEDB88320 : c >>> 1; } return ~c >>> 0; }
+function benchZip(name, bytes) {   // one stored (uncompressed) file
+  const n = new TextEncoder().encode(name), crc = benchCrc(bytes), len = bytes.length, le = (v, w) => Array.from({ length: w }, (_, i) => (v >>> (8 * i)) & 0xFF);
+  const common = [...le(20, 2), 0, 0, 0, 0, 0, 0, 0x21, 0, ...le(crc, 4), ...le(len, 4), ...le(len, 4), ...le(n.length, 2), 0, 0];
+  const local = [0x50, 0x4B, 3, 4, ...common], central = [0x50, 0x4B, 1, 2, 20, 0, ...common, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const end = [0x50, 0x4B, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, ...le(central.length + n.length, 4), ...le(local.length + n.length + len, 4), 0, 0];
+  return new Blob([new Uint8Array(local), n, bytes, new Uint8Array(central), n, new Uint8Array(end)]);
+}
+async function benchDownload(name, data, type) {   // resolves to the name the file was saved under, or null if declined
+  const saver = await benchSaver;
+  if (saver) {
+    let fname = name, body = data; if (!/\.txt$/i.test(name)) { fname = name + '.zip'; body = benchZip(name, data); }
+    try { await saver.save({ filename: fname, data: body }); return fname; } catch (e) { if (e && e.code === 'declined') return null; throw e; }
+  }
+  const url = URL.createObjectURL(new Blob([data], { type })), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return name;
+}
+function benchStamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
+function memSnapshot() { const b = new Uint8Array(0x10000); for (let a = 0; a < 0x10000; a++) b[a] = peekMem(a); return b; }
+function memListing(b) {
+  const out = ['ZX81 ULA Test Bench memory dump: 64 KB as the CPU sees it, ' + new Date().toLocaleString('en-AU'), ''];
+  const rv = regsView(); out.push('Registers', '  ' + REGDEF.map(([n, get]) => n + ' ' + fmtReg(n, get(rv))).join('  '), '');
+  out.push('Hex dump (a row of * stands for rows identical to the one above)');
+  let prev = null, starred = false;
+  for (let r = 0; r < 0x10000; r += 16) {
+    const row = b.subarray(r, r + 16), key = row.join(',');
+    if (key === prev && r + 16 < 0x10000) { if (!starred) { out.push('*'); starred = true; } continue; }
+    prev = key; starred = false;
+    const hex = [...row].map(v => h2(v)), txt = [...row].map(v => v >= 0x20 && v < 0x7F ? String.fromCharCode(v) : '.').join('');
+    out.push(`${h4(r)}  ${hex.slice(0, 8).join(' ')}  ${hex.slice(8).join(' ')}  ${txt}`);
+  }
+  return out.join('\n') + '\n';
+}
+function memDumpDone(p, what) {
+  const m = $('memDumpMsg');
+  p.then(n => { if (n) { m.className = 'msg ok'; m.textContent = `${what} saved as ${n} (look in your downloads).`; } else { m.className = 'msg'; m.textContent = 'Not saved: the download was declined.'; } })
+   .catch(e => { m.className = 'msg err'; m.textContent = 'Could not save the file' + (e && e.message ? ': ' + e.message : '.'); });
+}
+$('memDumpBin').onclick = () => memDumpDone(benchDownload(`zx81-ula-memory-${benchStamp()}.bin`, memSnapshot(), 'application/octet-stream'), 'Memory (65,536 bytes, byte 0 is address 0000h)');
+$('memDumpTxt').onclick = () => memDumpDone(benchDownload(`zx81-ula-memory-${benchStamp()}.txt`, memListing(memSnapshot()), 'text/plain;charset=utf-8'), 'Memory listing');
 // ---------- master reset: memory, ROM, every debug point and the input pins ----------
 function masterReset() {
   if (running) stopRun();
