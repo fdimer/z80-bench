@@ -319,6 +319,90 @@ CPCTape.fromPulses = (pulses, note = 'Recorded on the Z80 Bench Amstrad CPC 464 
   flush();
   return any ? new Uint8Array(out) : null;
 };
+// Tapes from WAV files: a recording of a real cassette (or of a tape made by an emulator) is turned into the pulses it
+// carries, and those into a CDT file, so it plays exactly like one, with the firmware's records found for instant
+// loading. The samples (8, 16, 24 or 32-bit PCM, or float; the channels averaged) are freed of any DC drift by taking
+// away their average over 3 ms; the level then flips only when the signal swings past a threshold that follows its own
+// loudness (a quarter of the recent peak), and never below a floor set from the file itself: twice the hiss (the peak
+// level of the quietest tenth of its 5 ms stretches), at least 3% and at most 40% of the signal (the loudest tenth), so
+// hiss in the gaps is ignored. Each edge is timed at the zero crossing before the flip, between samples, and the time between edges
+// becomes a pulse in CPC clocks.
+CPCTape.readWav = bytes => {
+  const b = bytes, dv = new DataView(b.buffer, b.byteOffset, b.byteLength), tag = i => String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]);
+  if (b.length < 12 || tag(0) !== 'RIFF' || tag(8) !== 'WAVE') throw new Error('Not a WAV file (no RIFF WAVE header)');
+  let fmt = null, data = null;
+  for (let i = 12; i + 8 <= b.length;) {
+    const id = tag(i), len = dv.getUint32(i + 4, true), body = i + 8;
+    if (id === 'fmt ') { let f = dv.getUint16(body, true); const bits = dv.getUint16(body + 14, true); if (f === 0xFFFE && len >= 26) f = dv.getUint16(body + 24, true); fmt = { f, ch: dv.getUint16(body + 2, true), rate: dv.getUint32(body + 4, true), align: dv.getUint16(body + 12, true), bits }; }
+    else if (id === 'data') data = [body, Math.min(len, b.length - body)];
+    i = body + len + (len & 1);
+  }
+  if (!fmt || !data) throw new Error('The WAV file has no ' + (fmt ? 'sound data' : 'format chunk'));
+  const { f, ch, rate, align, bits } = fmt, by = bits >> 3;
+  if (!(f === 1 && [8, 16, 24, 32].includes(bits) || f === 3 && (bits === 32 || bits === 64)) || !ch || !rate || align < ch * by) throw new Error(`WAV format not supported (format ${f}, ${bits} bits): use PCM or float`);
+  const n = Math.floor(data[1] / align), x = new Float32Array(n);
+  for (let k = 0; k < n; k++) {
+    let sum = 0;
+    for (let c = 0; c < ch; c++) {
+      const o = data[0] + k * align + c * by;
+      sum += f === 3 ? (bits === 32 ? dv.getFloat32(o, true) : dv.getFloat64(o, true)) : bits === 8 ? (b[o] - 128) / 128 : bits === 16 ? dv.getInt16(o, true) / 32768 : bits === 24 ? ((b[o] | b[o + 1] << 8 | b[o + 2] << 16) << 8 >> 8) / 8388608 : dv.getInt32(o, true) / 2147483648;
+    }
+    x[k] = sum / ch;
+  }
+  return { rate, x, bits, ch };
+};
+CPCTape.wavPulses = (x, rate) => {
+  const n = x.length, W = Math.max(3, Math.round(rate * 0.003)), y = new Float32Array(n);
+  let acc = 0; const half = W >> 1;                                        // centred moving average
+  for (let k = 0; k < Math.min(n, half); k++) acc += x[k];
+  for (let k = 0; k < n; k++) {
+    const add = k + half, sub = k - half - 1; if (add < n) acc += x[add]; if (sub >= 0) acc -= x[sub];
+    const cnt = Math.min(n - 1, k + half) - Math.max(0, k - half) + 1; y[k] = x[k] - acc / cnt;
+  }
+  // the noise floor: the peak of each 5 ms window; the quietest tenth of them is the hiss, the loudest tenth the signal
+  const Wn = Math.max(8, Math.round(rate * 0.005)), wp = [];
+  for (let k = 0; k < n; k += Wn) { let m = 0; for (let j = k; j < Math.min(n, k + Wn); j++) m = Math.max(m, Math.abs(y[j])); wp.push(m); }
+  wp.sort((p, q) => p - q);
+  const sig = wp[Math.floor(wp.length * 0.9)] || 0, hiss = wp[Math.floor(wp.length * 0.1)] || 0;
+  if (!sig) return [];
+  const floor = Math.min(sig * 0.4, Math.max(sig * 0.03, hiss * 2)), decay = Math.exp(-1 / (rate * 0.02)), pulses = [], clk = 4000000 / rate;
+  let env = 0, state = 0, cross = 0, last = 0, first = true;
+  for (let k = 1; k < n; k++) {
+    const v = y[k], a = Math.abs(v); env = Math.max(a, env * decay);
+    if ((v >= 0) !== (y[k - 1] >= 0)) cross = k - 1 + y[k - 1] / (y[k - 1] - v);   // the zero crossing, between samples
+    const h = Math.max(floor, env * 0.25);
+    if (state <= 0 && v > h || state >= 0 && v < -h) {
+      const want = v > 0 ? 1 : -1;
+      if (state !== want) { if (state !== 0) { pulses.push(Math.max(1, Math.round((cross - last) * clk))); } else if (first) { pulses.push(Math.max(1, Math.round(cross * clk))); first = false; } last = cross; state = want; }
+    }
+  }
+  return pulses;
+};
+CPCTape.fromWav = (bytes, name) => {
+  const w = CPCTape.readWav(bytes), pulses = CPCTape.wavPulses(w.x, w.rate);
+  const t = CPCTape.fromPulses(pulses, `Converted from ${name || 'a WAV file'} (${w.rate} Hz, ${w.bits}-bit, ${w.ch === 1 ? 'mono' : w.ch + ' channels'}) by Z80 Bench`);
+  if (!t) throw new Error('No tape signal was found in the WAV file');
+  return t;
+};
+// a tape's signal as a WAV file (mono, 8-bit by default), for testing and for playing into a real CPC
+CPCTape.toWav = (tape, rate = 44100, opt = {}) => {
+  let total = 0; for (let i = 0; i < tape.n; i++) total += tape.dur[i];
+  const n = Math.ceil(total / 4000000 * rate) + 1, bits = opt.bits || 8, by = bits >> 3, out = new Uint8Array(44 + n * by), dv = new DataView(out.buffer);
+  const put = (o, s) => { for (let i = 0; i < s.length; i++) out[o + i] = s.charCodeAt(i); };
+  put(0, 'RIFF'); dv.setUint32(4, 36 + n * by, true); put(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate * by, true); dv.setUint16(32, by, true); dv.setUint16(34, bits, true); put(36, 'data'); dv.setUint32(40, n * by, true);
+  const amp = opt.amp === undefined ? 0.8 : opt.amp, rc = opt.smooth ? Math.exp(-1 / opt.smooth) : 0, dc = opt.dc || 0, hiss = opt.noise || 0, inv = opt.invert ? -1 : 1;
+  let seg = 0, left = tape.n ? tape.dur[0] : Infinity, t = 0, v = 0, seed = 12345;
+  for (let k = 0; k < n; k++) {
+    const at = (k / rate) * 4000000; while (seg < tape.n && at - t >= left) { t += left; seg++; left = seg < tape.n ? tape.dur[seg] : Infinity; }
+    const target = seg < tape.n ? (tape.lvl[seg] ? amp : -amp) * inv : 0;
+    v = rc ? v * rc + target * (1 - rc) : target;
+    seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
+    const s = Math.max(-1, Math.min(1, v + dc + hiss * (seed / 0x7FFFFFFF * 2 - 1)));
+    if (bits === 8) out[44 + k] = Math.round(s * 127 + 128); else dv.setInt16(44 + k * 2, Math.round(s * 32767), true);
+  }
+  return out;
+};
 class CPCMachine {
   constructor() {
     this.rom = new Uint8Array(0x8000).fill(0xFF); this.hasLo = false; this.hasHi = false;
@@ -772,7 +856,12 @@ class CPCMachine {
     return true;
   }
   // ---- cassette ----
-  insertTape(bytes) { this.tape = new CPCTape(bytes); this.tapePlay = false; this.tapeSeek(0); return this.tape; }
+  // a CDT (TZX) file, or a WAV recording, which is converted to a CDT first (tape.cdt then holds the file made)
+  insertTape(bytes, name) {
+    const wav = bytes.length > 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
+    const cdt = wav ? CPCTape.fromWav(bytes, name) : bytes;
+    this.tape = new CPCTape(cdt); this.tape.cdt = cdt; this.tape.fromWav = wav; this.tapePlay = false; this.tapeSeek(0); return this.tape;
+  }
   ejectTape() { this.tape = null; this.tapePlay = false; this.tapeLevel = 0; }
   tapeSeek(seg) { const tp = this.tape; if (!tp) return; this.tapeIdx = Math.min(seg, tp.n); this.tapeRem = tp.dur[this.tapeIdx] || 0; this.tapeLevel = tp.lvl[this.tapeIdx] || 0; this.tapePos = 0; for (let q = 0; q < this.tapeIdx; q++) this.tapePos += tp.dur[q]; }
   motorOn() { return !!(this.ppiCout() & 0x10); }

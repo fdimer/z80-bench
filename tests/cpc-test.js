@@ -144,6 +144,30 @@ for (const [name, bytes, want, setup] of [
     x = casCall(tzx2, 0x4000, 256); x.tapeSeek(0); x.cpu.pc = 0x2836; x.cpu.sp = 0xBFFE; x.instant = false; x.preStep(); ok('instant loading off: nothing happens', x.cpu.pc === 0x2836);
   }
   let bad = false; try { new CPCTape(new Uint8Array(20)); } catch (e) { bad = /ZXTape/.test(e.message); } ok('tape: a file that is not a tape is refused', bad);
+  { // WAV tapes: a record in the firmware's format (a leader of 400 one-bits, a zero-bit sync, the bytes; 1000 baud) played
+    // out as a rough recording (rounded edges, hiss, an offset, upside down, quiet), read back and loaded
+    const seg = Array.from({ length: 256 }, (_, i) => (i * 13 + 5) & 255), crc = CPCTape.crc(seg), rec = [0x16, ...seg, crc >> 8, crc & 255, 255, 255, 255, 255];
+    const tzx3 = new Uint8Array(hdr.concat([0x11], w(2333), w(1167), w(1167), w(1167), w(2333), w(400), [8], w(500), [rec.length & 255, rec.length >> 8, 0], rec));
+    const src = new CPCTape(tzx3);
+    for (const [label, opt, rate] of [['8-bit, 44.1 kHz, rough', { smooth: 2.5, noise: 0.08, dc: 0.15, invert: true, amp: 0.3 }, 44100], ['16-bit, 22.05 kHz, clean', { bits: 16 }, 22050]]) {
+      const wav = CPCTape.toWav(src, rate, opt), x = new CPCMachine(); x.gaMode = 0x08; x.instant = true; const tp = x.insertTape(wav, 'test.wav');
+      const b0 = tp.blocks.find(bl => bl.data);
+      ok(`WAV (${label}): read as a CDT, the record found with its CRC`, tp.fromWav && b0 && b0.data.length >= 259 && seg.every((v, i) => b0.data[1 + i] === v), tp.blocks.map(bl => bl.desc).join('; '));
+      x.ram[0xBCA1] = 0xCF; x.ram[0xBCA2] = 0x36; x.ram[0xBCA3] = 0xA8; x.ram[0xBFFE] = 0x34; x.ram[0xBFFF] = 0x12; x.cpu.sp = 0xBFFE; x.cpu.pc = 0x2836;
+      x.cpu.h = 0x40; x.cpu.l = 0; x.cpu.d = 1; x.cpu.e = 0; x.cpu.a = 0x16; x.cpu.f = 0; x.preStep();
+      ok(`WAV (${label}): instant loading puts the record in RAM`, x.cpu.pc === 0x1234 && (x.cpu.f & 1) === 1 && seg.every((v, i) => x.ram[0x4000 + i] === v));
+      // the WAV made here changes level only on whole samples, so each pulse can be out by a sample period, and hiss moves the crossings a little more
+      const smp = 4000000 / rate;
+      ok(`WAV (${label}): the tape plays the same pulses (to within two samples)`, (() => { let k = 0; while (tp.dur[k] > 60000 || tp.dur[k] < 200) k++; const a = [...tp.dur.subarray(k, k + 400)], ref = [...src.dur.subarray(0, 400)]; return a.every((d, i) => Math.abs(d - ref[i]) <= smp * 2); })());
+    }
+    { // hiss in a long gap is not taken for pulses: two seconds of silence before the record
+      const quiet = new Uint8Array([...tzx3.subarray(0, 10), 0x20, 0xD0, 0x07, ...tzx3.subarray(10)]), q = new CPCTape(quiet);
+      const t2 = new CPCTape(CPCTape.fromWav(CPCTape.toWav(q, 44100, { smooth: 2, noise: 0.05, dc: 0.1, amp: 0.5 })));
+      ok('WAV: hiss in a 2-second gap makes no pulses', Math.abs(t2.n - q.n) <= 2 && t2.blocks.some(bl => bl.data), q.n + ' ' + t2.n);
+    }
+    let bad2 = false; try { CPCTape.readWav(new TextEncoder().encode('RIFF....WAVEjunk')); } catch (e) { bad2 = /format chunk/.test(e.message); } ok('WAV: a file with no format chunk is refused', bad2);
+    let quiet = false; try { CPCTape.fromWav(CPCTape.toWav(src, 44100, { amp: 0 })); } catch (e) { quiet = /No tape signal/.test(e.message); } ok('WAV: silence is refused', quiet);
+  }
 }
 { // RAM chips: data bit and address pin faults follow the selectors' wiring
   const m = new CPCMachine(); m.gaMode = 0x0C;
@@ -264,10 +288,22 @@ if (dir) {
       ok('instant loading: the recording loads at once once the motor is up to speed, without PLAY', y.casLoads >= 2 && s2.some(l => l.trim().toUpperCase() === 'TAPE OK'), y.casLoads + ' ' + s2.filter(l => l.trim()).slice(-4).join(' | '));
     }
     ok('the recording loads back: the program runs', scr.some(l => /Loading T block 1/.test(l)) && scr.some(l => l.trim().toUpperCase() === 'TAPE OK'), scr.filter(l => l.trim()).join(' | '));
+    { // and from a WAV file of the recording, played in real time
+      const wav = ctx.CPCTape.toWav(new ctx.CPCTape(bytes), 44100, { smooth: 2, noise: 0.05, dc: 0.1, amp: 0.5 });
+      const y = new CPCMachine(); y.rom.set(m.rom); y.hasLo = y.hasHi = true; y.run(4000000 * 3);
+      const tky = (k, sh) => { if (sh) y.key('Shift', true); y.run(80000); y.key(k, true); y.run(240000); y.key(k, false); if (sh) y.key('Shift', false); y.run(80000); };
+      for (const [k, sh] of [['N'], ['E'], ['W'], ['Return'], ['L'], ['O'], ['A'], ['D'], ['Space'], ['2', 1], ['2', 1], ['Return']]) tky(k, sh); y.run(4000000);
+      const tp = y.insertTape(wav, 'recording.wav'); y.tapePlay = true; tky('Space');
+      for (let i = 0; i < 120 && !(i > 3 && !y.motorOn()); i++) y.run(4000000);
+      y.run(4000000); for (const k of ['R', 'U', 'N', 'Return']) tky(k); y.run(4000000 * 2);
+      const s3 = y.screenText();
+      ok('a WAV file of the recording loads in real time: the program runs', tp.fromWav && s3.some(l => l.trim().toUpperCase() === 'TAPE OK'), s3.filter(l => l.trim()).slice(-5).join(' | '));
+    }
   }
-  if (process.env.CPC_TAPE) {   // load a real tape: CPC_TAPE=/path/to/file.cdt
+  if (process.env.CPC_TAPE) {   // load a real tape: CPC_TAPE=/path/to/file.cdt (or .wav; CPC_TAPE_WAV=1 turns a CDT into a rough WAV first)
     const x = new CPCMachine(); x.rom.set(m.rom); x.hasLo = x.hasHi = true; x.run(4000000 * 3);
-    const tp = x.insertTape(new Uint8Array(fs.readFileSync(process.env.CPC_TAPE))), tk = (k, sh) => { if (sh) x.key('Shift', true); x.run(80000); x.key(k, true); x.run(240000); x.key(k, false); if (sh) x.key('Shift', false); x.run(80000); };
+    let tb = new Uint8Array(fs.readFileSync(process.env.CPC_TAPE)); if (process.env.CPC_TAPE_WAV) tb = ctx.CPCTape.toWav(new ctx.CPCTape(tb), 44100, { smooth: 2, noise: 0.05, dc: 0.1, amp: 0.5 });
+    const tp = x.insertTape(tb, path.basename(process.env.CPC_TAPE)), tk = (k, sh) => { if (sh) x.key('Shift', true); x.run(80000); x.key(k, true); x.run(240000); x.key(k, false); if (sh) x.key('Shift', false); x.run(80000); };
     for (const [k, sh] of [['R'], ['U'], ['N'], ['2', 1], ['2', 1], ['Return']]) tk(k, sh); x.run(4000000); x.tapePlay = true; tk('Space');
     for (let i = 0; i < 1200 && !(x.tapeIdx >= tp.n || (!x.tapePlay && i > 5)); i++) x.run(4000000);
     x.run(4000000 * 10); const scr = x.screenText();

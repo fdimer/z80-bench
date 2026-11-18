@@ -397,11 +397,11 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <span class="osbkeys mono" id="cpKeysDown"></span>
         </div>
         <div class="row cptape" id="cpTape">
-          <button id="cpTapeIns" type="button" title="A CDT (or TZX) tape file. It is played as the signal it describes, into the cassette input.">Insert tape (.cdt)…</button><input type="file" id="cpTapeFile" accept=".cdt,.tzx" hidden>
+          <button id="cpTapeIns" type="button" title="A CDT (or TZX) tape file, or a WAV recording of a cassette. It is played as the signal it describes, into the cassette input.">Insert tape (.cdt, .wav)…</button><input type="file" id="cpTapeFile" accept=".cdt,.tzx,.wav" hidden>
           <button id="cpTapePlay" type="button" title="Press PLAY on the cassette. The tape moves while PLAY is down and the computer has the motor on." disabled>▶ Play</button>
           <button id="cpTapeRew" type="button" title="Rewind to the start of the tape" disabled>⏮ Rewind</button>
           <button id="cpTapeRec" type="button" title="Press REC and PLAY on a blank tape: what the computer writes to the cassette (SAVE) is recorded while it has the motor on. Press again to stop; the recording is then the tape in the deck, ready to load back or save as a file.">● Record</button>
-          <button id="cpTapeSave" type="button" title="Save the tape in the deck as a CDT file" disabled>Save tape (.cdt)</button>
+          <button id="cpTapeSave" type="button" title="Save the tape in the deck as a CDT file" disabled>Save tape (.cdt)</button><button id="cpTapeWav" type="button" title="Save the tape's signal as a WAV file (44.1 kHz, 8-bit mono), to play into a real CPC's cassette input" disabled>Save .wav</button>
           <label class="inline" for="cpTapeBlk" title="Wind the tape to the start of a block">Block <select id="cpTapeBlk" disabled><option>no tape</option></select></label>
           <label class="inline" for="cpTapeInstant" title="Records the firmware reads (BASIC programs, RUN&quot;&quot;, and the files of most games) go straight from the tape file into memory, with no waiting. Programs with their own loaders still load from the tape's signal, so keep PLAY down."><input type="checkbox" id="cpTapeInstant" checked> Instant loading</label>
           <label class="inline" for="cpTapeFast" title="Run at full speed while the tape is playing and the motor is on, then back to real time."><input type="checkbox" id="cpTapeFast" checked> Fast loading</label>
@@ -2074,7 +2074,7 @@ const cpTime = c => { const s = Math.floor(c / CPC.CPU_HZ); return Math.floor(s 
 function cpTapeShow() {
   const tp = cpc.tape, has = !!tp;
   for (const id of ['cpTapePlay', 'cpTapeRew', 'cpTapeBlk']) $(id).disabled = !has || !!cpc.rec;
-  $('cpTapeSave').disabled = !has || !cpTapeBytes || !!cpc.rec; $('cpTapeRec').textContent = cpc.rec ? '■ Stop recording' : '● Record'; $('cpTapeRec').classList.toggle('armed', !!cpc.rec);
+  $('cpTapeSave').disabled = !has || !cpTapeBytes || !!cpc.rec; $('cpTapeWav').disabled = !has || !!cpc.rec; $('cpTapeRec').textContent = cpc.rec ? '■ Stop recording' : '● Record'; $('cpTapeRec').classList.toggle('armed', !!cpc.rec);
   const sel = $('cpTapeBlk'); sel.innerHTML = '';
   if (!has) { sel.add(new Option('no tape')); $('cpTapeInfo').textContent = cpc.rec ? '● REC' : ''; cpTapeSig = ''; return; }
   let c = 0, q = 0;
@@ -2095,9 +2095,10 @@ $('cpTapeFile').onchange = async () => {
   const f = $('cpTapeFile').files[0]; $('cpTapeFile').value = ''; if (!f) return;
   try {
     if (cpc.rec) cpc.recStop();
-    const bytes = new Uint8Array(await f.arrayBuffer()); const tp = cpc.insertTape(bytes); cpTapeName = f.name; cpTapeBytes = bytes;
+    const bytes = new Uint8Array(await f.arrayBuffer()); const tp = cpc.insertTape(bytes, f.name); cpTapeName = tp.fromWav ? f.name.replace(/\.wav$/i, '') + '.cdt' : f.name; cpTapeBytes = tp.cdt;
+    const found = tp.blocks.filter(b => b.data).length;
     $('cpMsg').className = 'msg ok';
-    $('cpMsg').textContent = `Tape inserted: ${f.name}, ${tp.blocks.length} blocks, ${cpTime(tp.total)} long. Type RUN"" and press RETURN, then press Play here and any key on the CPC.` + (tp.notes.length ? ' Notes on the tape: ' + tp.notes.join('; ') : '');
+    $('cpMsg').textContent = (tp.fromWav ? `WAV recording read: ${f.name}, ${cpTime(tp.total)} of tape, ${found ? found + ' firmware record' + (found === 1 ? '' : 's') + ' found (instant loading can use them)' : 'no firmware records found (instant loading cannot help; a custom loader may still read it)'}. Save tape keeps it as a CDT file.` : `Tape inserted: ${f.name}, ${tp.blocks.length} blocks, ${cpTime(tp.total)} long.`) + ` Type RUN"" and press RETURN, then press Play here and any key on the CPC.` + (tp.notes.length ? ' Notes on the tape: ' + tp.notes.join('; ') : '');
   } catch (e) { $('cpMsg').className = 'msg err'; $('cpMsg').textContent = 'Could not read the tape: ' + e.message; }
   cpTapeShow();
 };
@@ -2110,6 +2111,7 @@ $('cpTapeRec').onclick = () => {
   $('cpMsg').className = 'msg ok'; $('cpMsg').textContent = `Recorded ${cpTime(tp.total)} of tape (${bytes.length.toLocaleString()} bytes as a CDT file). It is now the tape in the deck, rewound: LOAD it back, or press Save tape to keep it.`;
   cpTapeShow();
 };
+$('cpTapeWav').onclick = () => { if (!cpc.tape) return; const w = CPCTape.toWav(cpc.tape, 44100), name = (cpTapeName || 'tape').replace(/\.(cdt|tzx|wav)$/i, '') + '.wav'; cpSaved(cpDownload(name, w, 'audio/wav'), f => `Tape saved as ${f}: ${cpTime(cpc.tape.total)} of sound (${(w.length / 1048576).toFixed(1)} MB), to play into a real CPC.`); };
 $('cpTapeSave').onclick = () => { if (!cpTapeBytes) return; const name = /\.(cdt|tzx)$/i.test(cpTapeName) ? cpTapeName : cpTapeName + '.cdt'; cpSaved(cpDownload(name, cpTapeBytes.slice(), 'application/octet-stream'), f => `Tape saved as ${f}: ${cpTapeBytes.length.toLocaleString()} bytes.`); };
 $('cpTapeInstant').onchange = () => { cpc.instant = $('cpTapeInstant').checked; try { localStorage.setItem('cpc.instant', cpc.instant ? '1' : '0'); } catch (e) {} };
 try { if (localStorage.getItem('cpc.instant') === '0') $('cpTapeInstant').checked = false; } catch (e) {}
