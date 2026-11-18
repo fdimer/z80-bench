@@ -420,6 +420,8 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <div class="row osbbar">
           <button id="osbLoadRom" class="primary" type="button">Load ROM…</button><input type="file" id="osbRomFile" hidden>
           <button id="osbRestart" type="button" title="Reset the machine and run in real time">Power on / restart</button>
+          <button id="osbDumpRam" type="button" title="Both 64K banks of the RAM board as one file: bank 0 (PRI1 low) first, then bank 1">Dump RAM (.bin)</button>
+          <button id="osbDumpVram" type="button" title="The video RAM: characters (C000h-CFFFh), then attributes (D000h-DFFFh), then the font RAM">Dump video RAM (.bin)</button>
           <label class="inline"><input type="checkbox" id="osbAlpha" checked> Alpha Lock</label>
           <span class="osbkeys" id="osbKeys"></span>
         </div>
@@ -1801,6 +1803,13 @@ function memDumpDone(p, what) {
   p.then(n => { if (n) { m.className = 'msg ok'; m.textContent = `${what} saved as ${n} (look in your downloads).`; } else { m.className = 'msg'; m.textContent = 'Not saved: the download was declined.'; } })
    .catch(e => { m.className = 'msg err'; m.textContent = 'Could not save the file' + (e && e.message ? ': ' + e.message : '.'); });
 }
+function osbDumped(p, what) {
+  const m = $('osbMsg');
+  p.then(n => { if (n) { m.className = 'msg ok'; m.textContent = `${what} saved as ${n} (look in your downloads).`; } else { m.className = 'msg'; m.textContent = 'Not saved: the download was declined.'; } })
+   .catch(e => { m.className = 'msg err'; m.textContent = 'Could not save the file' + (e && e.message ? ': ' + e.message : '.'); });
+}
+$('osbDumpRam').onclick = () => { const b = new Uint8Array(0x20000); b.set(osb.dram[0], 0); b.set(osb.dram[1], 0x10000); osbDumped(benchDownload(`osborne-ram-${benchStamp()}.bin`, b, 'application/octet-stream'), 'RAM (131,072 bytes: bank 0 at 00000h, bank 1 at 10000h)'); };
+$('osbDumpVram').onclick = () => { const b = new Uint8Array(0x3000); b.set(osb.vchar, 0); b.set(osb.vattr, 0x1000); b.set(osb.font, 0x2000); osbDumped(benchDownload(`osborne-video-ram-${benchStamp()}.bin`, b, 'application/octet-stream'), 'Video RAM (12,288 bytes: characters at 0000h, attributes at 1000h, font at 2000h)'); };
 $('memDumpBin').onclick = () => memDumpDone(benchDownload(`osborne-memory-${benchStamp()}.bin`, memSnapshot(), 'application/octet-stream'), 'Memory (65,536 bytes, byte 0 is address 0000h)');
 $('memDumpTxt').onclick = () => memDumpDone(benchDownload(`osborne-memory-${benchStamp()}.txt`, memListing(memSnapshot()), 'text/plain;charset=utf-8'), 'Memory listing');
 // ---------- master reset: memory, ROM, every debug point and the input pins ----------
