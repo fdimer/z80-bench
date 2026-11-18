@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CPC 464 Bench</title>
+<title>ZX Spectrum Bench</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -57,7 +57,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); fo
 .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px 28px; max-width: 1920px; margin: 0 auto; }
 #btnMaster { color: var(--warn); }
 #btnMaster.armed { background: var(--warn); border-color: var(--warn); color: #fff; }
-#cpTapeRec.armed { background: var(--warn); border-color: var(--warn); color: #fff; }
+#zxTapeRec.armed { background: var(--warn); border-color: var(--warn); color: #fff; }
 .mono, input.mono, textarea { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-bottom: 12px; }
 header.top h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.02em; margin: 0; }
@@ -204,8 +204,8 @@ textarea { width: 100%; min-height: 210px; resize: vertical; font-size: 12.5px; 
 .tapeinfo { font-size: 12px; color: var(--muted, #666); }
 .msg { font-size: 12.5px; margin-top: 8px; font-family: var(--font-mono); min-height: 1.4em; }
 .msg.err { color: var(--warn); } .msg.ok { color: var(--ok); }
-#cpTapeBlk { max-width: min(380px, 70vw); }
-#cpTapeInfo { margin-top: 4px; color: var(--muted, inherit); }
+#zxTapeBlk { max-width: min(380px, 70vw); }
+#zxTapeInfo { margin-top: 4px; color: var(--muted, inherit); }
 .fieldgrid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; }
 .fieldgrid label { color: var(--muted); font-size: 13px; }
 .fieldgrid select, .fieldgrid input { min-width: 0; width: 100%; }
@@ -296,6 +296,17 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 .zxkb button.down { background: var(--sel); border-color: var(--sel); }
 .zxkb button.latched { background: #8a5a00; border-color: #8a5a00; }
 .cpscreen { background: #000; border-color: #444; aspect-ratio: 4 / 3; image-rendering: auto; }
+.spscreen { aspect-ratio: 352 / 296; background: #000; border-color: #444; image-rendering: pixelated; max-width: 720px; }
+.spkb { max-width: 720px; margin: 12px auto 0; display: grid; gap: 4px; padding: 10px 8px 8px; background: #1d1d1f; border-radius: 6px; }
+.spkb .krow { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.spkb .krow:nth-child(2) { padding-left: 2.5%; } .spkb .krow:nth-child(3) { padding-left: 5%; }
+.spkb button { min-width: 0; padding: 2px 1px 3px; background: #1d1d1f; border: 0; color: #fff; display: flex; flex-direction: column; align-items: center; gap: 1px; touch-action: manipulation; overflow: hidden; }
+.spkb .kw { font-size: 8.5px; color: #fff; letter-spacing: -0.02em; white-space: nowrap; }
+.spkb .kc { display: flex; align-items: center; justify-content: center; gap: 3px; width: 100%; background: #6d6a66; border-radius: 3px; padding: 3px 1px; min-height: 26px; }
+.spkb .kc b { font-size: 14px; font-weight: 700; line-height: 1; text-align: center; } .spkb button[data-k="CAPS SHIFT"] .kc b, .spkb button[data-k="SYMBOL SHIFT"] .kc b, .spkb button[data-k="SPACE"] .kc b, .spkb button[data-k="ENTER"] .kc b { font-size: 8.5px; }
+.spkb .kc i { font-style: normal; font-size: 9px; color: #ff6a5f; white-space: nowrap; }
+.spkb .ke { font-size: 8px; color: #6fd06f; white-space: nowrap; letter-spacing: -0.02em; }
+.spkb button.down .kc { background: var(--sel); } .spkb button.latched .kc { background: #8a5a00; }
 .cpkb { max-width: 860px; margin: 12px auto 0; display: grid; gap: 5px; }
 .cpkb .krow { display: flex; gap: 5px; }
 .cpkb button { flex: 1 1 0; min-width: 0; padding: 4px 1px 6px; font-size: 13px; font-weight: 700; line-height: 1.1; background: #d9d6cc; color: #1c1c1e; border-color: #b9b5a8; border-radius: 4px; touch-action: manipulation; overflow: hidden; }
@@ -355,7 +366,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 
 <div class="wrap">
   <header class="top">
-    <h1>Amstrad CPC 464 <span>· Z80 Bench machine emulator</span></h1>
+    <h1>Sinclair ZX Spectrum 48K <span>· Z80 Bench machine emulator</span></h1>
     <div id="status" class="status">Ready</div>
     <div class="counters">
       <span>T-states <b id="cntT">0</b></span>
@@ -377,7 +388,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <option value="1000">Clock 1 kHz</option>
         <option value="5000">Clock 5 kHz</option>
         <option value="10000">Clock 10 kHz</option>
-        <option value="real" selected>Real time (4 MHz)</option>
+        <option value="real" selected>Real time (3.5 MHz)</option>
         <option value="max">Full speed</option>
       </select>
     </label>
@@ -385,65 +396,48 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 
   <div class="toprows">
       <section class="panel" id="pScreen">
-        <h2>Screen <span class="aside" id="cpScrInfo"></span></h2>
-        <canvas id="cpScreen" class="zxscreen cpscreen" width="768" height="272" tabindex="0" aria-label="Monitor picture: click it and type to use the keyboard"></canvas>
+        <h2>Screen <span class="aside" id="zxScrInfo"></span></h2>
+        <canvas id="zxScreen" class="zxscreen spscreen" width="352" height="296" tabindex="0" aria-label="TV picture: click it and type to use the keyboard"></canvas>
         <div class="row">
-          <button id="cpLoadRom" class="primary" type="button">Load ROM…</button><input type="file" id="cpRomFile" multiple hidden>
-          <button id="cpRestart" type="button">Power on / restart</button>
-          <button id="cpDumpBin" type="button">Dump RAM (.bin)</button>
-          <button id="cpDumpTxt" type="button" title="Registers, the gate array, the 6845, the 8255 and the sound chip, then all 64K of RAM as a hex dump">RAM listing (.txt)</button>
-          <label class="inline" for="cpGa" title="The gate array fitted at IC116. The two types behave alike; their pins are arranged differently.">Gate array <select id="cpGa"><option value="40010">40010</option><option value="40007">40007</option></select></label>
-          <label class="inline" for="cpSound" title="The AY-3-8912 sound chip, played while the machine runs in real time: through the built-in speaker (all three channels together), or as from the stereo socket (A left, C right, B in both).">Sound <select id="cpSound"><option value="speaker" selected>Speaker</option><option value="stereo">Stereo socket</option><option value="off">Off</option></select></label>
-          <span class="osbkeys mono" id="cpKeysDown"></span>
+          <button id="zxLoadRom" class="primary" type="button">Load ROM…</button><input type="file" id="zxRomFile" hidden>
+          <button id="zxRestart" type="button">Power on / restart</button>
+          <button id="zxSnapLoad" type="button" title="A 48K snapshot: .SNA, or .Z80 (versions 1 to 3)">Load snapshot…</button><input type="file" id="zxSnapFile" accept=".sna,.z80" hidden>
+          <button id="zxSnapSave" type="button" title="The machine as it is now, as a 48K .SNA snapshot">Save snapshot (.sna)</button>
+          <label class="inline" for="zxSound" title="The beeper (port FE bit 4), played while the machine runs in real time">Sound <select id="zxSound"><option value="on" selected>On</option><option value="off">Off</option></select></label>
+          <label class="inline" for="zxContend" title="The ULA holds the CPU's clock while it reads the screen, if the CPU uses 4000h-7FFFh or an even port. Untick to see the machine without it."><input type="checkbox" id="zxContend" checked> Contention</label>
+          <span class="osbkeys mono" id="zxKeysDown"></span>
         </div>
-        <div class="row cptape" id="cpTape">
-          <button id="cpTapeIns" type="button" title="A CDT (or TZX) tape file, or a WAV recording of a cassette. It is played as the signal it describes, into the cassette input.">Insert tape (.cdt, .wav)…</button><input type="file" id="cpTapeFile" accept=".cdt,.tzx,.wav" hidden>
-          <button id="cpTapePlay" type="button" title="Press PLAY on the cassette. The tape moves while PLAY is down and the computer has the motor on." disabled>▶ Play</button>
-          <button id="cpTapeRew" type="button" title="Rewind to the start of the tape" disabled>⏮ Rewind</button>
-          <button id="cpTapeRec" type="button" title="Press REC and PLAY on a blank tape: what the computer writes to the cassette (SAVE) is recorded while it has the motor on. Press again to stop; the recording is then the tape in the deck, ready to load back or save as a file.">● Record</button>
-          <button id="cpTapeSave" type="button" title="Save the tape in the deck as a CDT file" disabled>Save tape (.cdt)</button><button id="cpTapeWav" type="button" title="Save the tape's signal as a WAV file (44.1 kHz, 8-bit mono), to play into a real CPC's cassette input" disabled>Save .wav</button>
-          <label class="inline" for="cpTapeBlk" title="Wind the tape to the start of a block">Block <select id="cpTapeBlk" disabled><option>no tape</option></select></label>
-          <label class="inline" for="cpTapeInstant" title="Records the firmware reads (BASIC programs, RUN&quot;&quot;, and the files of most games) go straight from the tape file into memory, with no waiting. Programs with their own loaders still load from the tape's signal, so keep PLAY down."><input type="checkbox" id="cpTapeInstant" checked> Instant loading</label>
-          <label class="inline" for="cpTapeFast" title="Run at full speed while the tape is playing and the motor is on, then back to real time."><input type="checkbox" id="cpTapeFast" checked> Fast loading</label>
+        <div class="row cptape" id="zxTape">
+          <button id="zxTapeIns" type="button" title="A TAP or TZX tape file, or a WAV recording of a cassette. It is played as the signal it describes, into the EAR input.">Insert tape (.tap, .tzx, .wav)…</button><input type="file" id="zxTapeFile" accept=".tap,.tzx,.wav" hidden>
+          <button id="zxTapePlay" type="button" title="Press PLAY on the cassette: the tape moves while PLAY is down" disabled>▶ Play</button>
+          <button id="zxTapeRew" type="button" title="Rewind to the start of the tape" disabled>⏮ Rewind</button>
+          <button id="zxTapeRec" type="button" title="Record what the computer writes to the MIC socket (SAVE). Press again to stop; the recording is then the tape in the deck, ready to load back or save as a file.">● Record</button>
+          <button id="zxTapeSave" type="button" title="Save the tape in the deck as a file (.tap or .tzx)" disabled>Save tape</button><button id="zxTapeWav" type="button" title="Save the tape's signal as a WAV file (44.1 kHz, 8-bit mono), to play into a real Spectrum's EAR socket" disabled>Save .wav</button>
+          <label class="inline" for="zxTapeBlk" title="Wind the tape to the start of a block">Block <select id="zxTapeBlk" disabled><option>no tape</option></select></label>
+          <label class="inline" for="zxTapeInstant" title="Blocks the ROM reads (LOAD, and most games' first parts) go straight from the tape file into memory, with no waiting. Programs with their own loaders still load from the tape's signal, so keep PLAY down."><input type="checkbox" id="zxTapeInstant" checked> Instant loading</label>
+          <label class="inline" for="zxTapeFast" title="Run at full speed while the tape is playing or recording, then back to real time."><input type="checkbox" id="zxTapeFast" checked> Fast loading</label>
         </div>
-        <div class="msg mono" id="cpTapeInfo"></div>
-        <div class="msg" id="cpMsg"></div>
-        <div class="cpkb" id="cpKb" aria-label="Keyboard"></div>
-        <p class="hint" id="cpHint">Click the picture and type: letters, digits and symbols come out as typed (the page presses the CPC key, with or without SHIFT, that gives that character). Backspace is DEL, Delete is CLR, Alt is COPY, the numeric keypad gives the function keys f0–f9 and its Enter is the small ENTER key. On the keyboard above, SHIFT and CTRL stay down for the next key. Load ROM takes the 464's two 16 KB images, the firmware (OS_464, CRC 815752DF) and BASIC 1.0 (CRC 7D9A3BAC), together or one at a time, or one 32 KB image of both. They are not included; your browser keeps them, so you only load them once.</p>
-        <p class="hint">The picture is built the way the machine builds it: the 6845 counts characters and lines, the gate array turns two bytes of RAM into dots for each character, in the screen mode and colours it holds at that moment, with the border outside the display and black during the sync pulses. The monitor starts a new line at every HSYNC and a new picture at every VSYNC. When the machine is paused, the white mark shows where the beam is. The cassette input is port B bit 7 and the motor port C bit 4.</p>
+        <div class="msg mono" id="zxTapeInfo"></div>
+        <div class="msg" id="zxMsg"></div>
+        <div class="spkb" id="zxKb" aria-label="Keyboard"></div>
+        <p class="hint">Click the picture and type: letters, digits and symbols come out as typed (the page presses the Spectrum keys that give that character: SYMBOL SHIFT for the symbols, CAPS SHIFT for capitals). Shift is CAPS SHIFT, Ctrl or Alt is SYMBOL SHIFT, Backspace is DELETE, the arrows move the cursor and Escape is BREAK. Each key on the drawing shows the keyword it gives at the K cursor (above), the SYMBOL SHIFT symbol (red) and the extended-mode word (green below); on the digits the word above is the CAPS SHIFT function. CAPS SHIFT and SYMBOL SHIFT stay down for the next key. Load ROM takes the 48K's 16 KB ROM (CRC DDEE531F); it is not included, and your browser keeps it, so you only load it once.</p>
+        <p class="hint">The picture is built the way the ULA builds it: 312 lines of 224 T-states, the border from port FE and, for the 192 lines of the picture, the bitmap and attribute bytes read from the screen memory at the moment they are drawn, so programs that change the screen or the border while it is drawn show the effect. While the machine is paused, the white line and red mark show where the beam is.</p>
       </section>
       <section class="panel" id="pPinout">
-        <h2>Processor, gate array and 6845 <span class="aside">top view · live pins · ringed pins can be given a fault</span></h2>
+        <h2>Processor and ULA <span class="aside">top view · live pins</span></h2>
         <div class="cpchips">
-          <figure class="mcfig cpfig" id="cpFigZ80"><svg class="chip" id="chip" viewBox="0 0 380 540" role="group" aria-label="Z80 pinout"></svg><figcaption id="cpCapZ80"><b>IC111 · Z80A</b><br>processor, 4 MHz</figcaption></figure>
-          <figure class="mcfig cpfig" id="cpFigGa"><svg class="chip" id="cpChipGa" role="group" aria-label="Gate array pinout"></svg><figcaption id="cpCapGa"></figcaption></figure>
-          <figure class="mcfig cpfig" id="cpFigVdu"><svg class="chip" id="cpChipVdu" role="group" aria-label="6845 pinout"></svg><figcaption id="cpCapVdu"></figcaption></figure>
+          <figure class="mcfig cpfig" id="zxFigZ80"><svg class="chip" id="chip" viewBox="0 0 380 540" role="group" aria-label="Z80 pinout"></svg><figcaption><b>IC2 · Z80A</b><br>processor, 3.5 MHz from the ULA</figcaption></figure>
+          <figure class="mcfig cpfig" id="zxFigUla"><svg class="chip" id="zxChipUla" role="group" aria-label="ULA pinout"></svg><figcaption><b>IC1 · ULA 6C001</b><br>clocks, video, the lower RAM, the keyboard and the cassette</figcaption></figure>
         </div>
         <div class="legend">
-          <span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z)</span><span><i class="li"></i>Input: click to toggle</span>
+          <span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z), or not followed (~)</span><span><i class="li"></i>Input: click to toggle</span>
         </div>
         <dl class="busread">
           <dt>Machine cycle</dt><dd id="brCycle">–</dd>
           <dt>Address bus</dt><dd id="brAddr">–</dd>
           <dt>Data bus</dt><dd id="brData">–</dd>
         </dl>
-        <p class="hint">Click any ringed pin for its fault menu. There are two kinds of fault. <b>A line held high or low</b> is a short on the wire: every pin on that line, on every chip, sees the level and shows it. <b>A pin disconnected from its line</b> (tick the box) is a broken trace or a lifted pin: only that chip is affected. A disconnected input floats high, or can be given a level of its own; a disconnected output no longer drives its line, which then floats high for the pins that listen to it. A disconnected pin ignores a fault on the line. Lines that reach devices not drawn as chips still act on them: an address or data line held at a level is seen by the whole machine.</p>
-        <p class="hint">Clicking the Z80's CLK pulses one clock (right-click it for its fault menu). RESET is one line for the Z80, the gate array, the 6845 and the 8255: held low, they all stay in reset while the clocks run. Without CK16 (the 16 MHz oscillator) the whole machine stops; without PHI, or with READY low, the Z80 is held while the picture goes on; without CCLK the 6845 stands still. With READY high the wait states go: RAM accesses then fall out of step with the gate array, which is modelled approximately (a read returns what the RAM last put out, a write is lost). The gate array's CPU ADDR, CAS ADDR and 244EN, and the Z80's HALT, BUSACK and RFSH, are shown only. All pins follow the machine clock by clock: the 6845's outputs change once a character (four clocks), and R, G and B show the colour at each clock. Faults are listed in the Debug panel.</p>
-
-      </section>
-      <section class="panel" id="pMemChips">
-        <h2>Memory and I/O chips <span class="aside" id="mcInfo">live pins · click a pin to disconnect it or hold it high or low</span></h2>
-        <div class="mcwrap">
-          <div class="mctiles" id="mcTiles"></div>
-          <figure class="mcfig" id="mcFig">
-            <svg class="chip" id="mcChip" role="group" aria-label="Selected chip pinout"></svg>
-            <figcaption id="mcCap"></figcaption>
-            <div class="mcfaults mono" id="mcFaults"></div>
-            <div class="row mcbtns"><button id="mcClear" type="button">Clear this chip's faults</button><button id="mcClearAll" type="button">Clear all faults</button></div>
-          </figure>
-        </div>
-        <p class="hint">The machine's memory chips, from the CPC 464 circuit diagram: IC103, the 32K ROM holding the firmware and BASIC, and IC117–IC124, eight 4164 dynamic RAMs, one per data bit (IC124 is D7, IC120 is D0). Each RAM address pin is fed by one half of a 74LS153 selector (IC109, IC104, IC113, IC105) with a row bit and then a column bit of the CPU address: A0 carries A2 then A9, A1 carries A1 then A0, A2 A4/A11, A3 A3/A10, A4 A6/A13, A5 A5/A12, A6 A8/A15 and A7 A7/A14; for the display the selectors pass the 6845's address instead, chosen by the gate array's CPU line (the selectors' B) and CAS ADDR (their A). The I/O group holds the 8255 (IC107), whose port A and PC6–PC7 drive the sound chip, PC0–PC3 the keyboard row, PC4 the cassette motor and PC5 the tape, and whose port B reads VSYNC, the links and the tape; and the AY-3-8912 sound chip (IC102), whose I/O port reads the keyboard's columns. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the CPU's bus cycles on every clock, wait states included; the display's own reads of the RAM, which share every microsecond with the CPU, are not shown on the pins. The gate array and the 6845 are shown beside the processor.</p>
-        <p class="hint">To simulate a fault, click a pin for its menu. Hold the whole line high or low and every pin on that line is affected, on every chip: the eight RAM chips share their address, RAS, CAS and write-enable lines, each RAM chip's data output is one line with a data pin of the gate array, and the 8255 shares VSYNC with the 6845 and the gate array. Or tick "Disconnected from the line" for a fault on this chip's pin alone. A chip with a fault is marked in red, and every fault is listed in the Debug panel, where it can be removed.</p>
+        <p class="hint">Clicking the Z80's CLK pulses one clock. The pins follow the machine clock by clock. When the ULA holds the CPU (a cycle that uses 4000h–7FFFh or an even port while the picture is being drawn), the bus timing shows the held T-states as TH and the ULA's CPU CLK pin stays high. On the ULA, the data pins show the CPU's data only for an access to the lower RAM or to port FE (they are joined to the CPU's data bus through 470 ohm resistors); the ULA's own screen reads (RAS, CAS and its RAM address A0–A6) and its video outputs U, V and Y are not followed clock by clock and show ~. Pin numbers are from the issue 4A/4B circuit diagram.</p>
       </section>
   </div>
 
@@ -458,7 +452,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <textarea id="asmIn" spellcheck="false" aria-label="Z80 assembly source"></textarea>
         <textarea id="hexIn" spellcheck="false" aria-label="Hexadecimal machine code" hidden></textarea>
         <div class="row">
-          <label class="inline" for="loadAddr" id="loadAddrWrap" title="Where the code goes in memory. It is written straight into the RAM, also where a ROM lies over it. From BASIC, type MEMORY &amp;7FFF first so BASIC keeps below 8000h.">Load at <input id="loadAddr" type="text" class="mono" value="8000" size="5" maxlength="4">h</label>
+          <label class="inline" for="loadAddr" id="loadAddrWrap" title="Where the code goes in memory. It is written straight into the RAM, also where a ROM lies over it. From BASIC, type CLEAR 32767 first so BASIC keeps below 8000h.">Load at <input id="loadAddr" type="text" class="mono" value="8000" size="5" maxlength="4">h</label>
           <label class="inline"><input type="checkbox" id="clearFirst"> Clear RAM first</label>
           <label class="inline"><input type="checkbox" id="resetAfter"> Reset CPU after loading</label>
         </div>
@@ -556,9 +550,9 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
       </section>
 
       <section class="panel" id="pMach">
-        <h2>CPC hardware<button class="fold" type="button" aria-expanded="true" title="Collapse">»</button> <span class="aside">memory · gate array · 6845 · sound · 8255</span></h2>
-        <div class="zxstate" id="cpState"></div>
-        <p class="hint">The gate array (IC116) decides what the CPU reads: the 32K ROM lies over the RAM at 0000h–3FFFh (firmware) and C000h–FFFFh (BASIC), and two bits of its mode register switch each half off to reach the RAM underneath. It also makes READY, which holds the Z80 in wait states so that every bus cycle lines up with the video circuit: instructions take whole microseconds. I/O devices are picked by single address lines, so the port numbers are 16 bits: 7Fxxh gate array, BCxxh–BFxxh 6845, F4xxh–F7xxh 8255. The 6845 (IC108) times the picture: its HSYNC also feeds the gate array's interrupt counter, which asks for an interrupt every 52 lines, 300 times a second. The sound chip (AY-3-8912) is written through the 8255: port A carries the data and two bits of port C drive the chip's bus. It runs on the gate array's 1 MHz CCLK, so a tone period p gives 62,500 / p Hz, and it also reads the keyboard through its own port. The cassette input is port B bit 7 and the motor port C bit 4.</p>
+        <h2>Spectrum hardware<button class="fold" type="button" aria-expanded="true" title="Collapse">»</button> <span class="aside">memory · ULA · contention · port FE</span></h2>
+        <div class="zxstate" id="zxState"></div>
+        <p class="hint">The ULA (IC1) makes the 3.5 MHz clock, draws the picture from the screen memory at 4000h–5AFFh, asks for an interrupt at the start of every frame (50 a second) and answers every even port (port FE): reading it gives the keyboard's half-rows chosen by the high byte of the address (bits 0–4) and the EAR input (bit 6); writing it sets the border (bits 0–2), MIC (bit 3) and the speaker (bit 4). The lower 16K of RAM is the ULA's: while it reads the screen, a CPU cycle that uses 4000h–7FFFh, or an even port, is held until it is done (contention). The ROM is at 0000h–3FFFh and the upper 32K of RAM at 8000h–FFFFh run at full speed.</p>
       </section>
 
       <section class="panel" id="pSystem" hidden>
@@ -599,20 +593,19 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 <script src="src/z80core.js"></script>
 <script src="src/z80asm.js"></script>
 <script src="src/memchips.js"></script>
-<script src="src/cpc.js"></script>
+<script src="src/spectrum.js"></script>
 <script>
 (() => {
 const $ = id => document.getElementById(id);
-const SAMPLE_ASM = `; Sample program: draws a solid bar across the top
-; of the screen by writing straight into the screen
-; memory at C000h (the write goes to the RAM under
-; the BASIC ROM). From BASIC, load it without
-; "Reset CPU after loading" and type:
-;   MEMORY &7FFF:CALL &8000
+const SAMPLE_ASM = `; Sample program: paints the top row of the screen
+; red and white by writing to the attribute memory
+; at 5800h. Load it without "Reset CPU after
+; loading", then from BASIC type:
+;   RANDOMIZE USR 32768
         org  8000h
-start:  ld   hl,0C000h      ; first byte of the screen
-        ld   b,80           ; 80 bytes = one line
-loop:   ld   (hl),0FFh      ; all dots on (pen 3 in mode 1)
+start:  ld   hl,5800h       ; first attribute
+        ld   b,32           ; 32 cells = one row
+loop:   ld   (hl),17h       ; paper red, ink white
         inc  hl
         djnz loop
         ld   (count),a
@@ -620,11 +613,11 @@ loop:   ld   (hl),0FFh      ; all dots on (pen 3 in mode 1)
 
 count:  db   0              ; RAM variable
 `;
-const SAMPLE = `; Sample program: a solid bar across the top of the screen
+const SAMPLE = `; Sample program: paints the top row of the screen red
 8000:
-21 00 C0   ; LD HL,C000h
-06 50      ; LD B,80
-36 FF      ; loop: LD (HL),FFh
+21 00 58   ; LD HL,5800h
+06 20      ; LD B,32
+36 17      ; loop: LD (HL),17h
 23         ; INC HL
 10 FB      ; DJNZ loop
 C9         ; RET
@@ -639,21 +632,20 @@ const portOut = new Map();
 const ioLog = [];
 let lastWrites = new Set();
 
-const cpc = new CPCMachine();
-const bus = {   // the panes' view of memory, as the CPU sees it now (the CPU itself uses cpc.bus)
-  read: a => cpc.peek(a & 0xFFFF), peek: a => cpc.peek(a & 0xFFFF),
-  write: (a, v) => { disDirty = true; cpc.write(a & 0xFFFF, v & 0xFF); },
-  input: p => cpc.input(p), output: (p, v) => cpc.output(p, v)
+const zx = new SpecMachine();
+const bus = {   // the panes' view of memory, as the CPU sees it now (the CPU itself uses zx.bus)
+  read: a => zx.peek(a & 0xFFFF), peek: a => zx.peek(a & 0xFFFF),
+  write: (a, v) => { disDirty = true; zx.poke(a & 0xFFFF, v & 0xFF); },
+  input: p => zx.input(p), output: (p, v) => zx.output(p, v)
 };
-{ const oi = cpc.input.bind(cpc), oo = cpc.output.bind(cpc), ow = cpc.write.bind(cpc);
-  // the keyboard scan (8255 ports, 300 times a second) is left out of the log
-  const quiet = p => !(p & 0x0800);
-  cpc.input = p => { const v = oi(p); if (!quiet(p)) { ioLog.push({ dir: 'IN', p, v, t: tTotal }); trimLog(); } return v; };
-  cpc.output = (p, v) => { const g = cpc.gaMode; oo(p, v); if (cpc.gaMode !== g) disDirty = true; portOut.set(p >> 8 & 0xFF, v); if (!quiet(p)) { ioLog.push({ dir: 'OUT', p, v, t: tTotal }); trimLog(); } };
-  cpc.write = (a, v) => { if (a < 0xB100 && !(a >= 0xC000)) disDirty = true; ow(a, v); };
+{ const oi = zx.input.bind(zx), oo = zx.output.bind(zx), ow = zx.write.bind(zx);
+  // reading the keyboard (port FE, every frame) is left out of the log
+  zx.input = p => { const v = oi(p); if (p & 1) { ioLog.push({ dir: 'IN', p, v, t: tTotal }); trimLog(); } return v; };
+  zx.output = (p, v) => { oo(p, v); portOut.set(p & 0xFF, v); ioLog.push({ dir: 'OUT', p, v, t: tTotal }); trimLog(); };
+  zx.write = (a, v) => { if (a < 0x5B00) disDirty = true; ow(a, v); };
 }
 function trimLog() { if (ioLog.length > 60) ioLog.splice(0, ioLog.length - 60); }
-const cpu = cpc.cpu;
+const cpu = zx.cpu;
 
 // ---------- pins ----------
 const pins = { int: 1, nmi: 1, wait: 1, busreq: 1, reset: 1 };
@@ -710,7 +702,6 @@ function buildChip() {
 }
 function pinClick(name) {
   if (name === 'CLK') { pulseClock(); return; }
-  return;   // the other inputs open the fault menu (cpZ80Faults)
   const k = name.toLowerCase();
   const was = pins[k];
   pins[k] = was ? 0 : 1; pinSync();
@@ -776,15 +767,14 @@ function expand(cycles) {
         break;
     }
   }
-  // the gate array's READY: wait states before each cycle's WAIT sample, and the level of the WAIT pin on every clock
+  // the ULA holding the clock: held T-states before the cycle (TH)
   const out = []; let i = 0;
   cycles.forEach((c, n) => {
     let j = 0;
     while (i < T.length && T[i].mc === n + 1) {
       const s = T[i++];
-      if (s.ws && c.w) for (let k = 0; k < c.w; k++, j++) out.push(Object.assign({}, s, { t: 'TW', ws: false, first: false, gw: true, ready: false, at: c.t0 + j }));
-      if (c.t0 !== undefined) { s.ready = ((c.t0 + j) & 3) === 1; s.at = c.t0 + j; }
-      if (c.held && /READY|WAIT/.test(c.held)) Object.assign(s, { t: 'TW', a: cpu.pc, m1: 0, mreq: 0, rd: 0, gw: true });   // waiting in an opcode fetch
+      if (s.first && c.w) for (let k = 0; k < c.w; k++, j++) out.push(Object.assign({}, s, { t: 'TH', ws: false, first: k === 0, gw: true, at: c.t0 + j, mreq: 1, iorq: 1, rd: 1, wr: 1, m1: s.m1, rfsh: 1, d: null }));   // the ULA holds the clock before the cycle starts
+      if (c.t0 !== undefined) s.at = c.t0 + j;
       out.push(s); j++;
     }
   });
@@ -802,12 +792,12 @@ function describe(c0, pc) {
   return disasm(bus.read, pc).text;
 }
 function beginInstruction() {
-  cpc.preStep();
+  zx.preStep();
   pre = cpu.snapshot();
   const pc = cpu.pc;
   const text = cpu.halted ? null : disasm(bus.read, pc).text;
   memBefore = memWatches.size ? memVals() : null;
-  cpc.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(); cpc.afterStep(cyc);
+  zx.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(); zx.afterStep(cyc);
   timeline = expand(cyc); ti = 0; lastTimeline = timeline;
   lastWrites = new Set(cyc.filter(c => c.k === 'MW').map(c => c.a));
   curInstr = { pc, text: cpu.lastEvent === 'NMI' ? 'NMI response → 0066h' : cpu.lastEvent === 'INT' ? 'Interrupt response (IM ' + pre.im + ')' : (cyc[0] && cyc[0].held) ? 'Processor held (' + cyc[0].held + ')' : (cyc[0] && cyc[0].halt) ? 'HALT state (NOP fetch)' : text, tlen: timeline.length };
@@ -817,7 +807,7 @@ function tick() { const r = tick0(); if (pinWatches.size || busWatches.size) pin
 function tick0() {
   tTotal++;
   if (pins.reset === 0) {
-    cpc.reset(); cpu.intLine = pins.int === 0;
+    zx.reset(); cpu.intLine = pins.int === 0;
     timeline = null; pre = null; waitT = null; curT = RESET_T; busReleased = false; inReset = true;
     lastTimeline = null; curInstr = null;
     return 'reset';
@@ -850,7 +840,7 @@ function setStatus(text, warn, run) {
 function haltMsg() {
   const at = h4((cpu.pc - 1) & 0xFFFF) + 'h';
   if (cpu.nmiPending) return `Halted at ${at}; /NMI received: press Step or Run and the CPU jumps to 0066h`;
-  if (cpu.iff1) return pins.int === 0 || cpc.intOut() ? `Halted at ${at}; /INT is low: press Step or Run to take the interrupt` : `Halted at ${at}: waiting for the gate array's next interrupt`;
+  if (cpu.iff1) return pins.int === 0 || zx.intOut() ? `Halted at ${at}; /INT is low: press Step or Run to take the interrupt` : `Halted at ${at}: waiting for the ULA's next interrupt (once a frame)`;
   return `Halted at ${at} with interrupts disabled (DI): /INT is ignored, so only /NMI or /RESET can wake the CPU`;
 }
 function describeInputs() {
@@ -928,7 +918,7 @@ function frame(now) {
   // full speed
   const t0 = performance.now();
   let last = null, stall = null;
-  const budget = runRate === 'real' && !cpTurbo() ? dt * CPC.CPU_HZ / 1000 : Infinity;
+  const budget = runRate === 'real' && !zxTurbo() ? dt * SPEC.CPU_HZ / 1000 : Infinity;
   let spent = 0;
   while (performance.now() - t0 < 12 && spent < budget) {
     for (let k = 0; k < 400 && spent < budget; k++) {
@@ -939,10 +929,10 @@ function frame(now) {
         if (r === 'wait' || r === 'busreq' || r === 'reset') { stall = r; break; }
         continue;
       }
-      cpc.preStep();
+      zx.preStep();
       const pc = cpu.pc;
       const wb = watches.size ? regVals(cpu) : null, mb = memWatches.size ? memVals() : null;
-      cpc.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(), took = cpc.afterStep(cyc);
+      zx.syncInt(); if (pins.int === 0) cpu.intLine = true; const cyc = cpu.step(), took = zx.afterStep(cyc);
       tTotal += cycleT(cyc); instrCount++; last = cyc; spent += took;
       if (checkBoundary()) { finishFast(last, pc); return; }
       if (wb) { const wn = watchHit(wb); if (wn != null) { finishFast(last, pc); watchStop(wn); return; } }
@@ -954,7 +944,7 @@ function frame(now) {
     if (stall) break;
   }
   if (last) finishFast(last, last.pc);
-  if (stall) stalledMsg(stall); else setStatus(cpTurbo() ? 'Loading from tape at full speed' : runRate === 'real' ? 'Running in real time (4 MHz)' : 'Running at full speed', false, true);
+  if (stall) stalledMsg(stall); else setStatus(zxTurbo() ? 'Tape playing: running at full speed' : runRate === 'real' ? 'Running in real time (3.5 MHz)' : 'Running at full speed', false, true);
   render();
   requestAnimationFrame(frame);
 }
@@ -969,7 +959,7 @@ function finishFast(cyc, pc) {
 function disasmSafe(pc) { try { return disasm(bus.read, pc).text; } catch (e) { return '?'; } }
 function resetCPU() {
   if (running) stopRun();
-  cpc.reset(); cpu.intLine = pins.int === 0;
+  zx.reset(); cpu.intLine = pins.int === 0;
   timeline = null; pre = null; waitT = null; lastTimeline = null; curInstr = null; lastWrites = new Set();
   curT = Object.assign({}, BASE, { a: 0, t: '–' });
   tTotal = 0; instrCount = 0; pinSync();
@@ -987,16 +977,15 @@ function pinValue(name) {
   const T = curT;
   if (name === '+5V') return 'p';
   if (name === 'GND') return 'g';
-  if (name === 'CLK') return clk;
-  if (name in cpc.z80.f) return cpc.z80.f[name];
+  if (name === 'CLK') return curT.gw ? 1 : clk;
   if (/^A\d+$/.test(name)) { if (T.a === null || T.a === 'z') return 'z'; return (T.a >> +name.slice(1)) & 1; }
   if (/^D\d$/.test(name)) { if (T.d === null || T.d === undefined) return 'z'; return (T.d >> +name.slice(1)) & 1; }
   switch (name) {
     case 'M1': return T.m1; case 'MREQ': return T.mreq; case 'IORQ': return T.iorq; case 'RD': return T.rd; case 'WR': return T.wr; case 'RFSH': return T.rfsh;
     case 'HALT': return inReset ? 1 : (regsView().halted ? 0 : 1);
-    case 'BUSACK': return busReleased || cpc.z80.lv.BUSREQ === 0 ? 0 : 1;
-    case 'INT': return pins.int === 0 || cpc.intOut() ? 0 : 1;
-    case 'WAIT': return pins.wait === 0 ? 0 : cpc.ga.lv.READY !== undefined ? cpc.ga.lv.READY : curT.ready === false ? 0 : 1;      // READY from the gate array, through any fault on it
+    case 'BUSACK': return busReleased ? 0 : 1;
+    case 'INT': return pins.int === 0 || zx.intOut() ? 0 : 1;
+    case 'WAIT': return pins.wait === 0 ? 0 : 1;      // not used on the Spectrum: the ULA stops the clock instead
     default: return pins[name.toLowerCase()];
   }
 }
@@ -1016,7 +1005,7 @@ function renderPins() {
   if (T.reset) cy = 'Reset';
   else if (T.rel) cy = 'Bus released (/BUSACK low)';
   else if (!T.k) cy = '–';
-  else cy = CYCNAME[T.k] + ' · ' + T.t + (T.waitIns ? ' (wait state)' : '') + (T.halt ? ' · halted' : '');
+  else cy = CYCNAME[T.k] + ' · ' + T.t + (T.gw ? ' (clock held by the ULA)' : T.waitIns ? ' (wait state)' : '') + (T.halt ? ' · halted' : '');
   $('brCycle').textContent = cy;
   $('brAddr').textContent = (T.a === null || T.a === 'z') ? 'floating' : h4(T.a) + 'h' + (T.k === 'M1' && (T.t === 'T3' || T.t === 'T4') ? '  (refresh: I, R)' : T.k === 'IR' || T.k === 'IW' ? '  (port ' + h2(T.a & 0xFF) + 'h)' : '');
   let dtxt = 'floating';
@@ -1139,14 +1128,14 @@ function renderMem(focus) {
   }
   const tab = $('mem'); tab.style.top = first * MEM_ROW + 'px'; tab.innerHTML = html;
   if (document.activeElement !== $('memFrom')) $('memFrom').value = h4(Math.floor(view.scrollTop / MEM_ROW) * 16);
-  $('memInfo').textContent = 'lower ROM ' + (cpc.gaMode & 4 ? 'off' : 'on') + ' · upper ROM ' + (cpc.gaMode & 8 ? 'off' : 'on') + ' · 64K RAM';
+  $('memInfo').textContent = 'ROM 0000h–3FFFh · RAM 4000h–FFFFh (4000h–7FFFh shared with the ULA)';
 }
 function renderIO() {
   const lat = $('latches');
   if (!portOut.size) lat.innerHTML = '<div class="empty">No OUT instructions yet.</div>';
   else lat.innerHTML = [...portOut.entries()].sort((a, b) => a[0] - b[0]).map(([p, v]) => {
     let leds = ''; for (let b = 7; b >= 0; b--) leds += `<span class="led${(v >> b) & 1 ? ' on' : ''}" title="bit ${b}"></span>`;
-    return `<div class="latch"><span>Port ${h2(p)}xxh</span><span class="leds">${leds}</span><span>${h2(v)}h  ${v.toString(2).padStart(8, '0')}b</span></div>`;
+    return `<div class="latch"><span>Port ${h2(p)}h</span><span class="leds">${leds}</span><span>${h2(v)}h  ${v.toString(2).padStart(8, '0')}b</span></div>`;
   }).join('');
   $('iolog').innerHTML = ioLog.slice(-14).reverse().map(e => `<div>${e.dir === 'OUT' ? 'OUT' : 'IN '} port <b>${h4(e.p)}h</b> ${e.dir === 'OUT' ? '←' : '→'} <b>${h2(e.v)}h</b>  <span>(T ${e.t})</span></div>`).join('') || '';
   const pl = [...portIn.entries()].sort((a, b) => a[0] - b[0]).map(([p, v]) => `${h2(p)}h→${h2(v)}h`).join('  ');
@@ -1155,7 +1144,7 @@ function renderIO() {
 function render() {
   const pcNow = regsView().pc, focus = pcNow !== lastFocusPc || tTotal !== lastFocusT;
   lastFocusPc = pcNow; lastFocusT = tTotal;
-  renderPins(); renderRegs(); renderStops(); renderDebug(); renderCp(); mmDraw(); if (mcReady) renderMemChips(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
+  renderPins(); renderRegs(); renderStops(); renderDebug(); renderZx(); mmDraw(); if (mcReady) renderMemChips(); renderTiming(); renderDis(focus); renderMem(focus); renderIO();
   $('cntPC').textContent = h4(pcNow) + 'h';
   $('cntT').textContent = tTotal.toLocaleString('en-AU');
   $('cntI').textContent = instrCount.toLocaleString('en-AU');
@@ -1256,7 +1245,7 @@ function setMode(m) {
   $('btnToHex').hidden = !asm;
   $('btnLoad').textContent = asm ? 'Assemble and load' : 'Load into memory';
   $('loadMsg').textContent = ''; $('loadMsg').className = 'msg';
-  try { localStorage.setItem('cpcbench.mode', m); } catch (e) {}
+  try { localStorage.setItem('zxbench.mode', m); } catch (e) {}
 }
 function selectLine(ta, line) {
   const lines = ta.value.split('\n');
@@ -1271,14 +1260,14 @@ function readLoadAddr() {
     $('loadAddr').focus(); return null;
   }
   $('loadAddr').value = h4(v);
-  try { localStorage.setItem('cpcbench.loadAddr', h4(v)); } catch (e) {}
+  try { localStorage.setItem('zxbench.loadAddr', h4(v)); } catch (e) {}
   return v;
 }
 function assembleSource() {
   const base = readLoadAddr(); if (base === null) return null;
   const r = assemble($('asmIn').value, base);
   r.base = base;
-  try { localStorage.setItem('cpcbench.asm', $('asmIn').value); } catch (e) {}
+  try { localStorage.setItem('zxbench.asm', $('asmIn').value); } catch (e) {}
   if (r.errors.length) {
     const msg = $('loadMsg'); msg.className = 'msg err';
     msg.textContent = 'Not assembled. ' + r.errors.slice(0, 4).map(e => `Line ${e.line}: ${e.msg}`).join('. ') + (r.errors.length > 4 ? ` (+${r.errors.length - 4} more)` : '') + '.';
@@ -1290,10 +1279,10 @@ function assembleSource() {
 }
 function loadChunks(chunks, note, tail) {
   const msg = $('loadMsg');
-  if ($('clearFirst').checked) cpc.ram.fill(0);
+  if ($('clearFirst').checked) zx.ram.fill(0);
   let total = 0, outside = 0; const ranges = [];
   for (const c of chunks) {
-    c.bytes.forEach((v, i) => { cpc.ram[(c.addr + i) & 0xFFFF] = v; });
+    c.bytes.forEach((v, i) => zx.poke(c.addr + i, v));
     total += c.bytes.length; ranges.push(h4(c.addr) + '–' + h4((c.addr + c.bytes.length - 1) & 0xFFFF));
   }
   if ($('resetAfter').checked) { resetCPU(); cpu.pc = chunks[0].addr; disStart = cpu.pc; memScrollTo(chunks[0].addr); disDirty = true; setStatus('Program loaded, CPU reset, PC = ' + h4(cpu.pc) + 'h'); }
@@ -1314,7 +1303,7 @@ function loadProgram(fromUser) {
   const { chunks, errors } = parseHex($('hexIn').value, start & 0xFFFF);
   if (errors.length) { msg.className = 'msg err'; msg.textContent = 'Not loaded. ' + errors.slice(0, 3).join('; ') + (errors.length > 3 ? ` (+${errors.length - 3} more)` : ''); return; }
   if (!chunks.length) { msg.className = 'msg err'; msg.textContent = 'No bytes found to load.'; return; }
-  try { localStorage.setItem('cpcbench.hex', $('hexIn').value); } catch (e) {}
+  try { localStorage.setItem('zxbench.hex', $('hexIn').value); } catch (e) {}
   const intel = $('hexIn').value.split(/\r?\n/).some(l => l.trim().startsWith(':'));
   const dis = fromUser ? showDisassembly(chunks, importedName) : '';
   loadChunks(chunks, '', (intel && chunks[0].addr !== start ? ' (Intel HEX records carry their own addresses, so Load at is not used.)' : '') + dis);
@@ -1347,7 +1336,7 @@ const DIS = {
   db: 'DB  ', byte: v => '0' + h2(v) + 'h',
   jump: /^(JP|JR|CALL|DJNZ)\b.*?\b0?(?<t>[0-9A-F]{4})h$/, target: /\b0?[0-9A-F]{4}h$/
 };
-const LS_ASM = 'cpcbench.asm';
+const LS_ASM = 'zxbench.asm';
 
 // ---------- disassemble loaded code into the Assembly tab ----------
 let prevAsm = null, hexFromAsm = null;
@@ -1448,7 +1437,7 @@ function importFile(file) {
     $(target === 'hex' ? 'hexIn' : 'asmIn').value = text;
     if (target === 'hex') { importedName = file.name; hexFromAsm = null; }
     setMode(target);
-    try { localStorage.setItem(target === 'hex' ? 'cpcbench.hex' : 'cpcbench.asm', text); } catch (e) {}
+    try { localStorage.setItem(target === 'hex' ? 'zxbench.hex' : 'zxbench.asm', text); } catch (e) {}
     msg.className = 'msg ok';
     msg.textContent = note + ` Check Load at (now ${h4(parseInt($('loadAddr').value, 16) || 0)}h), then press ${target === 'hex' ? 'Load into memory' : 'Assemble and load'}.`;
     $('loadAddr').focus(); $('loadAddr').select();
@@ -1678,7 +1667,7 @@ $('dbgType').onchange = dbgFields; $('dbgMemCond').onchange = dbgFields;
 $('dbgAdd').onclick = dbgAdd;
 for (const id of ['dbgAddr', 'dbgMemVal', 'dbgBusVal']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); dbgAdd(); } });
 $('dbgList').addEventListener('click', e => { const b = e.target.closest('button[data-key]'); if (!b) return; b.classList.contains('x') ? dbgRemove(b.dataset.key) : dbgGo(b.dataset.key); });
-$('dbgClear').onclick = () => { if (mcReady) { cpc.clearFaults(); disDirty = true; } breakpoints.clear(); afterBps.clear(); watches.clear(); memWatches.clear(); pinWatches.clear(); busWatches.clear(); hitReg = null; dbgHit = null; render(); };
+$('dbgClear').onclick = () => { breakpoints.clear(); afterBps.clear(); watches.clear(); memWatches.clear(); pinWatches.clear(); busWatches.clear(); hitReg = null; dbgHit = null; render(); };
 // ---------- dump memory to a file ----------
 // Files leave through the claude.ai viewer's save prompt when this page runs there (it accepts .txt and .zip, so the
 // binary dump goes inside a .zip); anywhere else, through an ordinary browser download.
@@ -1704,7 +1693,7 @@ async function benchDownload(name, data, type) {   // resolves to the name the f
 function benchStamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
 function memSnapshot() { const b = new Uint8Array(0x10000); for (let a = 0; a < 0x10000; a++) b[a] = peekMem(a); return b; }
 function memListing(b) {
-  const out = ['Amstrad CPC 464 memory dump: 64 KB as the CPU sees it, ' + new Date().toLocaleString('en-AU'), ''];
+  const out = ['ZX Spectrum 48K memory dump: 64 KB as the CPU sees it, ' + new Date().toLocaleString('en-AU'), ''];
   const rv = regsView(); out.push('Registers', '  ' + REGDEF.map(([n, get]) => n + ' ' + fmtReg(n, get(rv))).join('  '), '');
   out.push('Hex dump (a row of * stands for rows identical to the one above)');
   let prev = null, starred = false;
@@ -1722,21 +1711,21 @@ function memDumpDone(p, what) {
   p.then(n => { if (n) { m.className = 'msg ok'; m.textContent = `${what} saved as ${n} (look in your downloads).`; } else { m.className = 'msg'; m.textContent = 'Not saved: the download was declined.'; } })
    .catch(e => { m.className = 'msg err'; m.textContent = 'Could not save the file' + (e && e.message ? ': ' + e.message : '.'); });
 }
-$('memDumpBin').onclick = () => memDumpDone(benchDownload(`cpc-memory-${benchStamp()}.bin`, memSnapshot(), 'application/octet-stream'), 'Memory (65,536 bytes, byte 0 is address 0000h)');
-$('memDumpTxt').onclick = () => memDumpDone(benchDownload(`cpc-memory-${benchStamp()}.txt`, memListing(memSnapshot()), 'text/plain;charset=utf-8'), 'Memory listing');
+$('memDumpBin').onclick = () => memDumpDone(benchDownload(`spectrum-memory-${benchStamp()}.bin`, memSnapshot(), 'application/octet-stream'), 'Memory (65,536 bytes, byte 0 is address 0000h)');
+$('memDumpTxt').onclick = () => memDumpDone(benchDownload(`spectrum-memory-${benchStamp()}.txt`, memListing(memSnapshot()), 'text/plain;charset=utf-8'), 'Memory listing');
 // ---------- master reset: memory, ROMs, every debug point and the input pins ----------
 function masterReset() {
   if (running) stopRun();
   $('dbgClear').onclick();
   for (const k of Object.keys(pins)) pins[k] = 1;
   cpu.nmiPending = false;
-  cpc.rom.fill(0xFF); for (const a of [cpc.ram, cpc.keys, mem]) a.fill(0);
-  cpc.hasLo = cpc.hasHi = false; cpc.fb.fill(20); cpc.rec = null; cpc.ejectTape(); cpTapeBytes = null; cpTapeShow();
-  try { localStorage.removeItem(CP_ROM_KEYS.lo); localStorage.removeItem(CP_ROM_KEYS.hi); } catch (e) {}
-  cpHeld.clear(); cpLatched.clear(); cpQueue.length = 0; cpWant.clear(); cpShow(); $('cpMsg').className = 'msg'; $('cpMsg').textContent = '';
+  zx.rom.fill(0xFF); for (const a of [zx.ram, zx.keys, mem]) a.fill(0);
+  zx.hasRom = false; zx.fb.fill(7); zx.rec = null; zx.ejectTape(); zxTapeBytes = null; zxTapeShow();
+  try { localStorage.removeItem(ZX_ROM_KEY); } catch (e) {}
+  zxHeld.clear(); zxLatched.clear(); zxQueue.length = 0; zxWant.clear(); zxShow(); $('zxMsg').className = 'msg'; $('zxMsg').textContent = '';
   resetCPU();
   if (typeof disDirty !== 'undefined') disDirty = true;
-  setStatus('Master reset: ROMs forgotten (load them again to switch on), RAM cleared; all breakpoints, stops and faults removed; input pins released');
+  setStatus('Master reset: the ROM forgotten (load it again to switch on), RAM cleared; all breakpoints, stops and faults removed; input pins released');
   render();
 }
 let masterArm = null;
@@ -1747,232 +1736,219 @@ $('btnMaster').onclick = () => {
 };
 dbgFields();
 
-// ---------- CPC: picture of the screen memory, keyboard, ROMs, hardware panel ----------
-const CP_W = CPC.FW, CP_H = CPC.FH;
-const cscr = $('cpScreen'), cctx = cscr.getContext('2d'), cimg = cctx.createImageData(CP_W, CP_H), cimg32 = new Uint32Array(cimg.data.buffer);
-// the gate array's 32 colours, through any fault on its R, G and B outputs
-let cpPalSig = null; const CP_PAL32 = new Uint32Array(32);
-function cpPal() {
-  const lv = cpc.ga.lv, sig = [lv.R, lv.G, lv.B].join(); if (sig === cpPalSig) return; cpPalSig = sig;
-  const b = new Uint8Array(CP_PAL32.buffer);
-  CPC.PALETTE.forEach((c, i) => { ['R', 'G', 'B'].forEach((k, n) => { b[i * 4 + n] = lv[k] === undefined ? c[n] : lv[k] ? 255 : 0; }); b[i * 4 + 3] = 255; });
-}
-const cpOn = () => cpc.hasLo;
-const cpCrc = cpcCrc32, cpCrcHex = b => cpCrc(b).toString(16).toUpperCase().padStart(8, '0');
-function drawCp() {
-  if (!cpOn()) {
-    cctx.fillStyle = '#000'; cctx.fillRect(0, 0, CP_W, CP_H); cctx.fillStyle = '#ddd'; cctx.textAlign = 'center';
-    cctx.font = '22px "IBM Plex Mono", monospace'; cctx.fillText('Load the CPC 464 ROMs to switch on', CP_W / 2, CP_H / 2 - 6);
-    cctx.font = '15px "IBM Plex Mono", monospace'; cctx.fillText('firmware and BASIC 1.0, 16 KB each, not included', CP_W / 2, CP_H / 2 + 20);
-    $('cpScrInfo').textContent = 'no ROM'; return;
+// ---------- ZX Spectrum: the picture, the keyboard, the ROM, snapshots and the hardware panel ----------
+const ZX_W = SPEC.FW, ZX_H = SPEC.FH;
+const zscr = $('zxScreen'), zctx = zscr.getContext('2d'), zimg = zctx.createImageData(ZX_W, ZX_H), zimg32 = new Uint32Array(zimg.data.buffer);
+const ZX_PAL32 = new Uint32Array(16);
+{ const b = new Uint8Array(ZX_PAL32.buffer); SPEC.RGB.forEach((c, i) => { b[i * 4] = c >> 16; b[i * 4 + 1] = c >> 8 & 255; b[i * 4 + 2] = c & 255; b[i * 4 + 3] = 255; }); }
+const zxOn = () => zx.hasRom;
+const zxCrcHex = b => specCrc32(b).toString(16).toUpperCase().padStart(8, '0');
+const ZX_COLOUR = ['black', 'blue', 'red', 'magenta', 'green', 'cyan', 'yellow', 'white'];
+function drawZx() {
+  if (!zxOn()) {
+    zctx.fillStyle = '#d8d8d8'; zctx.fillRect(0, 0, ZX_W, ZX_H); zctx.fillStyle = '#000'; zctx.textAlign = 'center';
+    zctx.font = '13px "IBM Plex Mono", monospace'; zctx.fillText('Load the 48K ROM to switch on', ZX_W / 2, ZX_H / 2 - 6);
+    zctx.font = '10px "IBM Plex Mono", monospace'; zctx.fillText('16 KB, not included', ZX_W / 2, ZX_H / 2 + 12);
+    $('zxScrInfo').textContent = 'no ROM'; return;
   }
-  cpPal(); const fb = cpc.fb;
-  for (let i = 0; i < fb.length; i++) cimg32[i] = CP_PAL32[fb[i]];
-  cctx.putImageData(cimg, 0, 0);
-  const b = cpc.beam();
-  if (!running && b.y >= 0 && b.y < CP_H) { cctx.fillStyle = 'rgba(255,255,255,0.75)'; cctx.fillRect(0, b.y, CP_W, 1); if (b.x >= 0 && b.x < CP_W) cctx.fillRect(b.x, b.y - 3, 4, 7); }
-  $('cpScrInfo').textContent = `mode ${cpc.vmode} · ${[20, 40, 80][cpc.vmode] || 20} columns · line ${cpc.line} · frame ${cpc.frames}`;
+  const fb = zx.fb; for (let i = 0; i < fb.length; i++) zimg32[i] = ZX_PAL32[fb[i]];
+  zctx.putImageData(zimg, 0, 0);
+  const b = zx.beam();
+  if (!running && b.y >= 0 && b.y < ZX_H) { zctx.fillStyle = 'rgba(255,255,255,0.8)'; zctx.fillRect(0, b.y, ZX_W, 1); if (b.x >= 0) { zctx.fillStyle = 'rgba(224,50,45,0.9)'; zctx.fillRect(b.x, b.y - 2, 2, 5); } }
+  $('zxScrInfo').textContent = `line ${b.line} · T-state ${b.t} of the line · frame ${zx.frames}`;
 }
-let cpSig = '';
-// one sound channel: its tone (Hz and note) or off, whether noise is mixed in, and its volume
-function cpTone(ch) {
-  const g = cpc.psg, p = g[ch * 2] | (g[ch * 2 + 1] & 15) << 8, on = !(g[7] & (1 << ch)), nz = !(g[7] & (8 << ch)), v = g[8 + ch];
-  return `${'ABC'[ch]} <b>${on ? (p ? Math.round(CPCMachine.toneHz(p)) + ' Hz ' + CPCMachine.note(p) : 'period 0') : 'tone off'}</b>${nz ? ' + noise' : ''} · volume <b>${v & 16 ? 'envelope' : v & 15}</b>`;
+let zxSig = '';
+function renderZxState() {
+  const u = zx.ulaState(), keys = []; SPEC.ROWS.forEach((row, r) => row.forEach((k, i) => { if (zx.keys[r] & (1 << i)) keys.push(k); }));
+  const o = zx.out, held = zx.t ? (100 * zx.waits / zx.t).toFixed(1) : '0.0';
+  const html = `<div class="blk"><div class="hd">Memory</div><div class="kv">0000h–3FFFh → <b>${zx.hasRom ? 'ROM' : '<span class="none">no ROM loaded (reads FFh)</span>'}</b> (IC5)<br>4000h–7FFFh → <b>RAM, shared with the ULA</b> (IC6–IC13, 4116)<br>8000h–FFFFh → <b>RAM</b> (IC15–IC22, 4532)<br>Screen: bitmap 4000h–57FFh, attributes 5800h–5AFFh</div></div>
+    <div class="blk"><div class="hd">ULA IC1 (6C001) · now</div><div class="kv">Frame T-state <b>${zx.ft.toLocaleString('en-AU')}</b> of 69,888 · line <b>${u.line}</b> of 312 · T-state <b>${u.t}</b> of 224<br>Drawing <b>${esc(u.what)}</b>${u.pic ? ' · picture line ' + u.row : ''}<br>INT <b>${zx.intOut() ? 'low (asking, first 32 T-states of the frame)' : 'high'}</b> · interrupts taken <b>${zx.ints}</b> · frame <b>${zx.frames}</b> · flash <b>${zx.flash ? 'inverted' : 'normal'}</b></div></div>
+    <div class="blk"><div class="hd">Contention (the ULA holding the CPU's clock)</div><div class="kv">Held now <b>${zx.delay(zx.ft)}</b> T-states for a cycle starting here, if it uses 4000h–7FFFh or an even port<br>Total held <b>${zx.waits.toLocaleString('en-AU')}</b> of <b>${zx.t.toLocaleString('en-AU')}</b> T-states (${held}%)${zx.contended ? '' : '<br><b>Contention switched off</b>'}</div></div>
+    <div class="blk"><div class="hd">Port FE (any even port)</div><div class="kv">Border <b>${ZX_COLOUR[zx.border]}</b> (${zx.border}) · MIC <b>${o & 8 ? 'on' : 'off'}</b> · EAR/speaker <b>${o & 0x10 ? 'on' : 'off'}</b><br>EAR in (bit 6) <b>${zx.earBit() ? 1 : 0}</b>${zx.tapePlay ? ' · tape playing: ' + (zx.tapeIn() ? 'high' : 'low') : ''}<br>Keys down <b>${keys.join(' ') || 'none'}</b></div></div>`;
+  if (html !== zxSig) { zxSig = html; $('zxState').innerHTML = html; }
 }
-function renderCpState() {
-  const keys = []; CPC.KEYS.forEach((row, r) => row.forEach((k, i) => { if (cpc.keys[r] & (1 << i)) keys.push(k); }));
-  const g = cpc.gaMode, R = cpc.crtc, c = cpc.ppiC, none = '<span class="none">nothing fitted (reads FFh)</span>';
-  const lo = g & 4 ? 'RAM' : cpc.hasLo ? 'firmware ROM' : none, hi = g & 8 ? 'RAM' : cpc.hasHi ? 'BASIC ROM' : none;
-  const pen = n => `${n === 16 ? 'border' : 'pen ' + n} <b>${CPC.COLOUR_NAMES[cpc.pens[n]]}</b>`;
-  const html = `<div class="blk"><div class="hd">Memory now</div><div class="kv">0000h–3FFFh → <b>${lo}</b><br>4000h–BFFFh → <b>RAM</b><br>C000h–FFFFh → <b>${hi}</b><br>Writes always go to the RAM</div></div>
-    <div class="blk"><div class="hd">Gate array IC116 (${cpc.ga.part}) · port 7Fxxh</div><div class="kv">Mode and ROM register <b>${h2(0x80 | g)}h</b>: screen mode <b>${g & 3}</b>${cpc.vmode !== (g & 3) ? ' (mode ' + cpc.vmode + ' until the next HSYNC)' : ''} · lower ROM <b>${g & 4 ? 'off' : 'on'}</b> · upper ROM <b>${g & 8 ? 'off' : 'on'}</b><br>Interrupt counter <b>${cpc.intCnt}</b> of 52 lines · INT <b>${cpc.intReq ? 'low (asking)' : 'high'}</b>${cpc.ga.lv.INT !== undefined ? ' (pin fault: the Z80 sees ' + (cpc.ga.lv.INT ? 'high' : 'low') + ')' : ''} · taken <b>${cpc.ints}</b><br>${pen(16)} · ${pen(0)} · ${pen(1)}<br>${pen(2)} · ${pen(3)}</div></div>
-    <div class="blk"><div class="hd">READY (the Z80's WAIT)</div><div class="kv">Clock <b>${cpc.t.toLocaleString('en-AU')}</b> · wait states added <b>${cpc.waits.toLocaleString('en-AU')}</b>${cpc.t ? ' (' + (100 * cpc.waits / cpc.t).toFixed(1) + '%)' : ''}<br>${cpc.held() ? '<b>Z80 held: ' + esc(cpc.held()) + '</b>' : cpc.rdy === 1 ? '<b>No wait states (READY or the Z80\'s WAIT pin is high): RAM accesses out of step</b>' : 'READY is high one clock in four; each cycle waits for it'}</div></div>
-    <div class="blk"><div class="hd">6845 IC108 · ports BCxxh–BFxxh</div><div class="kv">R0–R7 <b>${[...R.subarray(0, 8)].map(h2).join(' ')}</b><br>R8–R15 <b>${[...R.subarray(8, 16)].map(h2).join(' ')}</b><br>Character <b>${cpc.hcc}</b> of ${R[0] + 1} · row <b>${cpc.vcc}</b> line <b>${cpc.vlc}</b> · scan line <b>${cpc.line}</b> of ${cpc.frameLines()}<br>Display address <b>${h4((cpc.maRow + cpc.hcc) & 0x3FFF)}h</b> · DISPEN <b>${cpc.de ? 'high' : 'low'}</b> · HSYNC <b>${cpc.hs ? 'high' : 'low'}</b> · VSYNC <b>${cpc.vsync ? 'high' : 'low'}</b><br>Screen memory at <b>${h4((R[12] & 0x30) << 10)}h</b> · frame <b>${cpc.frames}</b></div></div>
-    <div class="blk"><div class="hd">Monitor</div><div class="kv">Beam <b>${cpc.mx}</b> characters after HSYNC, <b>${cpc.my}</b> lines after VSYNC · picture <b>${cpc.pictures}</b><br>Colour out <b>${CPC.COLOUR_NAMES[cpc.rgb]}</b></div></div>
-    <div class="blk"><div class="hd">Sound chip AY-3-8912 · through the 8255</div><div class="kv">${[0, 1, 2].map(cpTone).join('<br>')}<br>Noise period <b>${cpc.psg[6] & 31}</b> · envelope period <b>${cpc.psg[11] | cpc.psg[12] << 8}</b> shape <b>${cpc.psg[13] & 15}</b> · selected register <b>${cpc.psgSel}</b>${cpc.soundClock() ? '' : '<br><b>No CCLK: the sound chip stands still</b>'}</div></div>
-    <div class="blk"><div class="hd">8255 IC107 · ports F4xxh–F7xxh</div><div class="kv">Port A <b>${h2(cpc.ppiA)}h</b> · port C <b>${h2(c)}h</b>: keyboard row <b>${c & 15}</b> · cassette motor <b>${c & 0x10 ? 'on' : 'off'}</b> · cassette in <b>${cpc.tapeIn() ? 'high' : 'low'}</b> · sound chip bus <b>${['idle', 'read', 'write', 'address'][c >> 6]}</b><br>Keys down <b>${keys.join(' ') || 'none'}</b></div></div>`;
-  if (html !== cpSig) { cpSig = html; $('cpState').innerHTML = html; }
-}
-// ---------- the gate array and the 6845 beside the CPU: live pins, and faults on the pins that have a ring ----------
-const cpSide = [[9, 'cpChipGa', 'cpFigGa', 'cpCapGa'], [10, 'cpChipVdu', 'cpFigVdu', 'cpCapVdu']].map(([ci, sv, fig, cap]) => ({ ci, s: $(sv), fig: $(fig), cap: $(cap), els: {}, drawn: '' }));
-function cpSideDraw(S) {
-  const c = cpc.chips[S.ci], list = MEM_PINOUTS[c.part], half = list.length / 2, s = S.s;
-  const top = 26, pitch = 24, bx = 128, bw = 124, bh = half * pitch + 12;
-  s.innerHTML = ''; s.setAttribute('viewBox', `0 0 380 ${bh + 34}`); S.els = {}; S.drawn = c.part;
+// ---------- the ULA beside the CPU: its pins, from the bus cycle the CPU is in ----------
+const ULA_PINS = [[1, 'CAS', 'o'], [2, 'WR', 'i'], [3, 'RD', 'i'], [4, 'WE', 'o'], [5, 'A0', 'o'], [6, 'A1', 'o'], [7, 'A2', 'o'], [8, 'A3', 'o'], [9, 'A4', 'o'], [10, 'A5', 'o'],
+  [11, 'A6', 'o'], [12, 'INT', 'o'], [13, 'VCC2', 'p'], [14, 'VCC1', 'p'], [15, 'U', 'o'], [16, 'V', 'o'], [17, 'Y', 'o'], [18, 'D0', 'b'], [19, 'KB0', 'i'], [20, 'KB1', 'i'],
+  [21, 'D1', 'b'], [22, 'D2', 'b'], [23, 'KB2', 'i'], [24, 'KB3', 'i'], [25, 'D3', 'b'], [26, 'KB4', 'i'], [27, 'D4', 'b'], [28, 'MIC/EAR', 'b'], [29, 'D5', 'b'], [30, 'D6', 'b'],
+  [31, 'D7', 'b'], [32, 'CPU CLK', 'o'], [33, 'IORQ', 'i'], [34, 'ROMCS', 'o'], [35, 'RAS', 'o'], [36, 'A14', 'i'], [37, 'A15', 'i'], [38, 'MREQ', 'i'], [39, 'OSC', 'i'], [40, 'GND', 'g']];
+const ULA_LOW = new Set(['CAS', 'WR', 'RD', 'WE', 'INT', 'IORQ', 'ROMCS', 'RAS', 'MREQ']);
+const ULA_TIP = { CAS: 'Column address strobe of the lower 16K RAM (IC6–IC13)', WE: 'Write enable of the lower RAM (DRAMWE)', INT: 'Interrupt to the Z80: low for 32 T-states at the start of every frame',
+  U: 'Colour difference U, to the LM1889 (IC14)', V: 'Colour difference V, to the LM1889', Y: 'Brightness and sync, to the LM1889', 'MIC/EAR': 'MIC/TAPE: the outputs of port FE bits 3 and 4 (MIC and speaker), and the EAR input read on bit 6',
+  'CPU CLK': 'The Z80\'s 3.5 MHz clock, through TR6. The ULA stops it (holds it high) while it needs the lower RAM', ROMCS: 'Select of the ROM (IC5): an access to 0000h–3FFFh',
+  RAS: 'Row address strobe of the lower RAM', OSC: '14 MHz crystal oscillator', KB0: 'Keyboard KB0 (half-row bit 0), 10K pull-up', A14: 'CPU address A14', A15: 'CPU address A15' };
+for (let i = 0; i < 7; i++) ULA_TIP['A' + i] = 'Address line A' + i + ' of the lower RAM: the ULA\'s own address for the screen, or the CPU\'s through IC3 and IC4 (330 ohm)';
+for (let i = 0; i < 8; i++) ULA_TIP['D' + i] = 'Data line D' + i + ' of the lower RAM and the ULA: joined to the CPU\'s D' + i + ' through 470 ohm (R' + (i + 1) + ')';
+for (let i = 1; i < 5; i++) ULA_TIP['KB' + i] = 'Keyboard KB' + i + ' (half-row bit ' + i + '), 10K pull-up';
+const ulaEls = {};
+function buildUla() {
+  const s = $('zxChipUla'), top = 26, pitch = 24, bx = 128, bw = 124, bh = 20 * pitch + 12;
+  s.setAttribute('viewBox', '0 0 380 540');
   svg('rect', { class: 'body-rect', x: bx, y: top - 6, width: bw, height: bh, rx: 5 }, s);
   svg('path', { d: `M ${bx + bw / 2 - 12} ${top - 6} a 12 12 0 0 0 24 0`, fill: 'var(--bg)' }, s);
-  const t1 = svg('text', { class: 'chiptitle', x: bx + bw / 2, y: top + bh / 2 - 8, 'text-anchor': 'middle', 'font-size': 24 }, s); t1.textContent = c.part.replace('HD', '');
-  const t2 = svg('text', { class: 'chipsub', x: bx + bw / 2, y: top + bh / 2 + 12, 'text-anchor': 'middle' }, s); t2.textContent = c.id;
-  for (const [n, name, kind] of list) {
-    const left = n <= half, idx = left ? n - 1 : list.length - n, y = top + idx * pitch + 6, sx = left ? bx - 30 : bx + bw + 4;
-    const g = svg('g', { class: 'pin' + (kind === 'i' ? ' input' : ''), 'data-pin': name }, s);
-    if (kind === 'i') { svg('rect', { x: left ? sx - 70 : sx - 4, y: y - 11, width: 104, height: 22, fill: 'transparent' }, g); svg('rect', { class: 'ring', x: sx - 3, y: y - 9, width: 32, height: 18, rx: 3 }, g); }
+  const t1 = svg('text', { class: 'chiptitle', x: bx + bw / 2, y: top + 228, 'text-anchor': 'middle', 'font-size': 26 }, s); t1.textContent = 'ULA';
+  const t2 = svg('text', { class: 'chipsub', x: bx + bw / 2, y: top + 248, 'text-anchor': 'middle' }, s); t2.textContent = '6C001';
+  for (const [n, name, kind] of ULA_PINS) {
+    const left = n <= 20, idx = left ? n - 1 : 40 - n, y = top + idx * pitch + 6, sx = left ? bx - 30 : bx + bw + 4;
+    const g = svg('g', { class: 'pin', 'data-pin': name }, s);
     svg('rect', { class: 'stub', x: sx, y: y - 6, width: 26, height: 12, rx: 2 }, g);
     const sv = svg('text', { class: 'sv', x: sx + 13, y: y + 0.5 }, g);
     const num = svg('text', { class: 'num', x: left ? bx + 7 : bx + bw - 7, y, 'text-anchor': left ? 'start' : 'end' }, g); num.textContent = n;
     const nm = svg('text', { class: 'nm', x: left ? sx - 8 : sx + 34, y, 'text-anchor': left ? 'end' : 'start' }, g);
-    if (MEM_ACTIVE_LOW.has(name) && c.part !== 'HD6845' || c.part === 'HD6845' && (name === 'CS' || name === 'RESET')) { const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = name; } else nm.textContent = name;
-    const title = svg('title', {}, g); title.textContent = kind === 'i' ? `${c.id} pin ${n}, ${name}: click to disconnect it or hold it high or low` : `${c.id} pin ${n}, ${name}`;
-    if (kind === 'i') {
-      g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
-      g.addEventListener('click', ev => { ev.stopPropagation(); mcMenu(name, ev, S.ci, S.fig); });
-      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const r = g.getBoundingClientRect(); mcMenu(name, { clientX: r.left, clientY: r.top }, S.ci, S.fig); } });
-    }
-    S.els[name] = { g, sv, prev: null };
+    if (ULA_LOW.has(name)) { const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = name; } else nm.textContent = name;
+    const title = svg('title', {}, g); title.textContent = ULA_TIP[name] || name;
+    ulaEls[name] = { g, sv, prev: null };
   }
 }
-// the Z80's pins open the same fault menu as every other chip's (CLK: on a right-click, since a click pulses one clock)
-const CP_BUS_PINS = [...Array(16).keys()].map(n => 'A' + n).concat([...Array(8).keys()].map(n => 'D' + n), ['MREQ', 'IORQ', 'RD', 'WR', 'M1', 'HALT']);
-const CP_Z80_INPUTS = ['INT', 'NMI', 'WAIT', 'BUSREQ', 'RESET'];
-let cpZ80Done = false;
-function cpZ80Faults() {
-  cpZ80Done = true; const fig = $('cpFigZ80'), ci = cpc.chips.indexOf(cpc.z80);
-  for (const name of CP_BUS_PINS.concat(CP_Z80_INPUTS)) {
-    const g = pinEls[name].g;
-    if (!g.querySelector('.ring')) {
-      const stub = g.querySelector('.stub'), x = +stub.getAttribute('x'), y = +stub.getAttribute('y') + 6, left = x < 128;
-      const hit = svg('rect', { x: left ? x - 70 : x - 4, y: y - 11, width: 104, height: 22, fill: 'transparent' }), ring = svg('rect', { class: 'ring', x: x - 3, y: y - 9, width: 32, height: 18, rx: 3 });
-      g.insertBefore(ring, g.firstChild); g.insertBefore(hit, g.firstChild);
-      g.classList.add('input'); g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
-    }
-    g.querySelector('title').textContent = `IC111 pin ${name}: click for its fault menu`;
-    g.addEventListener('click', ev => { ev.stopPropagation(); mcMenu(name, ev, ci, fig); });
-    g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const r = g.getBoundingClientRect(); mcMenu(name, { clientX: r.left, clientY: r.top }, ci, fig); } });
+// what each ULA pin carries during the CPU's current T-state. The ULA's own screen reads (RAS, CAS, its RAM address)
+// and the analogue outputs are not followed clock by clock: they show '~'.
+function ulaPin(name) {
+  const T = curT, a = T.a === null || T.a === 'z' ? null : T.a, lower = a !== null && (a & 0xC000) === 0x4000 && T.mreq === 0 && T.rfsh !== 0;
+  const port = a !== null && T.iorq === 0 && !(a & 1);
+  switch (name) {
+    case 'VCC1': case 'VCC2': return 'p'; case 'GND': return 'g';
+    case 'INT': return pins.int === 0 || zx.intOut() ? 0 : 1;
+    case 'CPU CLK': return T.gw ? 1 : clk;
+    case 'RD': return T.rd; case 'WR': return T.wr; case 'MREQ': return T.mreq; case 'IORQ': return T.iorq;
+    case 'A14': return a === null ? 'z' : a >> 14 & 1; case 'A15': return a === null ? 'z' : a >> 15 & 1;
+    case 'ROMCS': return a !== null && T.mreq === 0 && T.rfsh !== 0 && !(a & 0xC000) ? 0 : 1;
+    case 'WE': return lower && T.wr === 0 ? 0 : 1;
+    case 'MIC/EAR': return zx.out & 0x10 || zx.tapeIn() ? 1 : 0;
   }
-  const clkPin = pinEls.CLK.g; clkPin.querySelector('title').textContent += ' Right-click for its fault menu.';
-  clkPin.addEventListener('contextmenu', ev => { ev.preventDefault(); mcMenu('CLK', ev, ci, fig); });
+  if (/^KB\d$/.test(name)) return zx.keyRows(a === null ? 0xFF : a >> 8) >> +name[2] & 1;
+  if (/^D\d$/.test(name)) { if ((lower || port) && T.d !== null && T.d !== undefined) return T.d >> +name[1] & 1; return '~'; }
+  return '~';
 }
-function cpSideRender() {
-  const B = MC.bus();
-  if (!cpZ80Done && pinEls.A0) cpZ80Faults();
-  if (cpZ80Done) {
-    const zf = cpc.z80.f; for (const name of CP_BUS_PINS.concat(CP_Z80_INPUTS, ['CLK'])) { const g = pinEls[name].g, f = name in zf; g.classList.toggle('forced', f); g.classList.toggle('fz', f && zf[name] === 'z'); }
-    const fl = cpc.chipFaults('IC111'), sig = fl.join();
-    if (cpSideRender.z !== sig) { cpSideRender.z = sig; $('cpCapZ80').innerHTML = '<b>IC111 · Z80A</b><br>processor, 4 MHz' + (fl.length ? `<br><span class="mcfaults mono">${esc(fl.join(' · '))}</span>` : ''); }
-  }
-  for (const S of cpSide) {
-    const c = cpc.chips[S.ci]; if (S.drawn !== c.part) cpSideDraw(S);
-    for (const [, name, kind] of MEM_PINOUTS[c.part]) {
-      const el = S.els[name], f = name in c.f, v = kind === 'p' ? 'p' : kind === 'g' ? 'g' : f ? c.f[name] : MC.net(c, S.ci, name, B);
-      const cls = v === 'z' ? 'vz' : v === 'p' ? 'vp' : v === 'g' ? 'vg' : v ? 'v1' : 'v0', changed = el.prev !== null && el.prev !== v && v !== 'p' && v !== 'g';
-      el.g.classList.remove('v1', 'v0', 'vz', 'vp', 'vg', 'changed'); el.g.classList.add(cls); if (changed && !running) el.g.classList.add('changed');
-      el.g.classList.toggle('forced', f); el.g.classList.toggle('fz', f && c.f[name] === 'z');
-      el.sv.textContent = v === 'z' ? 'Z' : v === 'p' ? '+' : v === 'g' ? '⏚' : v; el.prev = v;
-    }
-    const fl = cpc.chipFaults(c.id), sig = c.part + fl.join();
-    if (S.capSig !== sig) { S.capSig = sig; S.cap.innerHTML = `<b>${esc(c.id)} · ${esc(c.part)}</b><br>${esc(c.what)}` + (fl.length ? `<br><span class="mcfaults mono">${esc(fl.join(' · '))}</span>` : ''); }
+function renderUla() {
+  for (const [, name] of ULA_PINS) {
+    const v = ulaPin(name), el = ulaEls[name];
+    const cls = v === 'z' || v === '~' ? 'vz' : v === 'p' ? 'vp' : v === 'g' ? 'vg' : v ? 'v1' : 'v0';
+    const changed = el.prev !== null && el.prev !== v && v !== 'p' && v !== 'g' && v !== '~';
+    el.g.classList.remove('v1', 'v0', 'vz', 'vp', 'vg', 'changed'); el.g.classList.add(cls);
+    if (changed && !running) el.g.classList.add('changed');
+    el.sv.textContent = v === 'z' ? 'Z' : v === 'p' ? '+' : v === 'g' ? '⏚' : v; el.prev = v;
   }
 }
-function renderCp() { drawCp(); renderCpState(); cpTapeRender(); if (mcReady) cpSideRender(); }
-// keyboard: the PC keyboard by key position, and the on-screen CPC 464 keyboard
-// each key: [matrix name, legend, shifted legend, width]
-const CP_LAYOUT = [
-  [['Esc', 'ESC'], ['1', '1', '!'], ['2', '2', '"'], ['3', '3', '#'], ['4', '4', '$'], ['5', '5', '%'], ['6', '6', '&'], ['7', '7', "'"], ['8', '8', '('], ['9', '9', ')'], ['0', '0', '_'], ['-', '-', '='], ['^', '↑', '£'], ['Clr', 'CLR'], ['Del', 'DEL'], ['F7', 'f7'], ['F8', 'f8'], ['F9', 'f9']],
-  [['Tab', 'TAB', '', 1.5], ['Q'], ['W'], ['E'], ['R'], ['T'], ['Y'], ['U'], ['I'], ['O'], ['P'], ['@', '@', '|'], ['[', '[', '{'], ['Return', 'RETURN', '', 1.5], ['F4', 'f4'], ['F5', 'f5'], ['F6', 'f6']],
-  [['CapsLock', 'CAPS', '', 1.7], ['A'], ['S'], ['D'], ['F'], ['G'], ['H'], ['J'], ['K'], ['L'], [';', ';', '+'], [':', ':', '*'], [']', ']', '}'], ['Return', '↵', '', 1.3], ['F1', 'f1'], ['F2', 'f2'], ['F3', 'f3']],
-  [['Shift', 'SHIFT', '', 2.2], ['Z'], ['X'], ['C'], ['V'], ['B'], ['N'], ['M'], [',', ',', '<'], ['.', '.', '>'], ['/', '/', '?'], ['\\', '\\', '`'], ['Shift', 'SHIFT', '', 1.8], ['F0', 'f0'], ['Up', '▲'], ['F.', '.']],
-  [['Ctrl', 'CTRL', '', 2.2], ['Copy', 'COPY', '', 1.6], ['Space', '', '', 8], ['Enter', 'ENTER', '', 2.2], ['Left', '◀'], ['Down', '▼'], ['Right', '▶']]
-];
-let cpShiftAt = -Infinity;
-const CP_LATCH = new Set(['Shift', 'Ctrl', 'Graph', 'Code']);     // on-screen modifier keys stay down for the next key
-const cpHeld = new Set(), cpLatched = new Set();
-function cpShow() {
-  const all = [...[...cpLatched].map(k => k + ' (latched)'), ...cpHeld];
-  $('cpKeysDown').textContent = all.length ? 'keys: ' + all.join(' + ') : '';
-  for (const b of document.querySelectorAll('#cpKb button')) { b.classList.toggle('down', cpHeld.has(b.dataset.k)); b.classList.toggle('latched', cpLatched.has(b.dataset.k)); }
+buildUla();
+function renderZx() { drawZx(); renderZxState(); renderUla(); zxTapeRender(); }
+// ---------- keyboard ----------
+// The 48K's 40 keys: [key, keyword at the K cursor (or the CAPS SHIFT word on the digits), the SYMBOL SHIFT symbol,
+// the extended-mode word]
+const ZX_LEGEND = {
+  1: ['EDIT', '!', 'DEF FN'], 2: ['CAPS LOCK', '@', 'FN'], 3: ['TRUE VIDEO', '#', 'LINE'], 4: ['INV. VIDEO', '$', 'OPEN #'], 5: ['←', '%', 'CLOSE #'],
+  6: ['↓', '&', 'MOVE'], 7: ['↑', "'", 'ERASE'], 8: ['→', '(', 'POINT'], 9: ['GRAPHICS', ')', 'CAT'], 0: ['DELETE', '_', 'FORMAT'],
+  Q: ['PLOT', '<=', 'SIN'], W: ['DRAW', '<>', 'COS'], E: ['REM', '>=', 'TAN'], R: ['RUN', '<', 'INT'], T: ['RAND', '>', 'RND'], Y: ['RETURN', 'AND', 'STR$'], U: ['IF', 'OR', 'CHR$'], I: ['INPUT', 'AT', 'CODE'], O: ['POKE', ';', 'PEEK'], P: ['PRINT', '"', 'TAB'],
+  A: ['NEW', 'STOP', 'READ'], S: ['SAVE', 'NOT', 'RESTORE'], D: ['DIM', 'STEP', 'DATA'], F: ['FOR', 'TO', 'SGN'], G: ['GOTO', 'THEN', 'ABS'], H: ['GOSUB', '↑', 'SQR'], J: ['LOAD', '-', 'VAL'], K: ['LIST', '+', 'LEN'], L: ['LET', '=', 'USR'], ENTER: ['', '', ''],
+  'CAPS SHIFT': ['', '', ''], Z: ['COPY', ':', 'LN'], X: ['CLEAR', '£', 'EXP'], C: ['CONT', '?', 'LPRINT'], V: ['CLS', '/', 'LLIST'], B: ['BORDER', '*', 'BIN'], N: ['NEXT', ',', 'INKEY$'], M: ['PAUSE', '.', 'PI'], 'SYMBOL SHIFT': ['', '', ''], SPACE: ['BREAK', '', '']
+};
+const ZX_LAYOUT = [['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'], ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'], ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'ENTER'], ['CAPS SHIFT', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'SYMBOL SHIFT', 'SPACE']];
+const ZX_LATCH = new Set(['CAPS SHIFT', 'SYMBOL SHIFT']);
+const zxHeld = new Set(), zxLatched = new Set();
+function zxShow() {
+  const all = [...[...zxLatched].map(k => k + ' (latched)'), ...zxHeld];
+  $('zxKeysDown').textContent = all.length ? 'keys: ' + all.join(' + ') : '';
+  for (const b of document.querySelectorAll('#zxKb button')) { b.classList.toggle('down', zxHeld.has(b.dataset.k)); b.classList.toggle('latched', zxLatched.has(b.dataset.k)); }
 }
-// Key presses and releases are queued and played to the machine in order, in the machine's own time: the firmware
-// scans the keyboard 50 times a second, so each change is held long enough to be seen however fast it was typed.
-const CP_SCAN = CPC.CPU_HZ * 0.05, cpDownAt = new Map(), cpUpAt = new Map();
-const cpQueue = [], cpWant = new Set(); let cpLastDown = -Infinity, cpLastWall = 0, cpPumpTimer = null;
-function cpPump() {
-  clearTimeout(cpPumpTimer); cpPumpTimer = null;
-  while (cpQueue.length) {
-    const ev = cpQueue[0];
-    if (running && performance.now() - cpLastWall < 1500) {
-      if (ev.k && ev.down && (cpc.t - cpLastDown < CP_SCAN || (ev.k !== 'Shift' && cpc.t - cpShiftAt < CP_SCAN) || cpc.t - (cpUpAt.get(ev.k) ?? -Infinity) < CP_SCAN)) break;
-      if (ev.k && !ev.down && cpc.t - (cpDownAt.get(ev.k) ?? -Infinity) < CP_SCAN) break;
+// Key presses and releases are queued and played to the machine in its own time: the ROM reads the keyboard once a
+// frame (50 times a second), so each change is held long enough to be seen however fast it was typed.
+const ZX_SCAN = SPEC.FRAME_T * 1.2, zxDownAt = new Map(), zxUpAt = new Map();
+const zxQueue = [], zxWant = new Set(); let zxLastDown = -Infinity, zxLastWall = 0, zxPumpTimer = null, zxShiftAt = -Infinity;
+function zxPump() {
+  clearTimeout(zxPumpTimer); zxPumpTimer = null;
+  while (zxQueue.length) {
+    const ev = zxQueue[0], mod = ev.k === 'CAPS SHIFT' || ev.k === 'SYMBOL SHIFT';
+    if (running && performance.now() - zxLastWall < 1500) {
+      if (ev.k && ev.down && (zx.t - zxLastDown < ZX_SCAN || (!mod && zx.t - zxShiftAt < ZX_SCAN) || zx.t - (zxUpAt.get(ev.k) ?? -Infinity) < ZX_SCAN)) break;
+      if (ev.k && !ev.down && zx.t - (zxDownAt.get(ev.k) ?? -Infinity) < ZX_SCAN) break;
     }
-    cpQueue.shift(); cpLastWall = performance.now(); if (ev.k === 'Shift') cpShiftAt = cpc.t;
+    zxQueue.shift(); zxLastWall = performance.now(); if (mod) zxShiftAt = zx.t;
     if (ev.fn) ev.fn();
-    else if (ev.down) { cpHeld.add(ev.k); cpDownAt.set(ev.k, cpc.t); cpLastDown = cpc.t; cpc.key(ev.k, true); }
-    else { cpHeld.delete(ev.k); cpUpAt.set(ev.k, cpc.t); if (!cpLatched.has(ev.k)) cpc.key(ev.k, false); }
-    cpShow();
+    else if (ev.down) { zxHeld.add(ev.k); zxDownAt.set(ev.k, zx.t); zxLastDown = zx.t; zx.key(ev.k, true); }
+    else { zxHeld.delete(ev.k); zxUpAt.set(ev.k, zx.t); if (!zxLatched.has(ev.k)) zx.key(ev.k, false); }
+    zxShow();
   }
-  if (cpQueue.length) cpPumpTimer = setTimeout(cpPump, 8);
+  if (zxQueue.length) zxPumpTimer = setTimeout(zxPump, 8);
 }
-function cpPush(ev) { if (!cpQueue.length) cpLastWall = performance.now(); cpQueue.push(ev); cpPump(); }
-function cpDown(k) { if (cpWant.has(k)) return; cpWant.add(k); cpPush({ k, down: true }); }
-function cpUp(k, then) { if (!cpWant.has(k)) return; cpWant.delete(k); cpPush({ k, down: false }); if (then) cpPush({ fn: then }); }
-function cpRenderKb() {
-  $('cpKb').innerHTML = CP_LAYOUT.map(row => '<div class="krow">' + row.map(([k, lg, sh, w]) => `<button type="button" data-k="${esc(k)}" style="flex-grow:${w || 1}" title="${esc(k)}${sh ? ' · SHIFT ' + esc(sh) : ''}"><small>${esc(sh || '') || '&nbsp;'}</small>${esc(lg || k)}</button>`).join('') + '</div>').join('');
-  for (const b of document.querySelectorAll('#cpKb button')) {
+function zxPush(ev) { if (!zxQueue.length) zxLastWall = performance.now(); zxQueue.push(ev); zxPump(); }
+function zxDown(k) { if (zxWant.has(k)) return; zxWant.add(k); zxPush({ k, down: true }); }
+function zxUp(k, then) { if (!zxWant.has(k)) return; zxWant.delete(k); zxPush({ k, down: false }); if (then) zxPush({ fn: then }); }
+function zxRenderKb() {
+  $('zxKb').innerHTML = ZX_LAYOUT.map(row => '<div class="krow">' + row.map(k => {
+    const [kw, sym, ext] = ZX_LEGEND[k], name = k === 'CAPS SHIFT' ? 'CAPS<br>SHIFT' : k === 'SYMBOL SHIFT' ? 'SYMBOL<br>SHIFT' : k === 'ENTER' ? 'ENTER' : k === 'SPACE' ? 'BREAK<br>SPACE' : k;
+    const tip = [k, kw && (/\d/.test(k) ? 'with CAPS SHIFT ' : 'keyword ') + kw, sym && 'with SYMBOL SHIFT ' + sym, ext && 'extended mode ' + ext].filter(Boolean).join(' · ');
+    return `<button type="button" data-k="${esc(k)}" title="${esc(tip)}"><span class="kw">${esc(k === 'SPACE' ? '' : kw) || '&nbsp;'}</span><span class="kc"><b>${name}</b>${sym ? `<i>${esc(sym)}</i>` : ''}</span><span class="ke">${esc(ext) || '&nbsp;'}</span></button>`;
+  }).join('') + '</div>').join('');
+  for (const b of document.querySelectorAll('#zxKb button')) {
     const k = b.dataset.k;
-    if (CP_LATCH.has(k)) { b.addEventListener('click', () => { if (cpLatched.has(k)) { cpLatched.delete(k); cpc.key(k, false); } else { cpLatched.add(k); cpc.key(k, true); } cpShow(); }); continue; }
-    b.addEventListener('pointerdown', e => { e.preventDefault(); cpDown(k); });
-    const up = () => { if (!cpWant.has(k)) return; const had = [...cpLatched]; cpUp(k, () => { for (const m of had) if (cpLatched.delete(m)) cpc.key(m, false); cpShow(); }); };
+    if (ZX_LATCH.has(k)) { b.addEventListener('click', () => { if (zxLatched.has(k)) { zxLatched.delete(k); zx.key(k, false); } else { zxLatched.add(k); zx.key(k, true); } zxShow(); }); continue; }
+    b.addEventListener('pointerdown', e => { e.preventDefault(); zxDown(k); });
+    const up = () => { if (!zxWant.has(k)) return; const had = [...zxLatched]; zxUp(k, () => { for (const m of had) if (zxLatched.delete(m)) zx.key(m, false); zxShow(); }); };
     b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up);
   }
-  cpShow();
+  zxShow();
 }
-cpRenderKb();
-// The PC keyboard: characters are translated to the CPC key (and SHIFT state) that produces them, so symbols come out
-// as typed whatever the PC layout; the other keys go by position.
-const CP_CODE = { Enter: 'Return', NumpadEnter: 'Enter', ControlLeft: 'Ctrl', ControlRight: 'Ctrl', AltLeft: 'Copy', AltRight: 'Copy', CapsLock: 'CapsLock', Space: 'Space',
-  Backspace: 'Del', Delete: 'Clr', Tab: 'Tab', Escape: 'Esc', ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down', NumpadDecimal: 'F.' };
-const CP_CHAR = {};   // character -> [key, shifted]
-for (const row of CP_LAYOUT) for (const [k, lg, sh] of row) { if (k.length === 1 && !/[A-Z]/.test(k)) CP_CHAR[k] = [k, false]; if (sh && sh.length === 1) CP_CHAR[sh] = [k, true]; }
-CP_CHAR['^'] = ['^', false];
-const cpPhys = new Map(); let cpShiftPhys = false;
-function cpKeyName(e) {
-  if (CP_CODE[e.code]) return CP_CODE[e.code];
-  let m = /^Key([A-Z])$/.exec(e.code); if (m) return m[1];
-  m = /^Numpad(\d)$/.exec(e.code); return m ? 'F' + m[1] : null;
-}
-const cpShiftTo = on => { if (on !== cpWant.has('Shift')) { if (on) cpDown('Shift'); else cpUp('Shift'); } };
-cscr.addEventListener('keydown', e => {
+zxRenderKb();
+// The PC keyboard: a typed character becomes the Spectrum keys that give it (SYMBOL SHIFT for the symbols, CAPS SHIFT
+// for capitals), whatever the PC's layout; Shift is CAPS SHIFT, Ctrl and Alt are SYMBOL SHIFT, Backspace is DELETE
+// (CAPS SHIFT + 0), the arrows are CAPS SHIFT + 5-8 and Escape is BREAK (CAPS SHIFT + SPACE).
+const ZX_CHAR = {};          // character -> [keys]
+for (const k in ZX_LEGEND) { const sym = ZX_LEGEND[k][1]; if (sym.length === 1 && sym !== '↑') ZX_CHAR[sym] = ['SYMBOL SHIFT', k]; }
+ZX_CHAR['^'] = ['SYMBOL SHIFT', 'H']; ZX_CHAR[' '] = ['SPACE'];
+for (let d = 0; d < 10; d++) ZX_CHAR[d] = [String(d)];
+for (const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') { ZX_CHAR[c.toLowerCase()] = [c]; ZX_CHAR[c] = ['CAPS SHIFT', c]; }
+const ZX_CODE = { Enter: ['ENTER'], NumpadEnter: ['ENTER'], Backspace: ['CAPS SHIFT', '0'], ArrowLeft: ['CAPS SHIFT', '5'], ArrowDown: ['CAPS SHIFT', '6'], ArrowUp: ['CAPS SHIFT', '7'], ArrowRight: ['CAPS SHIFT', '8'], Escape: ['CAPS SHIFT', 'SPACE'] };
+const zxPhys = new Map(); let zxMods = { CAPS: false, SYM: false };
+zscr.addEventListener('keydown', e => {
   if (e.metaKey) return;
-  if (e.key === 'Shift') { e.preventDefault(); cpShiftPhys = true; cpShiftTo(true); return; }
-  let k = cpKeyName(e);
-  if (!k && e.key.length === 1 && CP_CHAR[e.key]) { const [ck, sh] = CP_CHAR[e.key]; if (!e.repeat) cpShiftTo(sh); k = ck; }
-  if (!k) return; e.preventDefault(); if (e.repeat) return;
-  cpPhys.set(e.code, k); cpDown(k);
+  if (e.key === 'Shift') { e.preventDefault(); zxMods.CAPS = true; return; }
+  if (e.key === 'Control' || e.key === 'Alt') { e.preventDefault(); if (!zxMods.SYM) { zxMods.SYM = true; zxDown('SYMBOL SHIFT'); } return; }
+  let keys = ZX_CODE[e.code] || (e.key.length === 1 && !zxMods.SYM ? ZX_CHAR[e.key] : null);
+  if (!keys && zxMods.SYM) { const m = /^Key([A-Z])$/.exec(e.code) || /^Digit(\d)$/.exec(e.code); if (m) keys = [m[1]]; }     // Ctrl or Alt held: SYMBOL SHIFT + the key
+  if (!keys) return; e.preventDefault(); if (e.repeat || zxPhys.has(e.code)) return;
+  zxPhys.set(e.code, keys); for (const k of keys) zxDown(k);
 });
-cscr.addEventListener('keyup', e => {
-  if (e.key === 'Shift') { e.preventDefault(); cpShiftPhys = false; cpShiftTo(false); return; }
-  const k = cpPhys.get(e.code); if (!k) return; e.preventDefault(); cpPhys.delete(e.code); cpUp(k); cpShiftTo(cpShiftPhys);
+zscr.addEventListener('keyup', e => {
+  if (e.key === 'Shift') { zxMods.CAPS = false; return; }
+  if (e.key === 'Control' || e.key === 'Alt') { e.preventDefault(); zxMods.SYM = false; zxUp('SYMBOL SHIFT'); return; }
+  const keys = zxPhys.get(e.code); if (!keys) return; e.preventDefault(); zxPhys.delete(e.code);
+  for (const k of [...keys].reverse()) if (!(k === 'SYMBOL SHIFT' && zxMods.SYM)) zxUp(k);
 });
-cscr.addEventListener('blur', () => { cpShiftPhys = false; cpPhys.clear(); for (const k of [...cpWant]) cpUp(k); });
-// ROMs: the two 16K halves of IC103, each kept by this browser
-const CP_ROM_KEYS = { lo: 'cpc.rom.lo', hi: 'cpc.rom.hi' };
-const CP_ROM_NAMES = { '815752DF': 'CPC 464 firmware', '7D9A3BAC': 'Locomotive BASIC 1.0' };
-let cpRomSaid = [];
-function cpKeep(key, bytes) { try { let s = ''; for (const x of bytes) s += String.fromCharCode(x); localStorage.setItem(key, btoa(s)); } catch (e) {} }
-function cpUseRom(bytes, saved) {
-  const msg = $('cpMsg');
-  if (bytes.length !== 0x4000 && bytes.length !== 0x8000) { msg.className = 'msg err'; msg.textContent = `That file is ${bytes.length.toLocaleString('en-AU')} bytes: a CPC 464 ROM image is 16,384 bytes (firmware or BASIC) or 32,768 bytes (both).`; return false; }
-  const parts = bytes.length === 0x8000 ? [bytes.subarray(0, 0x4000), bytes.subarray(0x4000)] : [bytes], said = [];
-  for (const p of parts) {
-    const where = cpc.loadRom(p, parts.length === 2 ? (p === parts[0] ? 'lo' : 'hi') : undefined), crc = cpCrcHex(p), known = CP_ROM_NAMES[crc];
-    if (!saved) cpKeep(CP_ROM_KEYS[where], p);
-    said.push(`${where === 'lo' ? 'Firmware (lower half, 0000h)' : 'BASIC (upper half, C000h)'}: CRC ${crc}${known ? ', ' + known : ', not one this page knows'}`);
-  }
-  cpRomSaid.push(...said); msg.className = 'msg ok'; msg.textContent = (saved ? 'ROM loaded from this browser. ' : 'ROM loaded. ') + cpRomSaid.join('; ') + '.' + (cpc.hasLo && !cpc.hasHi ? ' BASIC is still missing: the firmware will start and then stop in the empty half.' : !cpc.hasLo ? ' The firmware is still missing.' : '');
+zscr.addEventListener('blur', () => { zxMods = { CAPS: false, SYM: false }; zxPhys.clear(); for (const k of [...zxWant]) zxUp(k); });
+// ---------- the ROM, kept by this browser ----------
+const ZX_ROM_KEY = 'zxspec.rom48';
+const ZX_ROM_NAMES = { DDEE531F: 'Sinclair ZX Spectrum 48K ROM' };
+function zxKeep(bytes) { try { let s = ''; for (const x of bytes) s += String.fromCharCode(x); localStorage.setItem(ZX_ROM_KEY, btoa(s)); } catch (e) {} }
+function zxUseRom(bytes, saved) {
+  const msg = $('zxMsg');
+  if (bytes.length !== 0x4000) { msg.className = 'msg err'; msg.textContent = `That file is ${bytes.length.toLocaleString('en-AU')} bytes: a Spectrum 48K ROM image is 16,384 bytes.`; return false; }
+  zx.loadRom(bytes); if (!saved) zxKeep(bytes);
+  const crc = zxCrcHex(bytes), known = ZX_ROM_NAMES[crc];
+  msg.className = 'msg ok'; msg.textContent = `${saved ? 'ROM loaded from this browser' : 'ROM loaded'}: CRC ${crc}${known ? ', ' + known : ', not one this page knows (it will still be run)'}.`;
   disDirty = true; return true;
 }
-function cpNoRom() { setStatus('Load the CPC 464 ROMs (firmware and BASIC, 16 KB each) to switch on'); }
-function cpPowerOn() {
-  if (!cpOn()) { $('cpMsg').className = 'msg err'; $('cpMsg').textContent = 'Load the firmware ROM first (16,384 bytes).'; return; }
+function zxNoRom() { setStatus('Load the Spectrum 48K ROM (16 KB) to switch on'); }
+function zxPowerOn() {
+  if (!zxOn()) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = 'Load the ROM first (16,384 bytes).'; return; }
   if (running) stopRun();
-  cpc.ram.fill(0); cpc.crtc.fill(0); cpc.pens.fill(20); cpc.fb.fill(20); resetCPU(); disDirty = true; $('speed').value = 'real'; runRate = 'real'; startRun(); cscr.focus();
+  zx.ram.fill(0); resetCPU(); disDirty = true; $('speed').value = 'real'; runRate = 'real'; startRun(); zscr.focus();
 }
-$('cpLoadRom').onclick = () => $('cpRomFile').click();
-$('cpRomFile').onchange = () => { const fs = [...$('cpRomFile').files]; $('cpRomFile').value = ''; if (!fs.length) return;
-  Promise.all(fs.map(f => f.arrayBuffer())).then(bufs => { let ok = false; cpRomSaid = []; for (const b of bufs) ok = cpUseRom(new Uint8Array(b), false) || ok; if (ok && cpOn()) cpPowerOn(); else render(); }); };
-$('cpRestart').onclick = cpPowerOn;
-// which gate array is fitted: the 40010 and the 40007 behave alike but have different pin arrangements
-function cpSetGa(part, quiet) { cpc.setGateArray(part); $('cpGa').value = cpc.ga.part; try { localStorage.setItem('cpc.ga', cpc.ga.part); } catch (e) {} if (!quiet) render(); }
-$('cpGa').onchange = () => cpSetGa($('cpGa').value);
+$('zxLoadRom').onclick = () => $('zxRomFile').click();
+$('zxRomFile').onchange = () => { const f = $('zxRomFile').files[0]; $('zxRomFile').value = ''; if (!f) return; f.arrayBuffer().then(b => { if (zxUseRom(new Uint8Array(b), false)) zxPowerOn(); else render(); }); };
+$('zxRestart').onclick = zxPowerOn;
+// ---------- snapshots ----------
+$('zxSnapLoad').onclick = () => $('zxSnapFile').click();
+$('zxSnapFile').onchange = async () => {
+  const f = $('zxSnapFile').files[0]; $('zxSnapFile').value = ''; if (!f) return;
+  try {
+    if (!zxOn()) throw new Error('load the ROM first');
+    const was = running; if (running) stopRun();
+    const kind = zx.loadSnapshot(new Uint8Array(await f.arrayBuffer()), f.name);
+    timeline = null; pre = null; lastTimeline = null; curInstr = null; disDirty = true; disStart = cpu.pc;
+    $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = `Snapshot loaded: ${f.name} (${kind}), running from ${h4(cpu.pc)}h.`;
+    if (was || true) { $('speed').value = 'real'; runRate = 'real'; startRun(); zscr.focus(); }
+  } catch (e) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = 'Could not load the snapshot: ' + e.message; render(); }
+};
+$('zxSnapSave').onclick = () => { if (midInstruction()) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = 'Finish the instruction first (Step instruction): a snapshot is taken between instructions.'; return; } cpSaved(cpDownload(`spectrum-${cpStamp()}.sna`, zx.saveSnapshot(), 'application/octet-stream'), f => `Snapshot saved as ${f} (48K .SNA, 49,179 bytes).`); };
 // ---------- memory bitmap: every bit as a pixel, tinted by region ----------
 // Each byte is a row of 8 pixels (bit 7 on the left); each strip is one 256-byte page, top to bottom; a band holds
 // up to 32 pages (8K). The background of every byte is tinted by the region it belongs to (MM.regions, by address,
@@ -1993,10 +1969,10 @@ function mmRebuild(defs) {
     const b = { cv, ctx: cv.getContext('2d', { willReadFrequently: true }), def, img: null, sig: null, mark: null, keys: new Uint8Array(def.bytes) }; mmBands.push(b);
     cv.addEventListener('mousemove', e => {
       const off = mmAddr(e, b); if (off < 0) return; const a = b.def.base + off, v = b.def.read(a), k = b.keyNames[b.keys[off]], reg = k && MM.legend[k] ? MM.legend[k][0] : '';
-      let dis = ''; if (b.def.cpu) try { dis = disasm(x => peekMem(x & 0xFFFF), a).text; } catch (err) {}
-      $('mmRead').innerHTML = `<b>${h4(a)}h</b>${b.def.space === 'v' ? '' : b.def.cpu ? '' : ' (not what the CPU sees now)'}: <b>${h2(v)}h</b> ${v.toString(2).padStart(8, '0').replace(/0/g, '·').replace(/1/g, '█')}${reg ? ' · ' + esc(reg) : ''}${dis ? ' · ' + esc(dis) : ''}`;
+      let dis = ''; try { dis = disasm(x => zx.peek(x & 0xFFFF), a).text; } catch (err) {}
+      $('mmRead').innerHTML = `<b>${h4(a)}h</b>: <b>${h2(v)}h</b> ${v.toString(2).padStart(8, '0').replace(/0/g, '·').replace(/1/g, '█')}${reg ? ' · ' + esc(reg) : ''}${dis ? ' · ' + esc(dis) : ''}`;
     });
-    cv.addEventListener('click', e => { const off = mmAddr(e, b); if (off < 0 || b.def.space) return; const a = b.def.base + off; $('memFollow').checked = false; $('memFrom').value = h4(a); memScrollTo(a); renderMem(false); });
+    cv.addEventListener('click', e => { const off = mmAddr(e, b); if (off < 0) return; const a = b.def.base + off; $('memFollow').checked = false; $('memFrom').value = h4(a); memScrollTo(a); renderMem(false); });
   }
 }
 window.addEventListener('resize', () => { if (!running) mmDraw(true); });
@@ -2021,11 +1997,10 @@ function mmDraw(force) {
     const sig = s + '|' + (def.key || regSig) + '|' + def.label;
     if (sig !== b.sig) {
       b.sig = sig; b.mark = null;
-      // region key of every byte: 0 = none, then indices into keyNames
       const names = b.keyNames = ['']; b.keys.fill(0);
       const idx = k => { let i = names.indexOf(k); if (i < 0) { i = names.length; names.push(k); } return i; };
       if (def.key) b.keys.fill(idx(def.key));
-      else for (const [a0, a1, k, sp] of regs) { if ((sp || '') !== (def.space || '')) continue; const lo = Math.max(a0, def.base) - def.base, hi = Math.min(a1, def.base + n) - def.base; if (hi > lo) b.keys.fill(idx(k), lo, hi); }
+      else for (const [a0, a1, k] of regs) { const lo = Math.max(a0, def.base) - def.base, hi = Math.min(a1, def.base + n) - def.base; if (hi > lo) b.keys.fill(idx(k), lo, hi); }
       const img = b.img || (b.img = b.ctx.createImageData(W, b.cv.height)), d = img.data;
       for (let o = 0; o < d.length; o += 4) { d[o] = mmPaper[0]; d[o + 1] = mmPaper[1]; d[o + 2] = mmPaper[2]; d[o + 3] = 255; }
       for (let i = 0; i < n; i++) {
@@ -2035,7 +2010,7 @@ function mmDraw(force) {
       }
     }
     for (const k of b.keyNames) if (k) used.add(k);
-    const mine = def.cpu ? marks.filter(([a]) => a >= def.base && a < def.base + n) : [], mark = mine.map(m => m[0]).join(',');
+    const mine = marks.filter(([a]) => a >= def.base && a < def.base + n), mark = mine.map(m => m[0]).join(',');
     if (mark !== b.mark) {
       b.mark = mark; b.ctx.putImageData(b.img, 0, 0);
       for (const [a, colr] of mine) { const x = ((a - def.base) >> 8) * 8, y = ((a - def.base) & 0xFF) + MM_TOP; b.ctx.fillStyle = colr; b.ctx.fillRect(x, 0, 8, 3); b.ctx.fillRect(x - 1, y - 1, 10, 1); b.ctx.fillRect(x - 1, y + 1, 10, 1); b.ctx.fillRect(x - 1, y, 1, 1); b.ctx.fillRect(x + 8, y, 1, 1); }
@@ -2046,112 +2021,103 @@ function mmDraw(force) {
   if (lsig !== mmLegendSig) { mmLegendSig = lsig; $('mmLegend').innerHTML = Object.keys(MM.legend).filter(k => used.has(k)).map(k => `<span><i style="background: rgb(${mmTints[k].join(',')})"></i>${esc(MM.legend[k][0])}</span>`).join(''); }
   const info = `${total.toLocaleString('en-AU')} bytes in ${mmBands.length} band${mmBands.length === 1 ? '' : 's'}`; if ($('mmInfo').textContent !== info) $('mmInfo').textContent = info;
 }
-// Bands: the ROM's two halves and the 64K of RAM, each as strips of 8K. A band is "live" (PC and SP marks,
-// disassembly on hover) only while the CPU sees it: a ROM half while it is switched on, the RAM under it while it is off.
+// Bands: the ROM in two of 8K, then the 48K of RAM in six. The tint shows the screen (bitmap, attributes) and BASIC's
+// system variables; the rest of the RAM is plain.
 const MM = {
-  legend: { rom: ['ROM', '#e6c229'], ram: ['RAM', '#8a8f98'], screen: ['screen memory', '#2e9e5b'], fw: ['firmware variables, jump blocks and stack', '#8e6bbf'] },
+  legend: { rom: ['ROM', '#e6c229'], ram: ['RAM', '#8a8f98'], bitmap: ['screen bitmap', '#2e9e5b'], attr: ['screen attributes', '#2f8fbf'], sys: ['printer buffer and system variables', '#8e6bbf'] },
   bands() {
     const out = [];
-    for (const a of [0x0000, 0x2000]) out.push({ label: `Firmware ROM ${h4(a)}h-${h4(a + 0x1FFF)}h${cpc.hasLo ? (cpc.gaMode & 4 ? ' (switched off)' : '') : ' (not loaded)'}`, base: a, bytes: 0x2000, read: x => cpc.rom[x], cpu: !(cpc.gaMode & 4), key: 'rom' });
-    for (const a of [0xC000, 0xE000]) out.push({ label: `BASIC ROM ${h4(a)}h-${h4(a + 0x1FFF)}h${cpc.hasHi ? (cpc.gaMode & 8 ? ' (switched off)' : '') : ' (not loaded)'}`, base: a, bytes: 0x2000, read: x => cpc.rom[x & 0x7FFF], cpu: !(cpc.gaMode & 8), key: 'rom' });
-    for (let a = 0; a < 0x10000; a += 0x2000) out.push({ label: `RAM ${h4(a)}h-${h4(a + 0x1FFF)}h${cpc.romOn(a) ? ' (under the ROM)' : ''}`, base: a, bytes: 0x2000, read: x => cpc.ram[x], cpu: !cpc.romOn(a) });
+    for (const a of [0x0000, 0x2000]) out.push({ label: `ROM ${h4(a)}h-${h4(a + 0x1FFF)}h${zx.hasRom ? '' : ' (not loaded)'}`, base: a, bytes: 0x2000, read: x => zx.rom[x], key: 'rom' });
+    for (let a = 0x4000; a < 0x10000; a += 0x2000) out.push({ label: `RAM ${h4(a)}h-${h4(a + 0x1FFF)}h${a < 0x8000 ? ' (shared with the ULA)' : ''}`, base: a, bytes: 0x2000, read: x => zx.ram[x - 0x4000] });
     return out;
   },
-  regions() {
-    const sb = (cpc.crtc[12] & 0x30) << 10, scr = cpc.crtc[1] > 0, pts = [...new Set([0, sb, sb + 0x4000, 0xB100, 0xC000, 0x10000])].sort((a, b) => a - b), R = [];
-    for (let i = 0; i + 1 < pts.length; i++) { const a = pts[i]; R.push([a, pts[i + 1], scr && a >= sb && a < sb + 0x4000 ? 'screen' : cpc.hasLo && a >= 0xB100 && a < 0xC000 ? 'fw' : 'ram']); }
-    return R;
-  },
+  regions() { return [[0x4000, 0x5800, 'bitmap'], [0x5800, 0x5B00, 'attr'], [0x5B00, 0x5CB6, 'sys'], [0x5CB6, 0x10000, 'ram']]; },
   markers() { const cs = getComputedStyle(document.documentElement); return [[cpu.sp, cs.getPropertyValue('--sel').trim() || '#2a6fb0'], [cpu.pc, '#e0322d']]; }
 };
 // ---------- cassette ----------
-// A CDT file is turned into the signal it holds (see CPCTape in src/cpc.js). PLAY is a key on the cassette deck:
-// the tape moves while it is down and the 8255 has the motor on. A "stop the tape" block releases it.
-let cpTapeName = '';
-let cpTapeBytes = null;
-function cpTurbo() { return $('cpTapeFast').checked && (cpc.tapePlay || !!cpc.rec) && cpc.motorOn(); }
-const cpTime = c => { const s = Math.floor(c / CPC.CPU_HZ); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
-function cpTapeShow() {
-  const tp = cpc.tape, has = !!tp;
-  for (const id of ['cpTapePlay', 'cpTapeRew', 'cpTapeBlk']) $(id).disabled = !has || !!cpc.rec;
-  $('cpTapeSave').disabled = !has || !cpTapeBytes || !!cpc.rec; $('cpTapeWav').disabled = !has || !!cpc.rec; $('cpTapeRec').textContent = cpc.rec ? '■ Stop recording' : '● Record'; $('cpTapeRec').classList.toggle('armed', !!cpc.rec);
-  const sel = $('cpTapeBlk'); sel.innerHTML = '';
-  if (!has) { sel.add(new Option('no tape')); $('cpTapeInfo').textContent = cpc.rec ? '● REC' : ''; cpTapeSig = ''; return; }
+// A TAP or TZX file is turned into the signal it holds (see SpecTape in src/spectrum.js). PLAY is a key on the deck:
+// the tape moves while it is down. A "stop the tape" block releases it.
+let zxTapeName = '', zxTapeBytes = null;
+// fast loading: full speed while a loader is reading the playing tape (or SAVE is being recorded), real time otherwise
+function zxTurbo() { return $('zxTapeFast').checked && ((zx.tapePlay && zx.reading()) || (!!zx.rec && !!zx.recBusy && zx.recBusy())); }
+const zxTime = c => { const s = Math.floor(c / SPEC.CPU_HZ); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+function zxTapeShow() {
+  const tp = zx.tape, has = !!tp;
+  for (const id of ['zxTapePlay', 'zxTapeRew', 'zxTapeBlk']) $(id).disabled = !has || !!zx.rec;
+  $('zxTapeSave').disabled = !has || !zxTapeBytes || !!zx.rec; $('zxTapeWav').disabled = !has || !!zx.rec; $('zxTapeRec').textContent = zx.rec ? '■ Stop recording' : '● Record'; $('zxTapeRec').classList.toggle('armed', !!zx.rec);
+  const sel = $('zxTapeBlk'); sel.innerHTML = '';
+  if (!has) { sel.add(new Option('no tape')); $('zxTapeInfo').textContent = zx.rec ? '● REC' : ''; zxTapeSig = ''; return; }
   let c = 0, q = 0;
-  tp.blocks.forEach((b, i) => { for (; q < b.seg; q++) c += tp.dur[q]; sel.add(new Option(`${i + 1}. ${b.desc} (${cpTime(c)})`, i)); });
-  cpTapeRender();
+  tp.blocks.forEach((b, i) => { for (; q < b.seg; q++) c += tp.dur[q]; sel.add(new Option(`${i + 1}. ${b.desc} (${zxTime(c)})`, i)); });
+  zxTapeRender();
 }
-let cpTapeSig = '';
-function cpTapeRender() {
-  if (cpc.rec) { const txt = `● REC · ${cpTime(cpc.rec.clock)} recorded · ${cpc.rec.pulses.length.toLocaleString()} pulses · motor ${cpc.motorOn() ? 'on' : 'off'}${cpc.motorOn() ? '' : ' (waiting for the computer: type SAVE "name" and press a key)'}`; if (txt !== cpTapeSig) { cpTapeSig = txt; $('cpTapeInfo').textContent = txt; } return; }
-  const tp = cpc.tape; if (!tp) return;
-  const k = cpc.tapeBlock(), playing = cpc.tapePlay, motor = cpc.motorOn();
-  const end = cpc.tapeIdx >= tp.n;
-  const txt = `${cpTapeName} · ${end ? 'end of tape' : k >= 0 ? 'block ' + (k + 1) + ' of ' + tp.blocks.length + ': ' + tp.blocks[k].desc : 'leader'} · ${cpTime(cpc.tapePos)} of ${cpTime(tp.total)} · ${playing ? 'PLAY down' : 'stopped'} · motor ${motor ? 'on' : 'off'}${playing && !motor ? ' (waiting for the computer)' : ''}`;
-  if (txt !== cpTapeSig) { cpTapeSig = txt; $('cpTapeInfo').textContent = txt; $('cpTapePlay').textContent = playing ? '■ Stop' : '▶ Play'; if (k >= 0 && document.activeElement !== $('cpTapeBlk')) $('cpTapeBlk').value = k; }
+let zxTapeSig = '';
+function zxTapeRender() {
+  if (zx.rec) { const txt = `● REC · ${zxTime(zx.rec.clock)} recorded · ${zx.rec.pulses.length.toLocaleString()} pulses`; if (txt !== zxTapeSig) { zxTapeSig = txt; $('zxTapeInfo').textContent = txt; } return; }
+  const tp = zx.tape; if (!tp) return;
+  const k = zx.tapeBlock(), playing = zx.tapePlay, end = zx.tapeIdx >= tp.n;
+  const txt = `${zxTapeName} · ${end ? 'end of tape' : k >= 0 ? 'block ' + (k + 1) + ' of ' + tp.blocks.length + ': ' + tp.blocks[k].desc : 'leader'} · ${zxTime(zx.tapePos)} of ${zxTime(tp.total)} · ${playing ? 'PLAY down' : 'stopped'}`;
+  if (txt !== zxTapeSig) { zxTapeSig = txt; $('zxTapeInfo').textContent = txt; $('zxTapePlay').textContent = playing ? '■ Stop' : '▶ Play'; if (k >= 0 && document.activeElement !== $('zxTapeBlk')) $('zxTapeBlk').value = k; }
 }
-$('cpTapeIns').onclick = () => $('cpTapeFile').click();
-$('cpTapeFile').onchange = async () => {
-  const f = $('cpTapeFile').files[0]; $('cpTapeFile').value = ''; if (!f) return;
+$('zxTapeIns').onclick = () => $('zxTapeFile').click();
+$('zxTapeFile').onchange = async () => {
+  const f = $('zxTapeFile').files[0]; $('zxTapeFile').value = ''; if (!f) return;
   try {
-    if (cpc.rec) cpc.recStop();
-    const bytes = new Uint8Array(await f.arrayBuffer()); const tp = cpc.insertTape(bytes, f.name); cpTapeName = tp.fromWav ? f.name.replace(/\.wav$/i, '') + '.cdt' : f.name; cpTapeBytes = tp.cdt;
+    if (zx.rec) zx.recStop();
+    const bytes = new Uint8Array(await f.arrayBuffer()), tp = zx.insertTape(bytes, f.name);
+    zxTapeName = tp.fromWav ? f.name.replace(/\.wav$/i, '') + '.tzx' : f.name; zxTapeBytes = tp.file;
     const found = tp.blocks.filter(b => b.data).length;
-    $('cpMsg').className = 'msg ok';
-    $('cpMsg').textContent = (tp.fromWav ? `WAV recording read: ${f.name}, ${cpTime(tp.total)} of tape, ${found ? found + ' firmware record' + (found === 1 ? '' : 's') + ' found (instant loading can use them)' : 'no firmware records found (instant loading cannot help; a custom loader may still read it)'}. Save tape keeps it as a CDT file.` : `Tape inserted: ${f.name}, ${tp.blocks.length} blocks, ${cpTime(tp.total)} long.`) + ` Type RUN"" and press RETURN, then press Play here and any key on the CPC.` + (tp.notes.length ? ' Notes on the tape: ' + tp.notes.join('; ') : '');
-  } catch (e) { $('cpMsg').className = 'msg err'; $('cpMsg').textContent = 'Could not read the tape: ' + e.message; }
-  cpTapeShow();
+    $('zxMsg').className = 'msg ok';
+    $('zxMsg').textContent = (tp.fromWav ? `WAV recording read: ${f.name}, ${zxTime(tp.total)} of tape, ${found ? found + ' block' + (found === 1 ? '' : 's') + ' in the ROM\'s format found' : 'no blocks in the ROM\'s format found (a custom loader may still read it)'}. Save tape keeps it as a TZX file.` : `Tape inserted: ${f.name}, ${tp.blocks.length} blocks, ${zxTime(tp.total)} long.`) + ' Type LOAD "" (J, then SYMBOL SHIFT + P twice) and ENTER, then press Play.' + (tp.notes.length ? ' Notes on the tape: ' + tp.notes.join('; ') : '');
+  } catch (e) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = 'Could not read the tape: ' + e.message; }
+  zxTapeShow();
 };
-$('cpTapePlay').onclick = () => { if (!cpc.tape || cpc.rec) return; cpc.tapePlay = !cpc.tapePlay && cpc.tapeIdx < cpc.tape.n; cpTapeRender(); cscr.focus(); };
-$('cpTapeRec').onclick = () => {
-  if (!cpc.rec) { cpc.recStart(); $('cpMsg').className = 'msg ok'; $('cpMsg').textContent = 'Recording: type SAVE "name" and press RETURN, then any key on the CPC. Press Stop recording when it says Ready.'; cpTapeShow(); cscr.focus(); return; }
-  const bytes = cpc.recStop();
-  if (!bytes) { $('cpMsg').className = 'msg err'; $('cpMsg').textContent = 'Nothing was recorded: the computer did not write to the tape.'; cpTapeShow(); return; }
-  const tp = cpc.insertTape(bytes); cpTapeBytes = bytes; cpTapeName = `recording-${cpStamp()}.cdt`;
-  $('cpMsg').className = 'msg ok'; $('cpMsg').textContent = `Recorded ${cpTime(tp.total)} of tape (${bytes.length.toLocaleString()} bytes as a CDT file). It is now the tape in the deck, rewound: LOAD it back, or press Save tape to keep it.`;
-  cpTapeShow();
+$('zxTapePlay').onclick = () => { if (!zx.tape || zx.rec) return; zx.tapePlay = !zx.tapePlay && zx.tapeIdx < zx.tape.n; zxTapeRender(); zscr.focus(); };
+$('zxTapeRec').onclick = () => {
+  if (!zx.rec) { zx.recStart(); $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = 'Recording: type SAVE "name" and ENTER, then press any key when it says "Start tape". Press Stop recording when it says 0 OK.'; zxTapeShow(); zscr.focus(); return; }
+  const pulses = zx.recStop(), file = pulses && (SpecTape.tapFromPulses(pulses) || SpecTape.fromPulses(pulses));
+  if (!file) { $('zxMsg').className = 'msg err'; $('zxMsg').textContent = 'Nothing was recorded: the computer did not write to the tape.'; zxTapeShow(); return; }
+  const isTap = !(file[0] === 0x5A && file[1] === 0x58), tp = zx.insertTape(file, 'recording'); zxTapeBytes = file; zxTapeName = `recording-${cpStamp()}.${isTap ? 'tap' : 'tzx'}`;
+  $('zxMsg').className = 'msg ok'; $('zxMsg').textContent = `Recorded ${zxTime(tp.total)} of tape: ${tp.blocks.length} block${tp.blocks.length === 1 ? '' : 's'}${isTap ? ' in the ROM\'s format (kept as a TAP file)' : ' (kept as a TZX file of pulses)'}. It is now the tape in the deck, rewound: LOAD it back, or press Save tape to keep it.`;
+  zxTapeShow();
 };
-$('cpTapeWav').onclick = () => { if (!cpc.tape) return; const w = CPCTape.toWav(cpc.tape, 44100), name = (cpTapeName || 'tape').replace(/\.(cdt|tzx|wav)$/i, '') + '.wav'; cpSaved(cpDownload(name, w, 'audio/wav'), f => `Tape saved as ${f}: ${cpTime(cpc.tape.total)} of sound (${(w.length / 1048576).toFixed(1)} MB), to play into a real CPC.`); };
-$('cpTapeSave').onclick = () => { if (!cpTapeBytes) return; const name = /\.(cdt|tzx)$/i.test(cpTapeName) ? cpTapeName : cpTapeName + '.cdt'; cpSaved(cpDownload(name, cpTapeBytes.slice(), 'application/octet-stream'), f => `Tape saved as ${f}: ${cpTapeBytes.length.toLocaleString()} bytes.`); };
-$('cpTapeInstant').onchange = () => { cpc.instant = $('cpTapeInstant').checked; try { localStorage.setItem('cpc.instant', cpc.instant ? '1' : '0'); } catch (e) {} };
-try { if (localStorage.getItem('cpc.instant') === '0') $('cpTapeInstant').checked = false; } catch (e) {}
-cpc.instant = $('cpTapeInstant').checked;
-$('cpTapeRew').onclick = () => { if (!cpc.tape) return; cpc.tapePlay = false; cpc.tapeSeek(0); cpTapeRender(); };
-$('cpTapeBlk').onchange = () => { const tp = cpc.tape, b = tp && tp.blocks[+$('cpTapeBlk').value]; if (!b) return; cpc.tapeSeek(b.seg); cpTapeRender(); };
-
-// ---------- sound ----------
-// The machine model fills two ring buffers (left, right) with samples as emulated time passes; a script processor
-// plays them. Sound is only played in real time, and browsers only allow it to start from a click or a key press.
-let cpAudio = null, cpAr = 0, cpLastL = 0, cpLastR = 0, cpHpL = 0, cpHpR = 0;
-function cpSoundMode() { return $('cpSound').value; }
-function cpAudioStart() {
-  if (cpSoundMode() === 'off') return;
-  if (cpAudio) { if (cpAudio.state === 'suspended') cpAudio.resume().catch(() => {}); return; }
+$('zxTapeWav').onclick = () => { if (!zx.tape) return; const w = SpecTape.toWav(zx.tape, 44100), name = (zxTapeName || 'tape').replace(/\.(tap|tzx|wav)$/i, '') + '.wav'; cpSaved(cpDownload(name, w, 'audio/wav'), f => `Tape saved as ${f}: ${zxTime(zx.tape.total)} of sound (${(w.length / 1048576).toFixed(1)} MB), to play into a real Spectrum.`); };
+$('zxTapeSave').onclick = () => { if (!zxTapeBytes) return; const name = /\.(tap|tzx)$/i.test(zxTapeName) ? zxTapeName : zxTapeName + '.tzx'; cpSaved(cpDownload(name, zxTapeBytes.slice(), 'application/octet-stream'), f => `Tape saved as ${f}: ${zxTapeBytes.length.toLocaleString()} bytes.`); };
+$('zxTapeInstant').onchange = () => { zx.instant = $('zxTapeInstant').checked; try { localStorage.setItem('zxspec.instant', zx.instant ? '1' : '0'); } catch (e) {} };
+try { if (localStorage.getItem('zxspec.instant') === '0') $('zxTapeInstant').checked = false; } catch (e) {}
+zx.instant = $('zxTapeInstant').checked;
+$('zxTapeRew').onclick = () => { if (!zx.tape) return; zx.tapePlay = false; zx.tapeSeek(0); zxTapeRender(); };
+$('zxTapeBlk').onchange = () => { const tp = zx.tape, b = tp && tp.blocks[+$('zxTapeBlk').value]; if (!b) return; zx.tapeSeek(b.seg); zxTapeRender(); };
+// ---------- sound: the beeper ----------
+// The machine fills a ring buffer with the speaker's level as emulated time passes; a script processor plays it. Only in
+// real time, and browsers only allow it to start from a click or a key press.
+let zxAudio = null, zxAr = 0, zxLast = 0, zxHp = 0;
+function zxAudioStart() {
+  if ($('zxSound').value === 'off') return;
+  if (zxAudio) { if (zxAudio.state === 'suspended') zxAudio.resume().catch(() => {}); return; }
   try {
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-    cpAudio = new AC(); const node = cpAudio.createScriptProcessor(1024, 0, 2);
+    zxAudio = new AC(); const node = zxAudio.createScriptProcessor(1024, 0, 1);
     node.onaudioprocess = e => {
-      const L = e.outputBuffer.getChannelData(0), R = e.outputBuffer.getChannelData(1), mode = cpSoundMode();
-      const live = running && runRate === 'real' && !cpTurbo() && mode !== 'off', rate = cpc.audioRate;
-      if (cpc.aw - cpAr > rate * 0.2 || cpc.aw < cpAr) cpAr = Math.max(0, cpc.aw - Math.round(rate * 0.06));      // fell behind: skip ahead
-      for (let i = 0; i < L.length; i++) {
-        if (live && cpAr < cpc.aw) { const j = cpAr++ & 32767; cpLastL = cpc.abufL[j]; cpLastR = cpc.abufR[j]; }
-        else if (!live) { cpLastL = cpLastR = 0; cpAr = cpc.aw; }
-        let l = cpLastL, r = cpLastR; if (mode !== 'stereo') l = r = (l + r) / 2;      // the speaker: all three channels
-        cpHpL += (l - cpHpL) * 0.002; cpHpR += (r - cpHpR) * 0.002;                           // remove the DC level
-        L[i] = Math.max(-1, Math.min(1, (l - cpHpL) * 2)); R[i] = Math.max(-1, Math.min(1, (r - cpHpR) * 2));
+      const out = e.outputBuffer.getChannelData(0), live = running && runRate === 'real' && !zxTurbo() && $('zxSound').value !== 'off', rate = zx.audioRate;
+      if (zx.aw - zxAr > rate * 0.2 || zx.aw < zxAr) zxAr = Math.max(0, zx.aw - Math.round(rate * 0.06));
+      for (let i = 0; i < out.length; i++) {
+        if (live && zxAr < zx.aw) zxLast = zx.abuf[zxAr++ & 32767]; else if (!live) { zxLast = 0; zxAr = zx.aw; }
+        zxHp += (zxLast - zxHp) * 0.002; out[i] = Math.max(-1, Math.min(1, (zxLast - zxHp) * 0.8));
       }
     };
-    node.connect(cpAudio.destination); cpc.audioRate = cpAudio.sampleRate; cpAr = cpc.aw;
-  } catch (e) { cpAudio = null; }
+    node.connect(zxAudio.destination); zx.audioRate = zxAudio.sampleRate; zxAr = zx.aw;
+  } catch (e) { zxAudio = null; }
 }
-for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, cpAudioStart, { passive: true });
-$('cpSound').onchange = () => { try { localStorage.setItem('cpc.sound', cpSoundMode()); } catch (e) {} if (cpSoundMode() !== 'off') cpAudioStart(); else if (cpAudio) cpAudio.suspend().catch(() => {}); };
-try { const v = localStorage.getItem('cpc.sound'); if (v === 'off' || v === 'stereo' || v === 'speaker') $('cpSound').value = v; } catch (e) {}
+for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, zxAudioStart, { passive: true });
+$('zxSound').onchange = () => { try { localStorage.setItem('zxspec.sound', $('zxSound').value); } catch (e) {} if ($('zxSound').value !== 'off') zxAudioStart(); else if (zxAudio) zxAudio.suspend().catch(() => {}); };
+try { const v = localStorage.getItem('zxspec.sound'); if (v === 'off' || v === 'on') $('zxSound').value = v; } catch (e) {}
+$('zxContend').onchange = () => { zx.contended = $('zxContend').checked; render(); };
 
 // ---------- file downloads ----------
 // Files leave through the claude.ai viewer's save prompt when this page runs there (it accepts .txt and .zip, so
 // binary files go inside a .zip); anywhere else, through an ordinary browser download.
+const cpCrc = specCrc32;
 const cpSaver = window.claude && typeof window.claude.use === 'function' ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
 function cpZip(name, bytes) {   // one stored (uncompressed) file
   const n = new TextEncoder().encode(name), crc = cpCrc(bytes), len = bytes.length;
@@ -2175,23 +2141,19 @@ async function cpDownload(name, data, type) {   // resolves to the name given to
   return name;
 }
 function cpSaved(p, ok) {
-  p.then(n => { const m = $('cpMsg'); if (n) { m.className = 'msg ok'; m.textContent = ok(n); } else { m.className = 'msg'; m.textContent = 'Not saved: the download was declined.'; } })
-   .catch(e => { const m = $('cpMsg'); m.className = 'msg err'; m.textContent = 'Could not save the file' + (e && e.message ? ': ' + e.message : '.'); });
+  p.then(n => { const m = $('zxMsg'); if (n) { m.className = 'msg ok'; m.textContent = ok(n); } else { m.className = 'msg'; m.textContent = 'Not saved: the download was declined.'; } })
+   .catch(e => { const m = $('zxMsg'); m.className = 'msg err'; m.textContent = 'Could not save the file' + (e && e.message ? ': ' + e.message : '.'); });
 }
 function cpStamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
-// a readable listing: the registers, the chips' state, then the RAM (under the ROM too) as a hex dump
+ // a readable listing: the registers, the ULA's state, then the RAM as a hex dump
 function cpListing() {
-  const H = v => h2(v) + 'h', rv = regsView(), out = ['Amstrad CPC 464 RAM listing, ' + new Date().toLocaleString('en-AU'), ''];
+  const rv = regsView(), out = ['ZX Spectrum 48K RAM listing, ' + new Date().toLocaleString('en-AU'), ''];
   out.push('Registers', '  ' + REGDEF.map(([n, get]) => n + ' ' + fmtReg(n, get(rv))).join('  '), '');
-  out.push('Gate array', `  mode ${cpc.gaMode & 3} · lower ROM ${cpc.gaMode & 4 ? 'off' : 'on'} · upper ROM ${cpc.gaMode & 8 ? 'off' : 'on'} · pens ${[...cpc.pens.slice(0, 16)].map(v => v).join(' ')} · border ${cpc.pens[16]}`, '');
-  out.push('6845', '  ' + [...cpc.crtc.slice(0, 16)].map((v, i) => 'R' + i + ' ' + H(v)).join('  '), '');
-  out.push('8255', `  port A ${H(cpc.ppiA)} · port C ${H(cpc.ppiC)} · control ${H(cpc.ppiCtl)}`, '');
-  out.push('Sound chip', '  ' + [...cpc.psg].map((v, i) => 'R' + i + ' ' + H(v)).join('  '), '');
-  if (cpc.faultList().length) out.push('Faults', ...cpc.faultList().map(f => '  ' + f[2]), '');
-  out.push('RAM (a row of * stands for rows identical to the one above)');
-  const b = cpc.ram; let prev = null, starred = false;
-  for (let r = 0; r < 0x10000; r += 16) {
-    const row = b.subarray(r, r + 16), key = row.join(',');
+  out.push('ULA', `  frame T-state ${zx.ft} · frame ${zx.frames} · border ${zx.border} · MIC ${zx.out & 8 ? 1 : 0} · speaker ${zx.out & 16 ? 1 : 0}`, '');
+  out.push('RAM 4000h-FFFFh (a row of * stands for rows identical to the one above)');
+  let prev = null, starred = false;
+  for (let r = 0x4000; r < 0x10000; r += 16) {
+    const row = zx.ram.subarray(r - 0x4000, r - 0x4000 + 16), key = row.join(',');
     if (key === prev && r + 16 < 0x10000) { if (!starred) { out.push('*'); starred = true; } continue; }
     prev = key; starred = false;
     const hex = [...row].map(v => h2(v)), txt = [...row].map(v => v >= 0x20 && v < 0x7F ? String.fromCharCode(v) : '.').join('');
@@ -2199,228 +2161,12 @@ function cpListing() {
   }
   return out.join('\n') + '\n';
 }
-$('cpDumpTxt').onclick = () => cpSaved(cpDownload(`cpc-listing-${cpStamp()}.txt`, cpListing(), 'text/plain;charset=utf-8'), f => `Listing saved to ${f}: registers, the chips, any faults, and the RAM as a hex dump.`);
-$('cpDumpBin').onclick = () => cpSaved(cpDownload(`cpc-ram-64k-${cpStamp()}.bin`, cpc.ram.slice(), 'application/octet-stream'), f => `RAM dumped to ${f}: 65,536 bytes, 0000h-FFFFh.`);
 
-// ---------- memory chips: what this machine has, and what each pin's board net is doing ----------
-// Shown for the CPU's own accesses. The display's reads, which share the RAM in every microsecond, are not shown yet.
-// The video-side pins of the gate array and the 6845 come from the machine's record of each character (cpc.videoAt).
-const MC = {
-  m: cpc,
-  groups() { return [['ROM · 32K · ' + (cpc.hasLo && cpc.hasHi ? 'firmware and BASIC' : cpc.hasLo ? 'firmware only, BASIC half empty' : cpc.hasHi ? 'BASIC only, firmware half empty' : 'empty'), [0]], ['RAM · 64K · one 4164 per data bit', [8, 7, 6, 5, 4, 3, 2, 1]],
-    ['RAM address selectors · 74LS153', [12, 13, 14, 15]], ['I/O · the 8255 and the sound chip', [16, 17]]]; },
-  tile(c, i) {
-    if (i >= 12 && i <= 15) { const ps = CPC_SEL.map(([ic], p) => ic === c.id ? p : -1).filter(p => p >= 0); return [c.id, 'LS153 · RAM A' + ps.join(', A')]; }
-    return i === 0 ? [c.id, '23256 · D0–D7'] : i === 16 ? [c.id, '8255 · F4xx–F7xx'] : i === 17 ? [c.id, 'AY-3-8912 · sound'] : i >= 9 ? [c.id, c.part] : [c.id, '4164 · D' + c.bit];
-  },
-  acc(i) { return i === 0 ? 0 : i === 16 ? 3 : i === 17 ? 4 : i >= 9 && i <= 11 ? 2 : 1; },
-  bus() {
-    const T = curT, A = T.a === null || T.a === 'z' ? null : cpc.busA(T.a), mem = T.mreq === 0 && T.rfsh !== 0 && A !== null;
-    return { T, A, mem, rd: mem && T.rd === 0, wr: mem && T.wr === 0, rom: mem && T.rd === 0 && cpc.romOn(A) };
-  },
-  net(c, i, name, B) {
-    const A = B.A, D = n => pinValue('D' + n); let m = /^A(\d+)$/.exec(name), d;
-    if (i === 0) {                      // the ROM: CS is the gate array's ROMEN, OE is ROMDIS (pulled low)
-      if (m) return A === null ? 'z' : (A >> +m[1]) & 1;
-      if ((d = /^O(\d)$/.exec(name))) return B.rom ? D(+d[1]) : 'z';
-      return name === 'CE' ? (B.rom ? 0 : 1) : name === 'OE' ? 0 : 1;
-    }
-    if (i === 9) {                      // the gate array
-      const T = B.T, V = cpc.videoAt(T.at), act = (B.rd || B.wr) && T.t !== 'T1', gaw = T.iorq === 0 && T.m1 !== 0 && T.wr === 0 && A !== null && !(A & 0x8000) && !!(A & 0x4000);
-      const dead = cpc.gaDead();
-      if ((d = /^D(\d)$/.exec(name))) return gaw ? D(+d[1]) : B.rd && T.t !== 'T1' ? (cpc.ramRead(A, true) >> +d[1]) & 1 : 'z';
-      switch (name) {
-        case 'A15': return A === null ? 'z' : A >> 15 & 1; case 'A14': return A === null ? 'z' : A >> 14 & 1;
-        case 'MREQ': return T.mreq; case 'IORQ': return T.iorq; case 'M1': return T.m1; case 'RD': return T.rd;
-        case 'RESET': return pins.reset; case 'CK16': return clk; case 'PHI': return dead ? 0 : clk;
-        case 'READY': return T.ready === false ? 0 : 1;
-        case 'CPU': case 'CASAD': case 'CAS': return act ? 0 : 1;
-        case 'RAS': return B.mem ? 0 : 1; case 'MWE': return B.wr ? 0 : 1; case '244EN': return gaw ? 0 : 1;
-        case 'ROMEN': return B.rom ? 0 : 1; case 'RAMRD': return B.rd && !B.rom ? 0 : 1;
-        case 'INT': return V.int ? 0 : 1;
-        case 'HSYNC': return cpc.vdu.lv.HSYNC !== undefined ? cpc.vdu.lv.HSYNC : V.hs; case 'VSYNC': return cpc.vdu.lv.VSYNC !== undefined ? cpc.vdu.lv.VSYNC : V.vs; case 'DISPEN': return cpc.vdu.lv.DE !== undefined ? cpc.vdu.lv.DE : V.de;
-        case 'CCLK': return dead ? 0 : (T.at === undefined ? tTotal : T.at) >> 1 & 1; case 'SYNC': return V.gHs || V.gVs ? 0 : 1;
-        case 'R': return CPC.PALETTE[V.rgb][0] ? 1 : 0; case 'G': return CPC.PALETTE[V.rgb][1] ? 1 : 0; case 'B': return CPC.PALETTE[V.rgb][2] ? 1 : 0;
-      }
-      return 'z';
-    }
-    if (i === 10) {                     // the 6845: CS is A14, RS is A8, R/W is A9, E follows IORQ.
-      const T = B.T, V = cpc.videoAt(T.at), io = T.iorq === 0 && T.m1 !== 0 && A !== null, sel = io && !(A & 0x4000);
-      if ((d = /^D(\d)$/.exec(name))) return sel ? D(+d[1]) : 'z';
-      if ((d = /^MA(\d+)$/.exec(name))) return V.ma >> +d[1] & 1;
-      if ((d = /^RA(\d)$/.exec(name))) return V.ra >> +d[1] & 1;
-      switch (name) {
-        case 'RESET': return pins.reset; case 'LPSTB': case 'CURSOR': return 0; case 'CLK': return cpc.gaDead() || 'CCLK' in cpc.ga.lv ? 0 : (T.at === undefined ? tTotal : T.at) >> 1 & 1;
-        case 'CS': return A === null ? 'z' : A >> 14 & 1; case 'RS': return A === null ? 'z' : A >> 8 & 1; case 'R/W': return A === null ? 'z' : A >> 9 & 1; case 'E': return io ? 1 : 0;
-        case 'DE': return V.de; case 'HSYNC': return V.hs; case 'VSYNC': return V.vs;
-      }
-      return 'z';
-    }
-    if (i >= 12 && i <= 15) {           // a selector: B is the gate array's CPU, A its CAS ADDR; inputs 0-1 the CPU's column and row bits, 2-3 the display's
-      const T = B.T, act = (B.rd || B.wr) && T.t !== 'T1', L = c.lv, V = cpc.videoAt(T.at), at = T.at === undefined ? tTotal : T.at;
-      const va = (V.ma & 0x3000) << 2 | (V.ra & 7) << 11 | (V.ma & 0x3FF) << 1 | (at >> 1 & 1);
-      const sel = name === 'B' || name === 'A' ? null : name[0], p = sel ? CPC_SEL.findIndex(([ic, h]) => ic === c.id && h === sel) : -1;
-      const inp = (k, pp) => { const f = L[sel + 'C' + k]; if (f !== undefined) return f; const [r, cl] = CPC.RAM_PINS[pp], src = k < 2 ? A : va; return src === null ? 'z' : src >> (k & 1 ? r : cl) & 1; };
-      const bv = L.B !== undefined ? L.B : act ? 0 : 1, av = L.A !== undefined ? L.A : act ? 0 : 1;
-      if (name === 'B') return act ? 0 : 1; if (name === 'A') return act ? 0 : 1;
-      if (/^\dG$/.test(name)) return 0;
-      if ((d = /^\dC(\d)$/.exec(name))) return inp(+d[1], p);
-      if (/^\dY$/.test(name)) return L[sel + 'G'] === 1 ? 0 : inp(bv * 2 + av, p);
-      return 'z';
-    }
-    if (i === 16) {                     // the 8255: CS is A11, A1 is A9, A0 is A8; RD and WR are IORQ with RD or WR; RESET is active high
-      const T = B.T, io = T.iorq === 0 && T.m1 !== 0 && A !== null, on = io && cpc.ppiCS(A);
-      if ((d = /^D(\d)$/.exec(name))) return on && (T.rd === 0 || T.wr === 0) ? D(+d[1]) : 'z';
-      if ((d = /^PA(\d)$/.exec(name))) return ((cpc.ppiCtl & 0x10 ? cpc.psgRead() : cpc.ppiAout()) >> +d[1]) & 1;
-      if ((d = /^PB(\d)$/.exec(name))) { const v = (0x7E | (cpc.vsOut() ? 1 : 0) | (cpc.tapeIn() ? 0x80 : 0)) & cpc.pbAnd | cpc.pbOr; return v >> +d[1] & 1; }
-      if ((d = /^PC(\d)$/.exec(name))) return cpc.ppiCout() >> +d[1] & 1;
-      switch (name) {
-        case 'CS': return A === null ? 'z' : A >> 11 & 1; case 'A1': return A === null ? 'z' : A >> 9 & 1; case 'A0': return A === null ? 'z' : A >> 8 & 1;
-        case 'RD': return io && T.rd === 0 ? 0 : 1; case 'WR': return io && T.wr === 0 ? 0 : 1; case 'RESET': return pins.reset ? 0 : 1;
-      }
-      return 'z';
-    }
-    if (i === 17) {                     // the sound chip: its bus from the 8255, CLOCK is CCLK, IO0-IO7 the keyboard's columns, A, B and C the channels
-      const pc = cpc.ppiCout(), g = cpc.psg, mode = cpc.ayMode();
-      if ((d = /^DA(\d)$/.exec(name))) return ((mode === 'read' ? cpc.psgRead() : cpc.ppiAout()) >> +d[1]) & 1;
-      if ((d = /^IO(\d)$/.exec(name))) return (cpc.keyRow() & cpc.ioAnd | cpc.ioOr) >> +d[1] & 1;
-      const ch = 'ABC'.indexOf(name);
-      if (ch >= 0) { const mix = g[7], on = (cpc.toneOut[ch] | (mix >> ch & 1)) & ((cpc.lfsr & 1) | (mix >> (ch + 3) & 1)); return on && (g[8 + ch] & 31) ? 1 : 0; }
-      switch (name) {
-        case 'BDIR': return pc >> 7 & 1; case 'BC1': return pc >> 6 & 1; case 'BC2': case 'A8': return 1; case 'TEST': return 0;
-        case 'RESET': return pins.reset; case 'CLOCK': return !cpc.soundClock() ? 0 : (T => (T.at === undefined ? tTotal : T.at) >> 1 & 1)(B.T);
-      }
-      return 'z';
-    }
-    // RAM: the selectors give each address pin a row bit, then a column bit once CAS ADDR switches over
-    const [row, col] = CPC.RAM_PINS[m ? +m[1] : 0], act = B.rd || B.wr;
-    if (m) return A === null ? 'z' : (A >> (act && B.T.t !== 'T1' ? col : row)) & 1;
-    switch (name) {
-      case 'RAS': return B.mem ? 0 : 1;
-      case 'CAS': return act && B.T.t !== 'T1' ? 0 : 1;
-      case 'WE': return B.wr ? 0 : 1;
-      case 'DIN': return D(c.bit);
-      case 'DOUT': return B.rd && B.T.t !== 'T1' ? (cpc.ramRead(A, true) >> c.bit) & 1 : 'z';     // also during a ROM read: RAMRD only gates the latch IC114
-    }
-    return 'z';
-  }
-};
-// ---------- memory chips: tiles, a live pinout of the selected chip, and pin faults ----------
-// The page supplies MC: { m (the machine: chips, acc, faulty), groups(), tile(c, i), acc(i), bus(), net(c, i, name, B) }.
-let mcSel = 0, mcEls = {}, mcDrawn = '', mcPrevAcc = null, mcSeen = null, mcTileSig = '', mcPop = null;
-const mcFaultText = v => v === 'z' ? 'disconnected' : v ? 'stuck high' : 'stuck low';
-function mcSetFault(id, pin, v) { cpc.setPinFault(id, pin, v); disDirty = true; }
-function mcClosePop() { if (mcPop) { mcPop.remove(); mcPop = null; } }
-document.addEventListener('click', e => { if (mcPop && !mcPop.contains(e.target) && !e.target.closest('.pin.input') && !e.target.closest('.mcpop')) mcClosePop(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') mcClosePop(); });
-// debug-pane entries for the faults
-function mcDebugItems() { return cpc.faultList().map(([id, pin, text]) => ['mfault:' + id + ':' + pin, id === 'net' ? 'line fault' : 'pin fault', text]); }
-function mcDebugRemove(t, v) { if (t !== 'mfault') return false; const i = v.lastIndexOf(':'); mcSetFault(v.slice(0, i), v.slice(i + 1), null); return true; }
-// a DIP of any size, drawn the same way as the CPU
-function mcDraw() {
-  const ch = MC.m.chips; if (mcSel >= ch.length) mcSel = 0;
-  const c = ch[mcSel], list = MEM_PINOUTS[c.part], half = list.length / 2, s = $('mcChip');
-  const top = 26, pitch = 24, bx = 128, bw = 124, bh = half * pitch + 12;
-  s.innerHTML = ''; s.setAttribute('viewBox', `0 0 380 ${bh + 34}`); mcEls = {}; mcDrawn = c.id + '/' + c.part;
-  svg('rect', { class: 'body-rect', x: bx, y: top - 6, width: bw, height: bh, rx: 5 }, s);
-  svg('path', { d: `M ${bx + bw / 2 - 12} ${top - 6} a 12 12 0 0 0 24 0`, fill: 'var(--bg)' }, s);
-  const ttl = c.part === 'M5L8255AP' ? '8255' : c.part === '74LS153' ? 'LS153' : c.part;
-  const t1 = svg('text', { class: 'chiptitle', x: bx + bw / 2, y: top + bh / 2 - 8, 'text-anchor': 'middle', 'font-size': ttl.length > 7 ? 17 : 24 }, s); t1.textContent = ttl;
-  const t2 = svg('text', { class: 'chipsub', x: bx + bw / 2, y: top + bh / 2 + 12, 'text-anchor': 'middle' }, s); t2.textContent = c.id;
-  for (const [n, name, kind] of list) {
-    const left = n <= half, idx = left ? n - 1 : list.length - n, y = top + idx * pitch + 6, sx = left ? bx - 30 : bx + bw + 4;
-    const g = svg('g', { class: 'pin' + (kind === 'i' ? ' input' : ''), 'data-pin': name }, s);
-    if (kind === 'i') { svg('rect', { x: left ? sx - 70 : sx - 4, y: y - 11, width: 104, height: 22, fill: 'transparent' }, g); svg('rect', { class: 'ring', x: sx - 3, y: y - 9, width: 32, height: 18, rx: 3 }, g); }
-    svg('rect', { class: 'stub', x: sx, y: y - 6, width: 26, height: 12, rx: 2 }, g);
-    const sv = svg('text', { class: 'sv', x: sx + 13, y: y + 0.5 }, g);
-    const num = svg('text', { class: 'num', x: left ? bx + 7 : bx + bw - 7, y, 'text-anchor': left ? 'start' : 'end' }, g); num.textContent = n;
-    const nm = svg('text', { class: 'nm', x: left ? sx - 8 : sx + 34, y, 'text-anchor': left ? 'end' : 'start' }, g);
-    if (MEM_ACTIVE_LOW.has(name) && !(c.part === 'M5L8255AP' && name === 'RESET')) { const ov = svg('tspan', { class: 'ov' }, nm); ov.textContent = name; } else nm.textContent = name;
-    const title = svg('title', {}, g); title.textContent = kind === 'i' ? `${c.id} pin ${n}, ${name}: click to disconnect it or hold it high or low` : `${c.id} pin ${n}, ${name}`;
-    if (kind === 'i') {
-      g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button');
-      g.addEventListener('click', ev => mcMenu(name, ev));
-      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const r = g.getBoundingClientRect(); mcMenu(name, { clientX: r.left, clientY: r.top }); } });
-    }
-    mcEls[name] = { g, sv, prev: null, kind };
-  }
-  $('mcCap').innerHTML = `<b>${esc(c.id)} · ${esc(c.part)}</b><br>${esc(c.what)}<br>${esc(c.range)}`;
-}
-// The fault menu of a pin. A pin on a shared line gets a tick box, "disconnected from the line (this pin only)":
-// without the tick the level buttons hold the whole line (every pin on it, on every chip); with it they set what
-// this pin alone sees. A pin with a line of its own keeps the plain choices.
-function mcMenu(name, ev, ci, host) {
-  mcClosePop();
-  const c = MC.m.chips[ci === undefined ? mcSel : ci], fig = host || $('mcFig'), r = fig.getBoundingClientRect(), key = c.id + '.' + name;
-  const net = cpc.netOf(c.id, name), N = net && CPC_NETS[net], shared = !!N && N.pins.length > 1, out = cpc.isDriver(c.id, name);
-  const el = document.createElement('div'); el.className = 'mcpop'; fig.appendChild(el); mcPop = el;
-  const lv = v => v ? 'high' : 'low', btn = (a, label, on) => `<button type="button" data-a="${a}"${on ? ' class="primary" aria-pressed="true"' : ''}>${label}</button>`;
-  const draw = () => {
-    const own = key in cpc.pinF ? cpc.pinF[key] : null, line = shared && net in cpc.netF ? cpc.netF[net] : null, cut = own !== null;
-    let h = `<div class="ttl">${esc(c.id)} · ${esc(name)}</div>`;
-    if (shared) {
-      const others = N.pins.filter(([i2, p2]) => i2 !== c.id || p2 !== name).map(([i2, p2]) => i2 + ' ' + p2), ids = [...new Set(others.map(o => o.split(' ')[0]))];
-      h += `<div class="sub">${esc(N.label)}: shared with ${others.length > 4 ? ids.length + ' chips (' + esc(ids[0]) + '…' + esc(ids[ids.length - 1]) + ')' : esc(others.join(', '))}</div>`;
-      h += `<label class="cut"><input type="checkbox" data-a="cut"${cut ? ' checked' : ''}> Disconnected from the line (this pin only)</label>`;
-      if (!cut) h += `<div class="cap">Hold the whole line:</div><div class="btns">${btn('n', 'Normal', line === null)}${btn('1', 'High', line === 1)}${btn('0', 'Low', line === 0)}</div><div class="note">${line === null ? 'No fault on the line.' : `Every pin on this line sees it ${lv(line)}.`}</div>`;
-      else if (out) h += `<div class="note">This pin no longer drives the line, which floats high for the other pins${line !== null ? ' (but the line is held ' + lv(line) + ')' : ''}.</div>`;
-      else h += `<div class="cap">This pin then sees:</div><div class="btns">${btn('z', 'Floating', own === 'z')}${btn('1', 'High', own === 1)}${btn('0', 'Low', own === 0)}</div><div class="note">Only ${esc(c.id)} is affected${line !== null ? '; the rest of the line is held ' + lv(line) : ''}. A floating input reads high.</div>`;
-    } else {
-      h += `<div class="sub">a line of its own on this board</div><div class="btns">${btn('n', 'Normal', own === null)}${btn('z', 'Disconnected', own === 'z')}${btn('1', 'High', own === 1)}${btn('0', 'Low', own === 0)}</div>`;
-    }
-    el.innerHTML = h;
-  };
-  const act = a => {
-    const cut = key in cpc.pinF;
-    if (a === 'cut') { cpc.setPinFault(c.id, name, cut ? null : 'z'); }
-    else if (!shared || cut) cpc.setPinFault(c.id, name, a === 'n' ? null : a === 'z' ? 'z' : +a);
-    else cpc.setNetFault(net, a === 'n' ? null : +a);
-    disDirty = true; draw(); render();
-  };
-  draw();
-  el.style.left = Math.max(4, Math.min(ev.clientX - r.left, r.width - el.offsetWidth - 4)) + 'px'; el.style.top = (ev.clientY - r.top + 10) + 'px';
-  el.addEventListener('click', e2 => { e2.stopPropagation(); const b = e2.target.closest('button'); if (b && b.dataset.a) act(b.dataset.a); });
-  el.addEventListener('change', e2 => { if (e2.target.dataset.a === 'cut') act('cut'); });
-  el.addEventListener('keydown', e2 => { if (e2.key === 'Escape') mcClosePop(); });
-  const b0 = el.querySelector('input, button'); if (b0) b0.focus();
-}
-function mcTiles() {
-  const ch = MC.m.chips, groups = MC.groups();
-  const sig = mcSel + '|' + groups.map(g => g[0] + g[1].join(',')).join(';') + '|' + ch.map(c => c.id + Object.keys(c.f).length).join('');
-  if (sig === mcTileSig) return; mcTileSig = sig;
-  const q = t => esc(t).replace(/"/g, '&quot;');
-  const tile = i => { const c = ch[i], n = Object.keys(c.f).length, [lab, sub] = MC.tile(c, i); return `<button type="button" class="mctile${i === mcSel ? ' sel' : ''}${n ? ' fault' : ''}" data-i="${i}" title="${q(c.id + ': ' + c.part + ', ' + c.what + '. ' + c.range + '.')}"><i class="dot"></i><b>${esc(lab)}</b><span>${esc(sub)}</span>${n ? `<span class="nf">${n} fault${n === 1 ? '' : 's'}</span>` : ''}</button>`; };
-  $('mcTiles').innerHTML = groups.map(([title, idx]) => `<div><h3>${esc(title)}</h3><div class="grp">${idx.map(tile).join('')}</div></div>`).join('');
-}
-$('mcTiles').addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (!b) return; mcSel = +b.dataset.i; mcClosePop(); mcDraw(); render(); });
-$('mcClear').onclick = () => { cpc.clearChip(MC.m.chips[mcSel].id); disDirty = true; render(); };
-$('mcClearAll').onclick = () => { cpc.clearFaults(); disDirty = true; render(); };
-function renderMemChips() {
-  const ch = MC.m.chips; if (mcSel >= ch.length) mcSel = 0;
-  if (mcDrawn !== ch[mcSel].id + '/' + ch[mcSel].part) mcDraw();
-  mcTiles();
-  // a tile's dot stays lit for half a second after its chip was last accessed
-  const acc = MC.m.acc, now = performance.now(); if (!mcPrevAcc || mcPrevAcc.length !== acc.length) { mcPrevAcc = new Uint32Array(acc.length); mcSeen = new Float64Array(acc.length).fill(-1e9); }
-  for (let k = 0; k < acc.length; k++) if (acc[k] !== mcPrevAcc[k]) { mcSeen[k] = now; mcPrevAcc[k] = acc[k]; }
-  for (const t of $('mcTiles').querySelectorAll('.mctile')) { const k = MC.acc(+t.dataset.i); t.classList.toggle('act', k >= 0 && now - mcSeen[k] < 500); }
-  const c = ch[mcSel], B = MC.bus();
-  for (const [, name, kind] of MEM_PINOUTS[c.part]) {
-    const el = mcEls[name], f = name in c.f;
-    const v = kind === 'p' ? 'p' : kind === 'g' ? 'g' : f ? c.f[name] : MC.net(c, mcSel, name, B);
-    const cls = v === 'z' ? 'vz' : v === 'p' ? 'vp' : v === 'g' ? 'vg' : v ? 'v1' : 'v0';
-    const changed = el.prev !== null && el.prev !== v && v !== 'p' && v !== 'g';
-    el.g.classList.remove('v1', 'v0', 'vz', 'vp', 'vg', 'changed'); el.g.classList.add(cls);
-    if (changed && !running) el.g.classList.add('changed');
-    el.g.classList.toggle('forced', f); el.g.classList.toggle('fz', f && c.f[name] === 'z');
-    el.sv.textContent = v === 'z' ? 'Z' : v === 'p' ? '+' : v === 'g' ? '⏚' : v; el.prev = v;
-  }
-  const fl = cpc.chipFaults(c.id), total = cpc.faultList().length;
-  $('mcFaults').textContent = fl.join(' · ');
-  $('mcClear').disabled = !fl.length; $('mcClearAll').disabled = !total;
-  $('mcInfo').textContent = total ? `${total} fault${total === 1 ? '' : 's'} set` : 'live pins · click a pin for its fault menu';
-}
-mcDraw();
-var mcReady = true;      // (var: render can run before this point)
+// ---------- memory chips and faults: to come on this machine ----------
+var mcReady = false;
+function mcDebugItems() { return []; }
+function mcDebugRemove() {}
+function renderMemChips() {}
 
 // ---------- collapsible side panels ----------
 for (const sec of document.querySelectorAll('.side .panel')) {
@@ -2435,18 +2181,15 @@ for (const sec of document.querySelectorAll('.side .panel')) {
 // ---------- init ----------
 buildChip(); buildRegs(); bind();
 let savedHex = null, savedAsm = null, savedMode = null;
-try { savedHex = localStorage.getItem('cpcbench.hex'); savedAsm = localStorage.getItem('cpcbench.asm'); savedMode = localStorage.getItem('cpcbench.mode'); const la = localStorage.getItem('cpcbench.loadAddr'); if (la && /^[0-9A-F]{4}$/.test(la)) $('loadAddr').value = la; } catch (e) {}
+try { savedHex = localStorage.getItem('zxbench.hex'); savedAsm = localStorage.getItem('zxbench.asm'); savedMode = localStorage.getItem('zxbench.mode'); const la = localStorage.getItem('zxbench.loadAddr'); if (la && /^[0-9A-F]{4}$/.test(la)) $('loadAddr').value = la; } catch (e) {}
 $('hexIn').value = savedHex || SAMPLE;
 $('asmIn').value = savedAsm || SAMPLE_ASM;
 portIn.set(0x02, 0x5A);
 setMode(savedMode === 'hex' ? 'hex' : 'asm');
-{ const get = k => { let s = null; try { s = localStorage.getItem(k); } catch (e) {} if (!s) return null; s = atob(s); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; };
-  const lo = get(CP_ROM_KEYS.lo), hi = get(CP_ROM_KEYS.hi);
-  if (hi && hi.length === 0x4000) cpUseRom(hi, true); if (lo && lo.length === 0x4000) cpUseRom(lo, true);
-  let ga = null; try { ga = localStorage.getItem('cpc.ga'); } catch (e) {} cpSetGa(ga === '40007' ? '40007' : '40010', true);
-  window.cpcBench = { cpc, mcSetFault };      // for testing from the browser console
-  if (cpOn()) { $('cpMsg').textContent = `ROMs loaded from this browser: firmware${cpc.hasHi ? ' and BASIC' : ' only (BASIC is missing)'}.`; cpPowerOn(); }
-  else { resetCPU(); cpNoRom(); render(); } }
+{ let r = null; try { const s = localStorage.getItem(ZX_ROM_KEY); if (s) { const t = atob(s); r = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) r[i] = t.charCodeAt(i); } } catch (e) {}
+  window.zxBench = { zx };      // for testing from the browser console
+  if (r && r.length === 0x4000 && zxUseRom(r, true)) zxPowerOn();
+  else { resetCPU(); zxNoRom(); render(); } }
 })();
 </script>
 </html>

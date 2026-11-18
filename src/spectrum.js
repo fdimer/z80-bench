@@ -266,6 +266,9 @@ class SpecMachine {
     this.fb = new Uint8Array(SPEC.FW * SPEC.FH);       // the picture, as colour numbers 0-15
     this.bus = { read: a => this.read(a), write: (a, v) => this.write(a, v), input: p => this.input(p), output: (p, v) => this.output(p, v) };
     this.cpu = new Z80(this.bus); this.cpu.log = true; this.cpu.intVector = 0xFF;
+    // each instruction starts its own clock count: the ULA's holds are worked out as its cycles happen
+    const run = this.cpu.step.bind(this.cpu);
+    this.cpu.step = () => { this.ct = 0; this.done = 0; this.wq = []; this.wqi = 0; this.lastA = this.cpu.pc; return run(); };
     this.tape = null; this.tapePlay = false; this.tapeIdx = 0; this.tapeRem = 0; this.tapeLevel = 0; this.tapePos = 0; this.rec = null; this.instant = true;
     this.audioRate = 0; this.abuf = new Float32Array(32768); this.aw = 0; this.audioT = 0; this.lvlSum = 0; this.lvlN = 0;
     this.contended = true;                             // the ULA holds the CPU (off: every access runs at full speed)
@@ -280,8 +283,9 @@ class SpecMachine {
   // power on: the RAM keeps whatever it held (filled here with a pattern), the ULA's counters start at the top of a frame
   reset() {
     this.cpu.reset(); this.t = 0; this.ft = 0; this.frames = 0; this.ints = 0; this.waits = 0;
+    this.feReads = 0; this.readingT = -1e12; this.instantT = -1;
     this.border = 7; this.out = 0; this.flash = 0; this.vt = this.cellT(0); this.cell = 0;
-    this.ct = 0; this.done = 0; this.lastA = 0;
+    this.ct = 0; this.done = 0; this.lastA = 0; this.wq = []; this.wqi = 0;
     this.cpu.intLine = false; this.fb.fill(7);
   }
   // ---- the ULA's timing ----
@@ -299,8 +303,10 @@ class SpecMachine {
     const cyc = this.cpu.cyc;
     for (; this.done < cyc.length; this.done++) {
       const c = cyc[this.done];
-      if (c.k === 'ID') { for (let k = 0; k < c.n; k++) { this.cont(this.lastA); this.ct++; } continue; }
+      if (c.k === 'ID') { c.t0 = this.ct; const h0 = this.waits; for (let k = 0; k < c.n; k++) { this.cont(this.lastA); this.ct++; } c.w = this.waits - h0; continue; }
+      const q = this.wq[this.wqi++] || [0, this.ct]; c.w = q[0]; c.t0 = q[1];
       if (c.k === 'IR' || c.k === 'IW') { this.lastA = c.a; continue; }          // already timed by ioCycle
+      if (c.k === 'IA') c.t0 = this.ct;
       this.ct += c.k === 'M1' ? 4 : c.k === 'IA' ? 6 : 3;
       this.lastA = c.k === 'M1' || c.k === 'IA' ? (c.rf & 0xFF00) | (c.rf & 0x80) | ((c.rf + 1) & 0x7F) : c.a;
     }
@@ -311,11 +317,11 @@ class SpecMachine {
     if (SpecMachine.contendedAddr(a)) { const d = this.delay(this.ftAt(this.ct)); this.ct += d; this.waits += d; }
   }
   ftAt(ct) { return (this.ft + ct) % SPEC.FRAME_T; }
-  memCycle(a) { this.catchUp(); this.cont(a); return this.ct; }
+  memCycle(a) { this.catchUp(); const t0 = this.ct, h0 = this.waits; this.cont(a); this.wq.push([this.waits - h0, t0]); return this.ct; }
   // an I/O cycle (4 T-states). The ULA is selected by A0 low and holds the clock from the second T-state; an address
   // in 4000h-7FFFh is held as for memory, at each T-state if the ULA is not selected
   ioCycle(p) {
-    this.catchUp(); const hi = SpecMachine.contendedAddr(p), ula = !(p & 1);
+    this.catchUp(); const hi = SpecMachine.contendedAddr(p), ula = !(p & 1), t0 = this.ct, h0 = this.waits;
     const c1 = () => { if (this.log) this.log.push([this.ct, p, 'io']); const d = this.delay(this.ftAt(this.ct)); this.ct += d; this.waits += d; };
     const free = () => { };
     let at;
@@ -323,7 +329,7 @@ class SpecMachine {
     else if (!hi && ula) { free(); this.ct += 1; c1(); at = this.ct; this.ct += 3; }
     else if (hi && ula) { c1(); this.ct += 1; c1(); at = this.ct; this.ct += 3; }
     else { for (let k = 0; k < 4; k++) { c1(); if (k === 1) at = this.ct; this.ct += 1; } }
-    return at;
+    this.wq.push([this.waits - h0, t0]); return at;
   }
   // ---- memory ----
   read(a) {
@@ -345,7 +351,7 @@ class SpecMachine {
   keyRows(hi) { let v = 0x1F; for (let r = 0; r < 8; r++) if (!(hi & (1 << r))) v &= ~this.keys[r] & 0x1F; return v; }
   input(p) {
     const at = this.ioCycle(p);
-    if (!(p & 1)) return this.keyRows(p >> 8) | 0xA0 | this.earBit();
+    if (!(p & 1)) { this.feReads++; return this.keyRows(p >> 8) | 0xA0 | this.earBit(); }
     return this.floating(this.ftAt(at));
   }
   output(p, v) {
@@ -380,26 +386,37 @@ class SpecMachine {
   }
   endFrame() {
     this.drawTo(SPEC.FRAME_T); this.frames++;
+    if (this.feReads > 200) this.readingT = this.t;       // the keyboard takes 8 reads a frame at most: this many is a loader reading EAR
+    this.feReads = 0;
     if ((this.frames & 15) === 0) this.flash ^= 1;
     this.cell = 0; this.vt = this.cellT(0);
   }
   // ---- running ----
   step() {
-    this.preStep();
-    this.cpu.intLine = this.ft < SPEC.INT_T;
-    this.ct = 0; this.done = 0; this.lastA = this.cpu.pc;
-    const cyc = this.cpu.step();
-    return this.afterStep(cyc);
+    this.preStep(); this.syncInt();
+    return this.afterStep(this.cpu.step());
   }
   afterStep(cyc) {
     this.catchUp(); const t = this.ct;
     if (this.cpu.lastEvent === 'INT') this.ints++;
     this.tapeMove(t);
+    // after an instant load the tape stops by itself once nothing has read it for 2 seconds (a custom loader keeps it going)
+    if (this.tapePlay && this.instantT >= 0 && this.t - Math.max(this.instantT, this.readingT) > 2 * SPEC.CPU_HZ) { this.tapePlay = false; this.instantT = -1; }
     if (this.rec) this.rec.clock += t;
     if (this.audioRate) this.audioRun(t);
     this.t += t; this.ft += t;
     if (this.ft >= SPEC.FRAME_T) { this.ft -= SPEC.FRAME_T; this.endFrame(); this.drawTo(this.ft); }
     return t;
+  }
+  intOut() { return this.ft < SPEC.INT_T; }           // INT is low for the first 32 T-states of the frame
+  syncInt() { this.cpu.intLine = this.intOut(); }
+  // where the beam is: line of the frame and T-state in the line, and as a position in the picture kept (fb)
+  beam() { const line = Math.floor(this.ft / SPEC.LINE_T), t = this.ft % SPEC.LINE_T; let x = t < 128 ? 48 + t * 2 : t < 152 ? 304 + (t - 128) * 2 : t >= 200 ? (t - 200) * 2 : -1; const y = (t >= 200 ? line + 1 : line) - SPEC.FIRST; return { line, t, x, y }; }
+  // a line of the picture being drawn, and where in it: what the ULA is doing at this moment
+  ulaState() {
+    const ft = this.ft, line = Math.floor(ft / SPEC.LINE_T), t = ft % SPEC.LINE_T, pic = line >= 64 && line < 256;
+    const what = !pic ? (line < 64 ? 'top border' : 'bottom border') : t < 128 ? 'picture, column ' + (t >> 2) : t < 152 ? 'right border' : t < 200 ? 'line blanking and sync' : 'left border';
+    return { line, t, what, pic, row: pic ? line - 64 : -1 };
   }
   run(tStates) { let t = 0; while (t < tStates) t += this.step(); return t; }
   runFrame() { const f = this.frames; let t = 0; while (this.frames === f) t += this.step(); return t; }
@@ -423,6 +440,7 @@ class SpecMachine {
   }
   ejectTape() { this.tape = null; this.tapePlay = false; this.tapeLevel = 0; }
   tapeSeek(seg) { const tp = this.tape; if (!tp) return; this.tapeIdx = Math.min(seg, tp.n); this.tapeRem = tp.dur[this.tapeIdx] || 0; this.tapeLevel = tp.lvl[this.tapeIdx] || 0; this.tapePos = 0; for (let q = 0; q < this.tapeIdx; q++) this.tapePos += tp.dur[q]; }
+  reading() { return this.t - this.readingT < SPEC.CPU_HZ / 2; }     // has a loader been reading the tape in the last half second?
   tapeIn() { return this.tapePlay && this.tape && this.tapeIdx < this.tape.n ? this.tapeLevel : 0; }
   tapeMove(t) {
     const tp = this.tape; if (!tp || !this.tapePlay) return;
@@ -437,7 +455,8 @@ class SpecMachine {
   tapeBlock() { const tp = this.tape; if (!tp) return -1; let k = -1; for (let q = 0; q < tp.blocks.length && tp.blocks[q].seg <= this.tapeIdx; q++) k = q; return k; }
   // recording: the MIC output (bit 3) while REC is down, as the times between its edges
   recStart() { this.rec = { pulses: [], clock: 0, last: 0, level: (this.out >> 3) & 1 }; }
-  recEdge(at) { const r = this.rec, l = (this.out >> 3) & 1; if (l === r.level) return; r.level = l; r.pulses.push(r.clock + at - r.last); r.last = r.clock + at; }
+  recBusy() { return this.t - (this.recEdgeT ?? -1e12) < SPEC.CPU_HZ / 2; }     // has SAVE written to MIC in the last half second?
+  recEdge(at) { const r = this.rec, l = (this.out >> 3) & 1; if (l === r.level) return; this.recEdgeT = this.t; r.level = l; r.pulses.push(r.clock + at - r.last); r.last = r.clock + at; }
   recStop() { const r = this.rec; this.rec = null; if (!r) return null; return r.pulses.length ? r.pulses : null; }
   // ---- instant loading. The ROM reads every tape block with LD-BYTES (0556h: IX address, DE length, A the flag byte,
   // carry set to load, clear to verify). When the processor is about to run it, the next block on the tape is taken from
@@ -456,7 +475,7 @@ class SpecMachine {
       for (let i = 0; i < want && i + 1 < d.length - 1; i++, a = (a + 1) & 0xFFFF) { if (load) this.poke(a, d[i + 1]); else if (this.peek(a) !== d[i + 1]) ok = false; }
       ok = ok && x === 0 && d.length - 2 >= want;
     }
-    this.tapeSeek(bl.end); this.instantLoads = (this.instantLoads || 0) + 1;
+    this.tapeSeek(bl.end); this.instantLoads = (this.instantLoads || 0) + 1; this.instantT = this.t;
     c.ix = (c.ix + Math.min(want, Math.max(0, d.length - 2))) & 0xFFFF; c.d = c.e = 0;
     c.f = ok ? c.f | 1 : c.f & ~1;
     c.pc = this.peek(c.sp) | this.peek((c.sp + 1) & 0xFFFF) << 8; c.sp = (c.sp + 2) & 0xFFFF;   // RET

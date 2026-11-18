@@ -71,6 +71,14 @@ for (const instant of [true, false]) {
   let f = 0; while (f < 1000 && !/HELLO/.test(text(m))) { m.runFrame(); f++; }
   ok(/HELLO/.test(text(m)), `LOAD "" ${instant ? 'instantly' : 'from the tape signal'}: the program loads and runs itself (${(f / 50).toFixed(1)} s): ${text(m)}`);
 }
+// after an instant load the tape stops by itself when nothing reads it; while the ROM's loader reads it, reading() says so
+{
+  const m = boot(); m.instant = false; m.insertTape(tap, 'hello.tap'); type(m, ['J', ['SYMBOL SHIFT', 'P'], ['SYMBOL SHIFT', 'P'], 'ENTER']); m.tapePlay = true;
+  for (let f = 0; f < 20; f++) m.runFrame(); ok(m.reading(), 'while LOAD reads the signal the machine knows a loader is reading the tape (fast loading follows this)');
+  const m2 = boot(); m2.insertTape(new Uint8Array([...tap, ...tap]), 'twice.tap'); type(m2, ['J', ['SYMBOL SHIFT', 'P'], ['SYMBOL SHIFT', 'P'], 'ENTER']); m2.tapePlay = true;
+  for (let f = 0; f < 200; f++) m2.runFrame();
+  ok(/HELLO/.test(text(m2)) && !m2.tapePlay && !m2.reading(), 'after an instant load, with nothing reading it, the tape stops by itself within 2 seconds');
+}
 // SAVE, recorded from the MIC output, then loaded back from the recording
 {
   const m = boot();
