@@ -516,7 +516,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <div class="mmbands" id="mmBands"></div>
         <div class="mm-legend" id="mmLegend"></div>
         <div class="mm-read" id="mmRead">Point at the bitmap to read a byte; click to show it in Memory.</div>
-        <p class="hint">Every bit of memory is one pixel. Each byte is a row of 8 pixels (bit 7 on the left) and each strip is one 256-byte page, read top to bottom; each band holds 8K. The ROM's two halves come first, then the 64K of RAM; the tint shows what each part of the RAM is used for (the screen memory follows the 6845's start address). The red mark is the program counter and the blue mark the stack pointer, shown on the bands the CPU sees at this moment.</p>
+        <p class="hint">Every bit of memory is one pixel. Each byte is a row of 8 pixels (bit 7 on the left) and each strip is one 256-byte page, read top to bottom; each band holds 8K. The ROM's two halves come first, then the 48K of RAM; the tint shows the screen bitmap (4000h–57FFh), the attributes (5800h–5AFFh) and the printer buffer and BASIC's system variables (5B00h–5CB5h). The red mark is the program counter and the blue mark the stack pointer.</p>
       </section>
     </div>
 
