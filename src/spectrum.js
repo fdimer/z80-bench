@@ -370,6 +370,18 @@ class SpecMachine {
     const col = (x >> 3) * 2 + (ph >> 1);
     return ph & 1 ? this.ram[0x1800 + (line >> 3) * 32 + col] : this.ram[((line & 0xC0) << 5 | (line & 7) << 8 | (line & 0x38) << 2) + col];
   }
+  // what the ULA reads from the lower RAM at frame T-state ft: in each 8 T-states of a line of the picture, the bitmap
+  // byte, its attribute, the next bitmap byte and its attribute, then 4 T-states left to the CPU (the same timing as
+  // the floating bus). A bitmap byte and its attribute share the low 8 address bits, so one row address (A0-A6) serves
+  // both: two page-mode reads under one RAS. Returns null when the ULA is not reading.
+  ulaFetch(ft) {
+    const r = ft - (SPEC.DISP_T + 2); if (r < 0) return null;
+    const line = Math.floor(r / SPEC.LINE_T), x = r % SPEC.LINE_T; if (line >= 192 || x >= 128) return null;
+    const ph = x & 7; if (ph > 3) return null;
+    const col = (x >> 3) * 2 + (ph >> 1), attr = !!(ph & 1);
+    const off = attr ? 0x1800 + (line >> 3) * 32 + col : ((line & 0xC0) << 5 | (line & 7) << 8 | (line & 0x38) << 2) + col;
+    return { ph, attr, addr: 0x4000 + off, val: this.ram[off], line, col };
+  }
   // ---- the picture: 44 cells of 8 dots (4 T-states) a line, 6 of border each side of the 32 of the picture ----
   cellT(cell) { const line = SPEC.FIRST + Math.floor(cell / 44), c = cell % 44; return SPEC.DISP_T + (line - 64) * SPEC.LINE_T + (c - 6) * 4; }
   drawTo(ft) {
@@ -397,7 +409,7 @@ class SpecMachine {
     return this.afterStep(this.cpu.step());
   }
   afterStep(cyc) {
-    this.catchUp(); const t = this.ct;
+    this.catchUp(); const t = this.ct; this.ftStart = this.ft;       // the frame T-state the instruction started at
     if (this.cpu.lastEvent === 'INT') this.ints++;
     this.tapeMove(t);
     // after an instant load the tape stops by itself once nothing has read it for 2 seconds (a custom loader keeps it going)

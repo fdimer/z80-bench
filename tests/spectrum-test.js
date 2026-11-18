@@ -25,6 +25,10 @@ let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m);
   // the floating bus: during the picture an odd port reads what the ULA is fetching
   m.ram[0] = 0x55; m.ram[0x1800] = 0x38;
   ok(m.floating(14338) === 0x55 && m.floating(14339) === 0x38 && m.floating(14342) === 0xFF && m.floating(1000) === 0xFF, 'floating bus: the bitmap byte, then its attribute, then idle (FFh); FFh outside the picture');
+  // the ULA's reads of the lower RAM, as on the pins: bitmap, attribute, bitmap, attribute, then 4 T-states free
+  const f0 = m.ulaFetch(14338), f1 = m.ulaFetch(14339), f2 = m.ulaFetch(14340), f4 = m.ulaFetch(14342), fl = m.ulaFetch(14338 + 224);
+  ok(f0 && f0.addr === 0x4000 && !f0.attr && f1.addr === 0x5800 && f2.addr === 0x4001 && f4 === null && fl.addr === 0x4100, 'the ULA reads 4000h, 5800h, 4001h, 5801h, then leaves 4 T-states; the next line starts at 4100h');
+  ok((f0.addr & 0xFF) === (f1.addr & 0xFF), 'a bitmap byte and its attribute share the low address bits: one row address (A0-A6) for both');
   // port FE: keys, and the EAR bit on an issue 3 or later board
   m.key('A', true); ok((m.keyRows(0xFD) & 1) === 0 && (m.keyRows(0xFE) & 1) === 1, 'a key reads low on its half-row (A on A9) only'); m.key('A', false);
   m.out = 0x10; ok(m.earBit() === 0x40, 'issue 3: bit 4 out reads back on EAR'); m.out = 0x08; ok(m.earBit() === 0, 'and bit 3 alone does not'); m.out = 0;

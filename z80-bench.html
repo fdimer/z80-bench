@@ -430,14 +430,14 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <figure class="mcfig cpfig" id="zxFigUla"><svg class="chip" id="zxChipUla" role="group" aria-label="ULA pinout"></svg><figcaption><b>IC1 · ULA 6C001</b><br>clocks, video, the lower RAM, the keyboard and the cassette</figcaption></figure>
         </div>
         <div class="legend">
-          <span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z), or not followed (~)</span><span><i class="li"></i>Input: click to toggle</span>
+          <span><i class="lh"></i>High (1)</span><span><i class="ll"></i>Low (0)</span><span><i class="lz"></i>Floating (Z), or analogue (~)</span><span><i class="li"></i>Input: click to toggle</span>
         </div>
         <dl class="busread">
           <dt>Machine cycle</dt><dd id="brCycle">–</dd>
           <dt>Address bus</dt><dd id="brAddr">–</dd>
           <dt>Data bus</dt><dd id="brData">–</dd>
         </dl>
-        <p class="hint">Clicking the Z80's CLK pulses one clock. The pins follow the machine clock by clock. When the ULA holds the CPU (a cycle that uses 4000h–7FFFh or an even port while the picture is being drawn), the bus timing shows the held T-states as TH and the ULA's CPU CLK pin stays high. On the ULA, the data pins show the CPU's data only for an access to the lower RAM or to port FE (they are joined to the CPU's data bus through 470 ohm resistors); the ULA's own screen reads (RAS, CAS and its RAM address A0–A6) and its video outputs U, V and Y are not followed clock by clock and show ~. Pin numbers are from the issue 4A/4B circuit diagram.</p>
+        <p class="hint">Clicking the Z80's CLK pulses one clock. The pins follow the machine clock by clock. When the ULA holds the CPU (a cycle that uses 4000h–7FFFh or an even port while the picture is being drawn), the bus timing shows the held T-states as TH and the ULA's CPU CLK pin stays high. On the ULA, the lower RAM's pins (RAS, CAS, WE, A0–A6, D0–D7) follow whoever uses that RAM at each T-state: during the picture the ULA reads a bitmap byte, its attribute, the next bitmap byte and its attribute in every 8 T-states (RAS and CAS low, the byte's column on A0–A6 and the byte on D0–D7), and the CPU's accesses to 4000h–7FFFh and its refresh cycles there come through the ULA too. They are shown T-state by T-state, not edge by edge. The video outputs U, V and Y are analogue and show ~. Pin numbers are from the issue 4A/4B circuit diagram.</p>
       </section>
   </div>
 
@@ -1777,7 +1777,7 @@ const ULA_TIP = { CAS: 'Column address strobe of the lower 16K RAM (IC6–IC13)'
   U: 'Colour difference U, to the LM1889 (IC14)', V: 'Colour difference V, to the LM1889', Y: 'Brightness and sync, to the LM1889', 'MIC/EAR': 'MIC/TAPE: the outputs of port FE bits 3 and 4 (MIC and speaker), and the EAR input read on bit 6',
   'CPU CLK': 'The Z80\'s 3.5 MHz clock, through TR6. The ULA stops it (holds it high) while it needs the lower RAM', ROMCS: 'Select of the ROM (IC5): an access to 0000h–3FFFh',
   RAS: 'Row address strobe of the lower RAM', OSC: '14 MHz crystal oscillator', KB0: 'Keyboard KB0 (half-row bit 0), 10K pull-up', A14: 'CPU address A14', A15: 'CPU address A15' };
-for (let i = 0; i < 7; i++) ULA_TIP['A' + i] = 'Address line A' + i + ' of the lower RAM: the ULA\'s own address for the screen, or the CPU\'s through IC3 and IC4 (330 ohm)';
+for (let i = 0; i < 7; i++) ULA_TIP['A' + i] = 'Address line A' + i + ' of the lower RAM (IC6-IC13): the column of the screen byte the ULA is reading, or the CPU\'s row then column through IC3 and IC4 (330 ohm); Z when nobody is using that RAM';
 for (let i = 0; i < 8; i++) ULA_TIP['D' + i] = 'Data line D' + i + ' of the lower RAM and the ULA: joined to the CPU\'s D' + i + ' through 470 ohm (R' + (i + 1) + ')';
 for (let i = 1; i < 5; i++) ULA_TIP['KB' + i] = 'Keyboard KB' + i + ' (half-row bit ' + i + '), 10K pull-up';
 const ulaEls = {};
@@ -1800,11 +1800,19 @@ function buildUla() {
     ulaEls[name] = { g, sv, prev: null };
   }
 }
-// what each ULA pin carries during the CPU's current T-state. The ULA's own screen reads (RAS, CAS, its RAM address)
-// and the analogue outputs are not followed clock by clock: they show '~'.
+// what each ULA pin carries during the CPU's current T-state. The lower RAM's pins follow whoever uses it at that
+// T-state: the ULA reading the screen (RAS and CAS low, its column address on A0-A6 and the byte on D0-D7), or the
+// CPU (an access to 4000h-7FFFh: RAS, then CAS with the column, and WE for a write; its refresh cycles in that range
+// are RAS-only refreshes). Shown T-state by T-state: the edges within a T-state are not modelled. The video outputs
+// U, V and Y are analogue and show ~.
+function ulaNow() {
+  const T = curT, f = T && T.at !== undefined && zx.ftStart !== undefined ? (zx.ftStart + T.at) % SPEC.FRAME_T : zx.ft;
+  return zx.ulaFetch(f);
+}
 function ulaPin(name) {
-  const T = curT, a = T.a === null || T.a === 'z' ? null : T.a, lower = a !== null && (a & 0xC000) === 0x4000 && T.mreq === 0 && T.rfsh !== 0;
-  const port = a !== null && T.iorq === 0 && !(a & 1);
+  const T = curT, a = T.a === null || T.a === 'z' ? null : T.a, mem = a !== null && T.mreq === 0 && (a & 0xC000) === 0x4000;
+  const lower = mem && T.rfsh !== 0, refresh = mem && T.rfsh === 0, port = a !== null && T.iorq === 0 && !(a & 1), u = ulaNow();
+  const cas = u || (lower && (T.rd === 0 || T.wr === 0)) ? 0 : 1;
   switch (name) {
     case 'VCC1': case 'VCC2': return 'p'; case 'GND': return 'g';
     case 'INT': return pins.int === 0 || zx.intOut() ? 0 : 1;
@@ -1812,11 +1820,26 @@ function ulaPin(name) {
     case 'RD': return T.rd; case 'WR': return T.wr; case 'MREQ': return T.mreq; case 'IORQ': return T.iorq;
     case 'A14': return a === null ? 'z' : a >> 14 & 1; case 'A15': return a === null ? 'z' : a >> 15 & 1;
     case 'ROMCS': return a !== null && T.mreq === 0 && T.rfsh !== 0 && !(a & 0xC000) ? 0 : 1;
-    case 'WE': return lower && T.wr === 0 ? 0 : 1;
+    case 'RAS': return u || lower || refresh ? 0 : 1;
+    case 'CAS': return cas;
+    case 'WE': return !u && lower && T.wr === 0 ? 0 : 1;
     case 'MIC/EAR': return zx.out & 0x10 || zx.tapeIn() ? 1 : 0;
+    case 'OSC': return clk;
+    case 'U': case 'V': case 'Y': return '~';
   }
   if (/^KB\d$/.test(name)) return zx.keyRows(a === null ? 0xFF : a >> 8) >> +name[2] & 1;
-  if (/^D\d$/.test(name)) { if ((lower || port) && T.d !== null && T.d !== undefined) return T.d >> +name[1] & 1; return '~'; }
+  if (/^A\d$/.test(name)) {
+    const k = +name[1];
+    if (u) return (u.addr >> 7) >> k & 1;                                   // the column of the byte the ULA reads
+    if (lower || refresh) return (cas === 0 ? a >> 7 : a) >> k & 1;           // the CPU's row, then its column (through IC3, IC4)
+    return 'z';
+  }
+  if (/^D\d$/.test(name)) {
+    const k = +name[1];
+    if (u) return u.val >> k & 1;
+    if ((lower || port) && T.d !== null && T.d !== undefined) return T.d >> k & 1;
+    return 'z';
+  }
   return '~';
 }
 function renderUla() {
