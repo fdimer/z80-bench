@@ -13,6 +13,11 @@
 // Read Track is not implemented: it ends at once with Record Not Found.
 // With no disk in the selected drive there are no index pulses, so a command that needs the disk stays busy until
 // the program gives up and sends Force Interrupt, which is what happens on the Executive (its READY input is tied high).
+// Pin faults: the machine puts the level of any faulty pin in pf (pin -> 0 or 1; a disconnected input reads 1).
+//   CLK: no clock, so a command never moves on (the disk still turns); STEP: the head never moves; DIR: the head
+//   always steps one way (high = in); TR00, INDEX, WPRT, RDY: the chip sees that level whatever the drive says
+//   (INDEX at either level gives no index edges, so nothing times out); RAWRD or RDCLK: no data comes off the disk, so
+//   no ID field is ever found; WG or WD: writes never reach the disk.
 
 // ---------- a floppy disk: tracks[cylinder][head] = { mfm, rate, sectors: [{ c, h, r, n, data, deleted, crcErr }] } ----------
 class FloppyDisk {
@@ -118,6 +123,7 @@ class WD1793 {
     this.drive = null;                    // the selected drive: { disk, cyl }, or null
     this.dden = true;                     // the DDEN* pin is low: double density (MFM)
     this.onIntrq = () => {};
+    this.pf = {};                         // levels of faulty pins (see above)
     this.rot = 0; this.revs = 0;          // position within the revolution, in T-states; revolutions counted while a command waits
     this.reset();
   }
@@ -133,11 +139,17 @@ class WD1793 {
   get disk() { return this.drive ? this.drive.disk : null; }
   trk() { const d = this.disk; return d ? d.track(this.drive.cyl, 0) : null; }
   // the IDs the controller can read on this track: none unless the track's encoding matches the DDEN* pin
-  ids() { const t = this.trk(); return t && t.mfm === this.dden ? t.sectors : []; }
+  ids() { const t = this.trk(), f = this.pf; return t && t.mfm === this.dden && !('RAWRD' in f) && !('RDCLK' in f) ? t.sectors : []; }
+  // what the chip sees on its drive inputs, faults included
+  tr0() { return 'TR00' in this.pf ? this.pf.TR00 === 0 : !!this.drive && this.drive.cyl === 0; }
+  wp() { return 'WPRT' in this.pf ? this.pf.WPRT === 0 : !!this.disk && this.disk.writeProtected; }
+  ready() { return this.pf.RDY !== 0; }
+  noIndex() { return 'INDEX' in this.pf; }
+  canWrite() { return !('WG' in this.pf) && !('WD' in this.pf); }
   byteT(t) { const tr = t || this.trk(), rate = tr ? tr.rate : 250; return this.cpuHz * (this.dden ? 8 : 16) / (rate * 1000); }
   // T-states until sector index i's ID field comes round (sectors are spaced evenly after the index)
   toSector(i, n) { const at = this.indexT + (this.revT - this.indexT) * i / n; let d = at - this.rot; if (d < 0) d += this.revT; return d; }
-  indexPin() { return !!this.disk && this.rot < this.indexT; }
+  indexPin() { return 'INDEX' in this.pf ? this.pf.INDEX === 0 : !!this.disk && this.rot < this.indexT; }
   // ----- registers -----
   read(reg) {
     switch (reg & 3) {
@@ -150,12 +162,13 @@ class WD1793 {
   statusByte() {
     let s = this.status & ~(FDC.BUSY | FDC.DRQ | FDC.NOTREADY | FDC.WP);      // READY is tied high on the Executive
     if (this.busy) s |= FDC.BUSY;
+    if (!this.ready()) s |= FDC.NOTREADY;
     if (this.type === 1) {
       s &= ~(FDC.INDEX | FDC.TR00 | FDC.HEADLOADED);
       if (this.indexPin()) s |= FDC.INDEX;
-      if (this.drive && this.drive.cyl === 0) s |= FDC.TR00;
+      if (this.tr0()) s |= FDC.TR00;
       if (this.hld) s |= FDC.HEADLOADED;
-      if (this.disk && this.disk.writeProtected) s |= FDC.WP;
+      if (this.wp()) s |= FDC.WP;
     } else { if (this.drq) s |= FDC.DRQ; s |= this.status & FDC.WP; }
     return s & 0xFF;
   }
@@ -190,6 +203,7 @@ class WD1793 {
       return;
     }
     this.type = 2; this.status = 0; this.hld = true;
+    if (!this.ready()) { this.lastCmd = 'not ready'; this.busy = false; this.intrq = true; this.onIntrq(1); return; }      // READY low: type II and III commands are not run
     const settle = v & 0x04 ? 15 * this.slow * this.ms : 24;
     switch (v & 0xE0) {
       case 0x80: this.lastCmd = 'Read Sector'; this.phase = 'find'; this.wait = settle; break;
@@ -203,7 +217,7 @@ class WD1793 {
   // ----- time -----
   advance(t) {
     if (this.drive) { this.rot += t; while (this.rot >= this.revT) { this.rot -= this.revT; if (this.disk) this.revs++; } }
-    if (!this.phase) return;
+    if (!this.phase || 'CLK' in this.pf) return;
     this.wait -= t;
     while (this.phase && this.wait <= 0) this.tick();
   }
@@ -211,13 +225,15 @@ class WD1793 {
     if (bits) this.status |= bits;
     this.busy = false; this.drq = false; this.phase = null; this.intrq = true; this.onIntrq(1);
   }
-  stepHead(dir) { const d = this.drive; if (d) d.cyl = Math.max(0, Math.min(this.maxCyl, d.cyl + dir)); }
+  stepHead(dir) { const d = this.drive, f = this.pf; if ('DIR' in f) dir = f.DIR ? 1 : -1; if (d && !('STEP' in f)) d.cyl = Math.max(0, Math.min(this.maxCyl, d.cyl + dir)); }
+  // a missing ID: Record Not Found after five index pulses, or never without index edges
+  notFound(bits) { if (this.noIndex()) { this.wait = Infinity; return; } this.phase = 'fail'; this.fail = bits; this.wait += 5 * this.revT; }
   tick() {
     const c = this.cmd;
     switch (this.phase) {
       // ----- type I -----
       case 'restore':
-        if (this.drive && this.drive.cyl === 0) { this.track = 0; this.phase = 'verify'; break; }
+        if (this.tr0()) { this.track = 0; this.phase = 'verify'; break; }
         if (this.left-- <= 0) { this.track = 0; this.finish(FDC.SEEKERR); break; }      // 255 steps and TR00* never came (no drive selected)
         this.stepHead(-1); this.wait += this.stepT; break;
       case 'seek':
@@ -226,7 +242,7 @@ class WD1793 {
         this.wait += this.stepT; break;
       case 'step1':
         if (c & 0x10) this.track = (this.track + this.dir) & 0xFF;
-        if (!(this.dir < 0 && this.drive && this.drive.cyl === 0)) this.stepHead(this.dir); else if (c & 0x10) this.track = 0;
+        if (!(this.dir < 0 && this.tr0())) this.stepHead(this.dir); else if (c & 0x10) this.track = 0;
         this.phase = 'verify'; this.wait += this.stepT; break;
       case 'verify':
         if (!(c & 0x04)) { this.finish(0); break; }
@@ -235,14 +251,14 @@ class WD1793 {
         if (!this.disk) { this.wait = Infinity; break; }                    // no index pulses: the chip waits for ever
         const ids = this.ids(), hit = ids.find(s => s.c === this.track);
         if (hit) { this.wait += this.toSector(ids.indexOf(hit), ids.length) + 10 * this.byteT(); this.phase = 'done'; break; }
-        this.phase = 'fail'; this.fail = FDC.SEEKERR; this.wait += 5 * this.revT; break;
+        this.notFound(FDC.SEEKERR); break;
       }
       // ----- type II: find the sector -----
       case 'find': {
         if (!this.disk) { this.wait = Infinity; break; }
-        if ((c & 0xE0) === 0xA0 && this.disk.writeProtected) { this.finish(FDC.WP); break; }
+        if ((c & 0xE0) === 0xA0 && this.wp()) { this.finish(FDC.WP); break; }
         const ids = this.ids(), i = ids.findIndex(s => s.c === this.track && s.r === this.sector && !s.noData);
-        if (i < 0) { this.phase = 'fail'; this.fail = FDC.RNF; this.wait += 5 * this.revT; break; }
+        if (i < 0) { this.notFound(FDC.RNF); break; }
         this.cur = ids[i]; const bt = this.byteT();
         // the ID field, then the gap: the data mark follows about 40 bytes later in double density, 28 in single
         this.wait += this.toSector(i, ids.length) + (this.dden ? 10 + 43 : 7 + 28) * bt;
@@ -269,8 +285,8 @@ class WD1793 {
       case 'wr': {
         const s = this.cur;
         if (this.drq) { this.status |= FDC.LOST; this.data = 0; this.drq = false; }      // a byte that was not supplied is written as zero
-        s.data[this.pos++] = this.data; this.disk.dirty = true;
-        if (this.pos >= s.data.length) { s.deleted = !!(c & 1); s.crcErr = false; this.phase = 'wrend'; this.wait += 3 * this.byteT(); break; }
+        if (this.canWrite()) { s.data[this.pos] = this.data; this.disk.dirty = true; } this.pos++;
+        if (this.pos >= s.data.length) { if (this.canWrite()) { s.deleted = !!(c & 1); s.crcErr = false; } this.phase = 'wrend'; this.wait += 3 * this.byteT(); break; }
         this.drq = true; this.wait += this.byteT(); break;
       }
       case 'wrend':
@@ -280,7 +296,7 @@ class WD1793 {
       case 'addr': {
         if (!this.disk) { this.wait = Infinity; break; }
         const ids = this.ids();
-        if (!ids.length) { this.phase = 'fail'; this.fail = FDC.RNF; this.wait += 5 * this.revT; break; }
+        if (!ids.length) { this.notFound(FDC.RNF); break; }
         let best = 0, bd = Infinity; ids.forEach((s, i) => { const d = this.toSector(i, ids.length); if (d < bd) { bd = d; best = i; } });
         const s = ids[best], id = [s.c, s.h, s.r, s.n], crc = fdcCrc(this.dden ? [0xA1, 0xA1, 0xA1, 0xFE, ...id] : [0xFE, ...id]);
         this.buf = [...id, crc >> 8, crc & 0xFF]; this.pos = 0; this.sector = s.c;      // the chip copies the track address into the sector register
@@ -293,7 +309,8 @@ class WD1793 {
       // ----- write track (format) -----
       case 'wtwait': {
         if (!this.disk) { this.wait = Infinity; break; }
-        if (this.disk.writeProtected) { this.finish(FDC.WP); break; }
+        if (this.wp()) { this.finish(FDC.WP); break; }
+        if (this.noIndex()) { this.wait = Infinity; break; }                // writing waits for an index pulse that never comes
         this.drq = true; this.phase = 'wtindex'; this.wait += 3 * this.byteT(); break;
       }
       case 'wtindex':
@@ -303,7 +320,7 @@ class WD1793 {
       case 'wt':
         if (this.drq) { this.status |= FDC.LOST; this.data = 0; }
         this.buf.push(this.data);
-        if (this.buf.length >= this.wtLen) { this.drq = false; this.formatTrack(this.buf); this.finish(0); break; }
+        if (this.buf.length >= this.wtLen) { this.drq = false; if (this.canWrite()) this.formatTrack(this.buf); this.finish(0); break; }
         this.drq = true; this.wait += this.byteT(); break;
       case 'fail': this.finish(this.fail); break;
       case 'done': this.finish(0); break;

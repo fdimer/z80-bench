@@ -62,7 +62,7 @@ m.clearFaults(); ok(!m.faulty && m.faultList().length === 0, 'all P1 faults clea
 // lines and the two kinds of fault (a line held, a pin disconnected), and the Z80's pins
 { const z = new ctx.Osborne(new Uint8Array(0x2000).fill(0xA5)); z.pa = 0x00; z.clearFaults();
   const N = z.nets();
-  ok(N.RA3.pins.length === 16 && N.D3.pins.join() === 'UD22,D3,UD18,O3,UD15,D3,P1,D3,U11,DIN,U11,DOUT,U20,DIN,U20,DOUT' && N.A12.pins.join() === 'UD22,A12,UD18,A12,P1,A12' && N.A3.pins.length === 4 && N.RAS0.pins.length === 8 && N.CAS.pins.length === 16, 'lines: the Z80, the two ROM sockets and P1 on each address and data line; a data line goes on to the two RAM chips of its bit; sixteen RAM chips on each RAM address line');
+  ok(N.RA3.pins.length === 16 && N.D3.pins.join() === 'UD22,D3,UD18,O3,UD15,D3,P1,D3,U11,DIN,U11,DOUT,U20,DIN,U20,DOUT,UD12,D3,UD8,D3,UD4,D3,UB17,D3' && N.A12.pins.join() === 'UD22,A12,UD18,A12,P1,A12' && N.A3.pins.length === 4 && N.A0.pins.length === 8 && N.RAS0.pins.length === 8 && N.CAS.pins.length === 16, 'lines: the Z80, the two ROM sockets and P1 on each address and data line (and the four I/O chips on the data lines, A0 and A1); a data line goes on to the two RAM chips of its bit; sixteen RAM chips on each RAM address line');
   z.write(0x1234, 0x5A); z.pa = 1; z.write(0x1234, 0xA5); z.pa = 0;
   z.setNetFault('D3', 1); ok(z.read(0x1234) === 0x5A && z.read(0x1235) === (z.dram[0][0x1235] | 8), 'data line DATA3 held high: RAM reads have bit 3 set'); z.pa = 0x80; ok((z.read(0x0100) & 8) === 8 && z.chipById.UD18.f.O3 === 1, 'and so do ROM reads'); z.pa = 0; ok(z.p1.f.D3 === 1 && z.chipById.U20.f.DOUT === 1, 'and every pin on it shows it'); z.clearFaults();
   z.setNetFault('RAS1', 1); ok(z.read(0x1234) === 0x5A, 'RAS of row 1 held high: row 0 still works'); z.pa = 1; ok(z.read(0x1234) === 0xFF, 'and row 1 reads FFh'); z.pa = 0; z.clearFaults();
@@ -71,4 +71,41 @@ m.clearFaults(); ok(!m.faulty && m.faultList().length === 0, 'all P1 faults clea
   z.setPinFault('UD22', 'WR', 'z'); z.write(0x1234, 0x00); z.clearFaults(); ok(z.read(0x1234) === 0x5A, 'Z80 WR disconnected: writes are lost');
   z.setPinFault('UD22', 'RESET', 0); ok(/reset/.test(z.held()) && z.cpu.step()[0].held, 'Z80 RESET stuck low: the processor is held in reset'); z.clearFaults(); ok(z.held() === null, 'and runs again once cleared');
   z.setNetFault('CAS', 0); z.setPinFault('UD18', 'CE', 1); ok(z.faultList().length === 2 && z.chipFaults('U8').join() === 'CAS: line held low', 'faults are listed as lines and as pins'); z.clearFaults(); }
+// ---- the I/O chips: the two PIAs, the SIO and the disk controller ----
+{ const q = new ctx.Osborne(new Uint8Array(0x2000).fill(0xA5)), out = (p, v) => q.output(p, v), inp = p => q.input(p);
+  const bankSetup = () => { out(0x01, 0x00); out(0x00, 0xFF); out(0x01, 0x04); out(0x00, 0x81); };
+  bankSetup(); ok(q.pa === 0x81, 'PIA UD12: port A drives the bank lines (ROM bank on, bank 1)');
+  q.setNetFault('PRI1', 0); ok(q.pa === 0x80 && q.p1.f.PRI1 === 0, 'PRI1 line held low: the PIA\'s PA0 and the RAM board\'s PRI1 both see it');
+  q.clearFaults(); ok(q.pa === 0x81, 'released: back to bank 1');
+  q.setPinFault('UD12', 'PA7', 0); ok(!(q.pa & 0x80) && q.read(0x0100) !== 0xA5, 'PA7 stuck low: the ROM bank cannot be switched in'); q.clearFaults();
+  q.setPinFault('UD12', 'E', 0); ok(inp(0x01) === 0xFF, 'PIA E stuck low: it is never clocked and never answers');
+  out(0x01, 0x05); q.clearFaults(); ok(q.pia0.cra === 0x04, 'and a write to it is lost');
+  q.setPinFault('UD12', 'D0', 0); ok(inp(0x01) === 0x04 && (out(0x01, 0x07), q.pia0.cra === 0x06), 'PIA D0 cut off and low: bit 0 of what it reads and writes is low'); q.clearFaults(); out(0x01, 0x04);
+  q.setPinFault('UD12', 'R/W', 1); out(0x01, 0x3C); ok(q.pia0.cra === 0x04, 'PIA R/W stuck high: a write becomes a read and is lost'); q.clearFaults();
+  q.setPinFault('UD12', 'CS2', 0); out(0x11, 0x05); ok(q.pia0.cra === 0x05 && q.pia1.cra === 0x05, 'PIA CS2 stuck low: it takes the writes meant for the other PIA too'); q.clearFaults(); out(0x01, 0x04); out(0x11, 0x00);
+  q.setPinFault('UD12', 'RS0', 1); ok(inp(0x00) === 0x04, 'PIA RS0 stuck high: port 00h reads the control register'); q.clearFaults();
+  out(0x03, 0x07); q.pia0.setCB1(0); q.pia0.setCB1(1); ok(q.intRequest(), 'VBLANK on UD12 CB1 raises IRQ*');
+  q.setPinFault('UD12', 'IRQB', 'z'); ok(!q.intRequest(), 'UD12 IRQB cut off from IRQ*: the interrupt no longer reaches the Z80'); q.clearFaults();
+  q.setNetFault('INT', 1); q.syncInt(); ok(!q.cpu.intLine, 'IRQ* held high: no interrupts'); q.clearFaults(); inp(0x02);
+  q.setPinFault('UD12', 'CB1', 0); q.setPinFault('UD12', 'CB1', 1); ok(q.pia0.cb1 === 1 && (q.pia0.setCB1(0), q.pia0.cb1 === 1), 'UD12 CB1 at a level ignores VBLANK'); q.clearFaults();
+  q.setPinFault('UD12', 'RESET', 'z'); out(0x01, 0x34); q.reset(); ok(q.pia0.cra === 0x34, 'PIA RESET cut off: the reset does not reach it'); q.clearFaults(); q.reset();
+  q.setNetFault('RESET', 0); out(0x01, 0x04); ok(q.pia0.cra === 0 && /reset/.test(q.held()), 'RESET* held low: the Z80 and the PIAs stay in reset'); q.clearFaults();
+  // disk controller
+  out(0x0A, 0x05); ok(inp(0x0A) === 0x05, 'FD1793: the sector register reads back');
+  q.setPinFault('UB17', 'A0', 0); out(0x0B, 0x07); ok(q.fdc.sector === 0x07, 'FDC A0 stuck low: a write to the data register lands in the sector register'); q.clearFaults();
+  q.setPinFault('UB17', 'CS', 'z'); ok(inp(0x0A) === 0xFF, 'FDC CS disconnected: it never answers'); q.clearFaults();
+  q.setPinFault('UB17', 'D2', 1); ok(inp(0x0A) === 0x07, 'FDC D2 cut off and high: bit 2 reads high'); q.clearFaults();
+  q.setPinFault('UB17', 'TR00', 0); ok(inp(0x08) & 0x04, 'TR00* held low: the controller thinks the head is on track 0'); q.clearFaults();
+  q.setPinFault('UB17', 'RDY', 0); out(0x08, 0xD0); out(0x08, 0x80); ok(!(inp(0x08) & 1) && inp(0x08) & 0x80, 'READY low: Read Sector is not run, and the status shows Not Ready'); q.clearFaults();
+  q.setPinFault('UB17', 'STEP', 'z'); q.fdc.drive = q.drives[0]; q.drives[0].cyl = 5; out(0x08, 0xD0); q.fdc.track = 5; out(0x08, 0x58); q.fdc.advance(4e6); ok(q.drives[0].cyl === 5 && q.fdc.track === 6, 'FDC STEP disconnected: the track register counts but the head stays put'); q.clearFaults();
+  q.setNetFault('FDCIRQ', 0); out(0x08, 0xD8); ok(q.fdc.intrq && q.pia1.cb1 === 0, 'FDC IRQ line held low: UD8 CB1 never sees the interrupt'); q.clearFaults();
+  q.setPinFault('UB17', 'MR', 0); out(0x0A, 0x09); ok(q.fdc.sector === 0, 'FDC MR low: held in reset'); q.clearFaults();
+  q.setPinFault('UD12', 'PB0', 1); ok(!q.fdc.dden, 'PB0 stuck high: the controller sees single density (DDEN* is the same line)'); q.clearFaults();
+  // SIO
+  out(0x0F, 0x02); out(0x0F, 0x40); out(0x0F, 0x02); ok(inp(0x0F) === 0x40, 'SIO: write register 2 (the vector) reads back through read register 2');
+  q.setPinFault('UD4', 'CE', 'z'); out(0x0F, 0x02); ok(inp(0x0F) === 0xFF, 'SIO CE disconnected: it never answers'); q.clearFaults();
+  q.setNetFault('M1', 0); ok(q.sio.held && inp(0x0D) === 0xFF, 'M1* held low: the SIO is kept in reset'); q.clearFaults();
+  q.setPinFault('UD4', 'CLK', 'z'); ok(inp(0x0D) === 0xFF, 'SIO with no clock does nothing'); q.clearFaults();
+  q.setPinFault('UD4', 'CTSA', 0); ok(q.sio.ch[0].cts === 0, 'SIO CTSA at a level: the channel sees it'); q.clearFaults();
+  ok(!q.ioF && q.faultList().length === 0, 'all cleared'); }
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);
