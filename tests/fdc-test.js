@@ -1,8 +1,9 @@
-// FD1793 and ImageDisk checks (no disk image needed): node tests/fdc-test.js
+// FD1793, ImageDisk and Teledisk checks (no disk image needed): node tests/fdc-test.js
+// Optional: OSB_TD0_DIR=folder also reads every .td0 file in that folder (none are included in this repository).
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const ctx = { console }; vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'wd1793.js'), 'utf8'), ctx, { filename: 'wd1793.js' });
-vm.runInContext('this.WD1793 = WD1793; this.FloppyDisk = FloppyDisk; this.parseIMD = parseIMD; this.writeIMD = writeIMD; this.fdcCrc = fdcCrc;', ctx);
+vm.runInContext('this.WD1793 = WD1793; this.FloppyDisk = FloppyDisk; this.parseIMD = parseIMD; this.writeIMD = writeIMD; this.parseTD0 = parseTD0; this.parseDiskImage = parseDiskImage; this.fdcCrc = fdcCrc;', ctx);
 let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const HZ = 3993600;
 // a disk in the Executive's format: 40 tracks, 5 sectors of 1024 bytes, double density; sector bytes = track ^ sector ^ index
@@ -17,6 +18,81 @@ ok(same && d1.track(0, 0).mfm && d1.track(0, 0).rate === 250, 'every sector, its
 ok(imd.length < 40 * 5 * 1024 + 200, 'a sector filled with one byte is stored compressed');
 let threw = false; try { ctx.parseIMD(new Uint8Array([1, 2, 3, 4])); } catch (e) { threw = true; } ok(threw, 'a file that is not ImageDisk is refused');
 ok(ctx.fdcCrc([0xA1, 0xA1, 0xA1, 0xFE, 0, 0, 1, 2]) === 0xCA6F, 'CRC of a standard double-density ID field (track 0, side 0, sector 1, 512 bytes) is CA6Fh');
+// ----- Teledisk -----
+// Build a .td0 file here: a header, a comment, then tracks whose sectors use each of the three data encodings.
+const td0File = (sig, tracks, comment) => {
+  const o = [sig.charCodeAt(0), sig.charCodeAt(1), 0, 0, 21, 0x02, 2, comment ? 0x81 : 0x01, 0, 1, 0, 0];
+  const w16 = v => o.push(v & 0xFF, v >> 8);
+  if (comment) { const t = Array.from(comment.replace(/\n/g, '\0'), c => c === 'ü' ? 0x81 : c.charCodeAt(0)); w16(0); w16(t.length); o.push(96, 10, 24, 12, 0, 0, ...t); }
+  for (const t of tracks) {
+    o.push(t.sectors.length, t.c, t.fm ? 0x80 : 0, 0);
+    for (const s of t.sectors) {
+      o.push(t.c, 0, s.r, s.n, s.flags || 0, 0);
+      if (s.flags & 0x30) continue;
+      const body = s.enc === 0 ? s.data : s.body; w16(body.length + 1); o.push(s.enc, ...body);
+    }
+  }
+  o.push(0xFF); return new Uint8Array(o);
+};
+// LZHUF, written out the way Teledisk's compressor works (4K window, matches of 3 to 60 bytes, adaptive Huffman codes)
+function lzhufPack(src) {
+  const N = 4096, F = 60, TH = 2, NC = 256 - TH + F, T = NC * 2 - 1, R = T - 1;
+  const freq = new Uint32Array(T + 1), prnt = new Int32Array(T + NC), son = new Int32Array(T);
+  for (let i = 0; i < NC; i++) { freq[i] = 1; son[i] = i + T; prnt[i + T] = i; }
+  for (let i = 0, j = NC; j <= R; i += 2, j++) { freq[j] = freq[i] + freq[i + 1]; son[j] = i; prnt[i] = prnt[i + 1] = j; }
+  freq[T] = 0xFFFF; prnt[R] = 0;
+  const update = c0 => { let c = prnt[c0 + T]; do { const k = ++freq[c]; let l = c + 1; if (k > freq[l]) { while (k > freq[++l]); l--; freq[c] = freq[l]; freq[l] = k; const i = son[c]; prnt[i] = l; if (i < T) prnt[i + 1] = l; const j = son[l]; son[l] = i; prnt[j] = c; if (j < T) prnt[j + 1] = c; son[c] = j; c = l; } } while ((c = prnt[c]) !== 0); };
+  const bits = []; const put = (v, n) => { for (let k = n - 1; k >= 0; k--) bits.push(v >> k & 1); };
+  const encChar = c => { const path = []; let k = prnt[c + T]; do { path.push(k & 1); k = prnt[k]; } while (k !== R); for (let i = path.length - 1; i >= 0; i--) bits.push(path[i]); update(c); };
+  const pLen = [3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, ...Array(24).fill(7), ...Array(16).fill(8)];
+  const pCode = [0x00, 0x20, 0x30, 0x40, 0x50, 0x58, 0x60, 0x68, 0x70, 0x78, 0x80, 0x88, 0x90, 0x94, 0x98, 0x9C, 0xA0, 0xA4, 0xA8, 0xAC, 0xB0, 0xB4, 0xB8, 0xBC,
+    ...Array.from({ length: 24 }, (_, i) => 0xC0 + 2 * i), ...Array.from({ length: 16 }, (_, i) => 0xF0 + i)];
+  const encPos = d => { const i = d >> 6; put(pCode[i] >> (8 - pLen[i]), pLen[i]); put(d & 0x3F, 6); };
+  const buf = new Uint8Array(N).fill(0x20); let r = N - F;
+  for (let p = 0; p < src.length;) {
+    let best = 0, bpos = 0;      // find the longest match in what was already written (a plain search: speed doesn't matter here)
+    for (let d = 0; d < N - F; d++) { const s0 = (r - d - 1) & (N - 1); let l = 0; while (l < F && p + l < src.length && buf[(s0 + l) & (N - 1)] === src[p + l] && (s0 + l) % N !== r) l++; if (l > best) { best = l; bpos = d; } }
+    const take = best > TH ? best : 1;
+    if (take > 1) { encChar(255 - TH + take); encPos(bpos); } else encChar(src[p]);
+    for (let k = 0; k < take; k++) { buf[r] = src[p++]; r = (r + 1) & (N - 1); }
+  }
+  while (bits.length % 8) bits.push(0);
+  const out = new Uint8Array(bits.length / 8); for (let i = 0; i < out.length; i++) for (let k = 0; k < 8; k++) out[i] = out[i] << 1 | bits[i * 8 + k]; return out;
+}
+{
+  const raw = Uint8Array.from({ length: 1024 }, (_, i) => (i * 7) & 0xFF);
+  const tracks = [
+    { c: 0, sectors: [
+      { r: 1, n: 3, enc: 0, data: raw },
+      { r: 2, n: 3, enc: 1, body: [0x00, 0x02, 0xE5, 0x5A] },                                        // 512 times "E5 5A"
+      { r: 3, n: 3, enc: 2, body: [0, 3, 0x41, 0x42, 0x43, 1, 200, 0x11, 0x22, 2, 4, 1, 2, 3, 4, 0, 5, 9, 9, 9, 9, 9] },  // "ABC", 200 x "11 22", 4 x "01 02 03 04", 5 x 09; the rest stays 0
+      { r: 4, n: 3, flags: 0x10 },                                                                    // no data
+      { r: 5, n: 3, enc: 0, data: raw.slice().fill(0xAA), flags: 0x06 } ] },                             // CRC error and deleted
+    { c: 1, fm: true, sectors: [{ r: 1, n: 1, enc: 1, body: [0x80, 0x00, 0xE5, 0xE5] }] } ];
+  const plain = td0File('TD', tracks, 'Test disk für Teledisk\nsecond line');
+  const d = ctx.parseTD0(plain, 'test.td0'), t0 = d.track(0, 0);
+  ok(d.cylinders === 2 && t0.mfm && !d.track(1, 0).mfm && d.track(1, 0).sectors[0].data.length === 256, 'Teledisk: two tracks, the first double density, the second single (the head byte\'s bit 7)');
+  ok(d.comment === 'Test disk für Teledisk\nsecond line' && d.date === '1996-11-24', 'the comment block gives the label (code page 437 letters kept) and its date');
+  ok(t0.sectors[0].data.every((v, i) => v === raw[i]), 'encoding 0: raw sector data');
+  ok(t0.sectors[1].data.every((v, i) => v === (i & 1 ? 0x5A : 0xE5)), 'encoding 1: a two-byte pattern repeated');
+  const e2 = [0x41, 0x42, 0x43]; for (let i = 0; i < 200; i++) e2.push(0x11, 0x22); for (let i = 0; i < 4; i++) e2.push(1, 2, 3, 4); for (let i = 0; i < 5; i++) e2.push(9);
+  ok(t0.sectors[2].data.every((v, i) => v === (i < e2.length ? e2[i] : 0)), 'encoding 2: literal runs and repeated patterns of 2 and 4 bytes');
+  ok(t0.sectors[3].noData && t0.sectors[4].crcErr && t0.sectors[4].deleted && !t0.sectors[0].crcErr, 'the sector flags: no data, CRC error, deleted data mark');
+  const packed = lzhufPack(plain.subarray(12)), comp = new Uint8Array([0x74, 0x64, ...plain.subarray(2, 12), ...packed]);
+  ok(packed.length < plain.length - 12, `the test's LZHUF packer shrinks the file body (${plain.length - 12} to ${packed.length} bytes)`);
+  const dc = ctx.parseTD0(comp, 'test.td0'); let match = dc.comment === d.comment && dc.cylinders === 2;
+  for (let c = 0; c < 2; c++) d.track(c, 0).sectors.forEach((s, i) => { const u = dc.track(c, 0).sectors[i]; if (u.r !== s.r || u.noData !== s.noData || u.data.some((v, k) => v !== s.data[k])) match = false; });
+  ok(match && /advanced compression/.test(dc.header), 'a compressed ("td") file reads back the same as the plain one');
+  ok(ctx.parseDiskImage(comp, 'x').cylinders === 2 && ctx.parseDiskImage(imd, 'x').cylinders === 40, 'parseDiskImage tells Teledisk and ImageDisk files apart by their first bytes');
+  const back = ctx.parseIMD(ctx.writeIMD(d), 'x');
+  ok(back.comment === d.comment && back.track(0, 0).sectors[2].data.every((v, i) => v === t0.sectors[2].data[i]) && !back.track(1, 0).mfm, 'a Teledisk disk saves as ImageDisk with its label, its data and its densities');
+  let msg = ''; try { ctx.parseTD0(plain.subarray(0, plain.length - 300), 'cut'); } catch (e) { msg = e.message; } ok(/cut short/.test(msg), 'a cut-short Teledisk file is refused (' + msg + ')');
+  msg = ''; const old = comp.slice(); old[4] = 10; try { ctx.parseTD0(old, 'old'); } catch (e) { msg = e.message; } ok(/not supported/.test(msg), 'old Teledisk 1.x compression is refused with a reason');
+}
+if (process.env.OSB_TD0_DIR) for (const f of fs.readdirSync(process.env.OSB_TD0_DIR).filter(f => /\.td0$/i.test(f)).sort()) {
+  let d = null, err = ''; try { d = ctx.parseTD0(fs.readFileSync(path.join(process.env.OSB_TD0_DIR, f)), f); } catch (e) { err = e.message; }
+  ok(d && d.cylinders >= 40, `${f}: ${d ? d.describe() + (d.comment ? ' · ' + d.comment.split('\n')[0] : '') : err}`);
+}
 // ----- the controller -----
 const f = new ctx.WD1793(HZ, { clock: 1 }), drv = { disk: null, cyl: 7 }; let irq = 0, irqs = 0; f.onIntrq = l => { if (l && !irq) irqs++; irq = l; };
 const run = ms => f.advance(Math.round(HZ * ms / 1000));

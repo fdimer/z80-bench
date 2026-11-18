@@ -79,6 +79,116 @@ function parseIMD(bytes, name) {
   for (let c = 0; c < disk.tracks.length; c++) if (!disk.tracks[c]) disk.tracks[c] = [];
   return disk;
 }
+// ---------- Teledisk (.TD0) files ----------
+// A 12-byte header: "TD" (plain) or "td" (everything after the header compressed with LZHUF), volume sequence, check
+// signature, version, data rate (bits 0-1: 250, 300 or 500 kbps; bit 7: single density, FM), drive type, stepping
+// (bit 7: a comment block follows), DOS allocation flag, sides, CRC. The comment block: CRC, text length, date and
+// time (6 bytes), then the text (lines ending in 00h). Then each track: sector count (FFh ends the disk), cylinder,
+// head (bit 7: this track is FM), CRC; and for each sector: cylinder, head, sector number, size code, flags (02h CRC
+// error, 04h deleted data mark, 10h or 20h no data), CRC; then, unless there is no data, a data block: its length
+// (2 bytes, counting the next byte), the encoding (0 raw, 1 a 2-byte pattern repeated a 2-byte count of times, 2 runs:
+// 00h n = n literal bytes, k r = a pattern of 2^k bytes repeated r times), and the encoded bytes.
+// LZHUF is Okumura and Yoshizaki's 1988 compressor: a 4K window, matches of 3 to 60 bytes, and adaptive Huffman codes.
+function td0Unpack(src) {
+  const N = 4096, F = 60, TH = 2, NC = 256 - TH + F, T = NC * 2 - 1, R = T - 1, MAX = 0x8000;
+  const freq = new Uint32Array(T + 1), prnt = new Int32Array(T + NC), son = new Int32Array(T), buf = new Uint8Array(N).fill(0x20);
+  const dCode = [], dLen = [];
+  for (const [code0, n, each, len] of [[0, 1, 32, 3], [1, 3, 16, 4], [4, 8, 8, 5], [12, 12, 4, 6], [24, 24, 2, 7], [48, 16, 1, 8]])
+    for (let c = 0; c < n; c++) for (let k = 0; k < each; k++) { dCode.push(code0 + c); dLen.push(len); }
+  for (let i = 0; i < NC; i++) { freq[i] = 1; son[i] = i + T; prnt[i + T] = i; }
+  for (let i = 0, j = NC; j <= R; i += 2, j++) { freq[j] = freq[i] + freq[i + 1]; son[j] = i; prnt[i] = prnt[i + 1] = j; }
+  freq[T] = 0xFFFF; prnt[R] = 0;
+  let pos = 0, bitBuf = 0, bitLen = 0;
+  const bit = () => { if (!bitLen) { bitBuf = pos < src.length ? src[pos++] : 0; bitLen = 8; } bitLen--; return bitBuf >> bitLen & 1; };
+  const byte = () => { let v = 0; for (let k = 0; k < 8; k++) v = v << 1 | bit(); return v; };
+  const reconst = () => {
+    let j = 0;
+    for (let i = 0; i < T; i++) if (son[i] >= T) { freq[j] = (freq[i] + 1) >> 1; son[j] = son[i]; j++; }
+    for (let i = 0, j2 = NC; j2 < T; i += 2, j2++) {
+      const f = freq[j2] = freq[i] + freq[i + 1]; let k = j2 - 1; while (f < freq[k]) k--; k++;
+      freq.copyWithin(k + 1, k, j2); freq[k] = f; son.copyWithin(k + 1, k, j2); son[k] = i;
+    }
+    for (let i = 0; i < T; i++) { const k = son[i]; if (k >= T) prnt[k] = i; else prnt[k] = prnt[k + 1] = i; }
+  };
+  const update = c0 => {
+    if (freq[R] === MAX) reconst();
+    let c = prnt[c0 + T];
+    do {
+      const k = ++freq[c]; let l = c + 1;
+      if (k > freq[l]) {
+        while (k > freq[++l]); l--;
+        freq[c] = freq[l]; freq[l] = k;
+        const i = son[c]; prnt[i] = l; if (i < T) prnt[i + 1] = l;
+        const j = son[l]; son[l] = i; prnt[j] = c; if (j < T) prnt[j + 1] = c; son[c] = j;
+        c = l;
+      }
+    } while ((c = prnt[c]) !== 0);
+  };
+  const decChar = () => { let c = son[R]; while (c < T) c = son[c + bit()]; c -= T; update(c); return c; };
+  const decPos = () => { let i = byte(); const c = dCode[i] << 6; let j = dLen[i] - 2; while (j-- > 0) i = (i << 1) + bit(); return c | (i & 0x3F); };
+  const out = []; let r = N - F;
+  while (pos < src.length || bitLen) {
+    const c = decChar();
+    if (c < 256) { out.push(c); buf[r++] = c; r &= N - 1; }
+    else { const i = (r - decPos() - 1) & (N - 1), len = c - 255 + TH; for (let k = 0; k < len; k++) { const v = buf[(i + k) & (N - 1)]; out.push(v); buf[r++] = v; r &= N - 1; } }
+    if (pos >= src.length && bitLen === 0) break;
+  }
+  return new Uint8Array(out);
+}
+function parseTD0(bytes, name) {
+  const h = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const sig = String.fromCharCode(h[0], h[1]);
+  if (h.length < 12 || (sig !== 'TD' && sig !== 'td')) throw new Error('not a Teledisk file: it does not start with "TD" or "td"');
+  if (sig === 'td' && h[4] < 20) throw new Error(`Teledisk ${h[4] / 10} files with advanced compression (the old LZW kind) are not supported`);
+  const b = sig === 'td' ? new Uint8Array([...h.subarray(0, 12), ...td0Unpack(h.subarray(12))]) : h;
+  const rateFM = !!(b[5] & 0x80), rate = [250, 300, 500][b[5] & 3] || 250, disk = new FloppyDisk(name);
+  disk.header = `Teledisk ${Math.floor(b[4] / 10)}.${b[4] % 10}${sig === 'td' ? ', advanced compression' : ''}`;
+  let p = 12;
+  if (b[7] & 0x80) {
+    if (p + 10 > b.length) throw new Error('Teledisk file is cut short in its comment');
+    const len = b[p + 2] | b[p + 3] << 8, d = b.subarray(p + 4, p + 10);
+    // the text is in the PC's code page 437: keep the accented letters it is most likely to hold
+    const cp437 = { 0x81: 'ü', 0x82: 'é', 0x83: 'â', 0x84: 'ä', 0x85: 'à', 0x87: 'ç', 0x88: 'ê', 0x89: 'ë', 0x8A: 'è', 0x8E: 'Ä', 0x90: 'É', 0x94: 'ö', 0x99: 'Ö', 0x9A: 'Ü', 0xA0: 'á', 0xA1: 'í', 0xA2: 'ó', 0xA3: 'ú', 0xA4: 'ñ', 0xE1: 'ß' };
+    disk.comment = Array.from(b.subarray(p + 10, p + 10 + len), c => c === 0 ? '\n' : c >= 0x20 && c < 0x7F ? String.fromCharCode(c) : cp437[c] || '').join('').split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+    disk.date = `${1900 + d[0]}-${String(d[1] + 1).padStart(2, '0')}-${String(d[2]).padStart(2, '0')}`;
+    p += 10 + len;
+  }
+  for (;;) {
+    if (p >= b.length) throw new Error('Teledisk file is cut short: no end-of-disk mark');
+    const n = b[p]; if (n === 0xFF) break;
+    if (p + 4 > b.length) throw new Error('Teledisk file is cut short in a track header');
+    const cyl = b[p + 1], hd = b[p + 2] & 1, fm = rateFM || !!(b[p + 2] & 0x80); p += 4;
+    const trk = { mfm: !fm, rate, sectors: [] };
+    for (let i = 0; i < n; i++) {
+      if (p + 6 > b.length) throw new Error(`Teledisk file is cut short in track ${cyl}`);
+      const [c, hh, r, nc, fl] = b.subarray(p, p + 5), size = 128 << Math.min(nc, 6); p += 6;
+      const s = { c, h: hh, r, n: nc, data: new Uint8Array(size), deleted: !!(fl & 0x04), crcErr: !!(fl & 0x02), noData: !!(fl & 0x30) };
+      if (!s.noData) {
+        const blen = b[p] | b[p + 1] << 8, enc = b[p + 2], end = p + 2 + blen; let q = p + 3, o = 0;
+        if (end > b.length) throw new Error(`Teledisk file is cut short in track ${cyl}, sector ${r}`);
+        if (enc === 0) { s.data.set(b.subarray(q, q + Math.min(size, end - q))); }
+        else if (enc === 1) { while (q + 4 <= end && o < size) { const cnt = b[q] | b[q + 1] << 8; for (let k = 0; k < cnt && o < size; k++) { s.data[o++] = b[q + 2]; if (o < size) s.data[o++] = b[q + 3]; } q += 4; } }
+        else if (enc === 2) {
+          while (q < end && o < size) {
+            const k = b[q++];
+            if (k === 0) { const m = b[q++]; for (let t = 0; t < m && o < size; t++) s.data[o++] = b[q + t]; q += m; }
+            else { const plen = 1 << k, rep = b[q++]; for (let t = 0; t < rep; t++) for (let u = 0; u < plen && o < size; u++) s.data[o++] = b[q + u]; q += plen; }
+          }
+        } else throw new Error(`Teledisk track ${cyl}, sector ${r}: unknown data encoding ${enc}`);
+        p = end;
+      }
+      trk.sectors.push(s);
+    }
+    disk.setTrack(cyl, hd, trk);
+  }
+  for (let c = 0; c < disk.tracks.length; c++) if (!disk.tracks[c]) disk.tracks[c] = [];
+  return disk;
+}
+// a disk image of either kind, told apart by its first bytes
+function parseDiskImage(bytes, name) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), s = String.fromCharCode(b[0], b[1]);
+  return s === 'TD' || s === 'td' ? parseTD0(b, name) : parseIMD(b, name);
+}
 function writeIMD(disk, stamp) {
   const out = [], put = s => { for (let i = 0; i < s.length; i++) out.push(s.charCodeAt(i) & 0xFF); };
   const d = stamp || new Date(), z = v => String(v).padStart(2, '0');
@@ -345,4 +455,4 @@ class WD1793 {
     this.disk.setTrack(this.drive.cyl, 0, { mfm: this.dden, rate: old ? old.rate : 250, sectors }); this.disk.dirty = true;
   }
 }
-if (typeof module !== 'undefined') module.exports = { WD1793, FloppyDisk, parseIMD, writeIMD, fdcCrc, FDC };
+if (typeof module !== 'undefined') module.exports = { WD1793, FloppyDisk, parseIMD, parseTD0, td0Unpack, parseDiskImage, writeIMD, fdcCrc, FDC };

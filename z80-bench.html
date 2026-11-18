@@ -429,10 +429,10 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <div class="row osbbar osbdrives">
           <span class="osbdrive" id="osbDrv0"><i class="led"></i><b>Drive A</b> <button type="button" data-ins="0">Insert disk…</button><button type="button" data-ej="0" hidden>Eject</button><button type="button" data-sv="0" hidden>Save (.imd)</button> <span class="mono dinfo">empty</span></span>
           <span class="osbdrive" id="osbDrv1"><i class="led"></i><b>Drive B</b> <button type="button" data-ins="1">Insert disk…</button><button type="button" data-ej="1" hidden>Eject</button><button type="button" data-sv="1" hidden>Save (.imd)</button> <span class="mono dinfo">empty</span></span>
-          <input type="file" id="osbDiskFile" accept=".imd,.IMD" hidden>
+          <input type="file" id="osbDiskFile" accept=".imd,.IMD,.td0,.TD0" hidden>
         </div>
         <div class="msg" id="osbMsg"></div>
-        <p class="hint">Click the screen and type: your keyboard drives the Executive's key matrix through the ROM's own 60 Hz scan. Caps Lock toggles Alpha Lock, and Backspace acts as the ← key. The ROM is not included: load your own 8 KB image (execv12, CRC 70798C2F). Your browser keeps it, so you only load it once. The blue marker shows the electron beam while you step. Floppy disks: insert an ImageDisk (.imd) file in drive A, then press RETURN at the ROM's prompt to boot from it. The lamp beside a drive lights while it is selected (its motor is then running), and brighter while the controller is busy. Disks are held in memory only: after a program has written to one, Save downloads it as a new .imd file. Disk images are not included.</p>
+        <p class="hint">Click the screen and type: your keyboard drives the Executive's key matrix through the ROM's own 60 Hz scan. Caps Lock toggles Alpha Lock, and Backspace acts as the ← key. The ROM is not included: load your own 8 KB image (execv12, CRC 70798C2F). Your browser keeps it, so you only load it once. The blue marker shows the electron beam while you step. Floppy disks: insert an ImageDisk (.imd) or Teledisk (.td0) file in drive A, then press RETURN at the ROM's prompt to boot from it. The lamp beside a drive lights while it is selected (its motor is then running), and brighter while the controller is busy. Disks are held in memory only: after a program has written to one, Save downloads it as a new .imd file (Teledisk disks are saved as .imd too). Disk images are not included.</p>
       </section>
   </div>
 
@@ -1932,7 +1932,7 @@ $('osbRomFile').onchange = () => {
 };
 $('osbRestart').onclick = powerOn;
 
-// ---------- floppy drives: ImageDisk files in and out ----------
+// ---------- floppy drives: ImageDisk (and Teledisk) files in, ImageDisk files out ----------
 let diskSlot = 0;
 const diskMsg = (cls, txt) => { $('osbMsg').className = 'msg' + (cls ? ' ' + cls : ''); $('osbMsg').textContent = txt; };
 function renderDrives() {
@@ -1953,14 +1953,14 @@ document.querySelector('.osbdrives').addEventListener('click', e => {
     if (dk.dirty && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Eject without saving?'; setTimeout(() => { delete b.dataset.sure; b.textContent = 'Eject'; }, 3000); return; }
     delete b.dataset.sure; b.textContent = 'Eject'; d.disk = null; diskMsg('', `Drive ${'AB'[i]}: ${dk.name} ejected.`); render(); return;
   }
-  const name = dk.name.replace(/\.imd$/i, '') + (dk.dirty ? '-changed' : '') + '.imd';
+  const name = dk.name.replace(/\.(imd|td0)$/i, '') + (dk.dirty ? '-changed' : '') + '.imd';
   benchDownload(name, writeIMD(dk), 'application/octet-stream').then(f => { if (f) { dk.dirty = false; diskMsg('ok', `Drive ${'AB'[i]}: disk saved as ${f}.`); render(); } });
 });
 $('osbDiskFile').onchange = () => {
   const f = $('osbDiskFile').files[0]; $('osbDiskFile').value = ''; if (!f) return;
   f.arrayBuffer().then(buf => {
     try {
-      const dk = parseIMD(new Uint8Array(buf), f.name); osb.drives[diskSlot].disk = dk;
+      const dk = parseDiskImage(new Uint8Array(buf), f.name); osb.drives[diskSlot].disk = dk;
       diskMsg('ok', `Drive ${'AB'[diskSlot]}: ${f.name} inserted (${dk.describe()}).${dk.comment ? ' Label: ' + dk.comment.split('\n')[0].slice(0, 80).replace(/\.$/, '') + '.' : ''}${diskSlot === 0 && romLoaded ? ' Press RETURN at the ROM\'s prompt to boot from it.' : ''}`);
     } catch (err) { diskMsg('err', `${f.name} could not be read: ${err.message}.`); }
     render();
