@@ -225,6 +225,22 @@ class CPCTape {
     this.total = 0; for (let q = 0; q < n; q++) this.total += this.dur[q];
   }
 }
+// A recording as a CDT file: the pulses (in CPC clocks) as TZX pulse-sequence blocks, at 3.5 MHz T-states; a gap
+// longer than a pulse can be becomes a pause block. Returns null if nothing was recorded.
+CPCTape.fromPulses = (pulses, note = 'Recorded on the Z80 Bench Amstrad CPC 464 emulator') => {
+  const out = [...'ZXTape!'].map(c => c.charCodeAt(0)).concat([0x1A, 1, 20]);
+  const t = [...note].map(c => c.charCodeAt(0) & 0x7F).slice(0, 255); out.push(0x30, t.length, ...t);
+  let run = [], frac = 0, any = false;
+  const flush = () => { while (run.length) { const n = Math.min(255, run.length); out.push(0x13, n); for (const v of run.splice(0, n)) out.push(v & 255, v >> 8); } };
+  for (let i = 0; i < pulses.length; i++) {
+    frac += pulses[i] * 7 / 8; const v = Math.round(frac); frac -= v;
+    if (i === 0 && v > 65535) continue;                    // silence before the first edge
+    if (v > 65535) { flush(); const ms = Math.min(65535, Math.max(1, Math.round(v / 3500))); out.push(0x20, ms & 255, ms >> 8); continue; }
+    if (v > 0) { run.push(v); any = true; }
+  }
+  flush();
+  return any ? new Uint8Array(out) : null;
+};
 class CPCMachine {
   constructor() {
     this.rom = new Uint8Array(0x8000).fill(0xFF); this.hasLo = false; this.hasHi = false;
@@ -244,6 +260,7 @@ class CPCMachine {
     this.acc = new Uint32Array(3);                    // accesses: 0 ROM, 1 RAM, 2 writes to the gate array
     this.crtc = new Uint8Array(18); this.crtcSel = 0;
     this.psg = new Uint8Array(16); this.keys = new Uint8Array(10);      // keys: bit set = key down
+    this.rec = null;     // a recording: { pulses: clocks between edges, clock: tape time while recording, last: time of the last edge, level }
     this.tape = null; this.tapePlay = false; this.tapeIdx = 0; this.tapeRem = 0; this.tapeLevel = 0; this.tapePos = 0;
     this.audioRate = 0; this.abufL = new Float32Array(32768); this.abufR = new Float32Array(32768); this.aw = 0; this.audioT = 0;
     this.pens = new Uint8Array(17);                   // gate array colours for pens 0-15 and the border
@@ -452,10 +469,11 @@ class CPCMachine {
     if (!(p & 0x0800)) {
       switch (p >> 8 & 3) {
         case 0: this.ppiA = v; this.psgBus(); break;
-        case 2: this.ppiC = v; this.psgBus(); break;
+        case 2: this.ppiC = v; this.psgBus(); this.recEdge(); break;
         case 3:
           if (v & 0x80) { this.ppiCtl = v; this.ppiA = 0; this.ppiC = 0; }
           else { const b = 1 << (v >> 1 & 7); this.ppiC = v & 1 ? this.ppiC | b : this.ppiC & ~b; this.psgBus(); }
+          this.recEdge();
           break;
       }
     }
@@ -564,6 +582,7 @@ class CPCMachine {
     }
     this.t += t;
     if (this.tapePlay) this.tapeMove(t);
+    if (this.rec && this.motorOn()) this.rec.clock += t;
     if (this.audioRate) { this.audioT += t * this.audioRate; while (this.audioT >= CPC.CPU_HZ) { this.audioT -= CPC.CPU_HZ; this.audioSample(); } }
     // the gate array recognises the acknowledge by IORQ and M1 both low
     if (this.cpu.lastEvent === 'INT') { this.ints++; if (!(this.gf && (this.gv.IORQ === 1 || this.gv.M1 === 1))) { this.intCnt &= 31; this.intReq = false; } }
@@ -590,6 +609,15 @@ class CPCMachine {
       if (tp.stops.has(this.tapeIdx)) { this.tapePlay = false; return; }                    // a "stop the tape" block
     }
   }
+  // ---- recording: REC and PLAY down. The cassette output (port C bit 5) is recorded while the motor is on, as the
+  // times between its edges; the tape does not move while the motor is off.
+  recStart() { this.tapePlay = false; this.rec = { pulses: [], clock: 0, last: 0, level: (this.ppiC >> 5) & 1 }; }
+  recEdge() {
+    const r = this.rec; if (!r || !this.motorOn()) return;
+    const l = (this.ppiC >> 5) & 1; if (l === r.level) return;
+    r.level = l; r.pulses.push(r.clock - r.last); r.last = r.clock;
+  }
+  recStop() { const r = this.rec; this.rec = null; if (!r) return null; if (r.clock > r.last) r.pulses.push(r.clock - r.last); return CPCTape.fromPulses(r.pulses); }
   tapeBlock() { const tp = this.tape; if (!tp) return -1; let k = -1; for (let q = 0; q < tp.blocks.length && tp.blocks[q].seg <= this.tapeIdx; q++) k = q; return k; }
   // ---- sound ----
   soundClock() { return !(this.gaDead() || (this.gf && 'CCLK' in this.gv)); }     // does CCLK reach the sound chip?

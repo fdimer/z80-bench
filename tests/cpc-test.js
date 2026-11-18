@@ -166,6 +166,21 @@ if (dir) {
   const type = s => { for (const ch of s) { const k = ch === '\n' ? 'Return' : ch === ' ' ? 'Space' : ch === '"' ? '2' : ch === '?' ? '/' : ch === '*' ? ':' : ch.toUpperCase(); const sh = '"?*'.includes(ch); if (sh) m.key('Shift', true); m.run(80000); m.key(k, true); m.run(240000); m.key(k, false); if (sh) m.key('Shift', false); m.run(160000); } };
   type('?3*4\n'); m.run(2000000); const s2 = m.screenText(); console.log(s2.slice(4, 10).map(l => '  |' + l).join('\n'));
   ok('BASIC computes 3*4', s2.some(l => l.trim() === '12'));
+  { // save a BASIC program to tape, then load it back from the recording
+    const x = new CPCMachine(); x.rom.set(m.rom); x.hasLo = x.hasHi = true; x.run(4000000 * 3);
+    const tk = (k, sh) => { if (sh) x.key('Shift', true); x.run(80000); x.key(k, true); x.run(240000); x.key(k, false); if (sh) x.key('Shift', false); x.run(80000); };
+    const typeX = str => { for (const ch of str) { if (ch === '\n') tk('Return'); else if (ch === '"') tk('2', 1); else if (ch === ' ') tk('Space'); else tk(ch.toUpperCase()); } };
+    typeX('10 PRINT "TAPE OK"\nSAVE "T"\n'); x.run(4000000);
+    const asked = x.screenText().some(l => /REC and PLAY/.test(l));
+    x.recStart(); tk('Space'); let i = 0; for (; i < 120 && !(i > 3 && !x.motorOn()); i++) x.run(4000000);
+    const bytes = x.recStop(); x.run(4000000 * 2);
+    ok('SAVE asks for REC and PLAY, and the recording becomes a CDT file', asked && bytes && bytes.length > 1000, bytes && bytes.length);
+    typeX('NEW\nLOAD ""\n'); x.run(4000000); x.insertTape(bytes); x.tapePlay = true; tk('Space');
+    for (i = 0; i < 120 && !(i > 3 && !x.motorOn()); i++) x.run(4000000);
+    x.run(4000000); typeX('RUN\n'); x.run(4000000 * 2);
+    const scr = x.screenText();
+    ok('the recording loads back: the program runs', scr.some(l => /Loading T block 1/.test(l)) && scr.some(l => l.trim().toUpperCase() === 'TAPE OK'), scr.filter(l => l.trim()).join(' | '));
+  }
   if (process.env.CPC_TAPE) {   // load a real tape: CPC_TAPE=/path/to/file.cdt
     const x = new CPCMachine(); x.rom.set(m.rom); x.hasLo = x.hasHi = true; x.run(4000000 * 3);
     const tp = x.insertTape(new Uint8Array(fs.readFileSync(process.env.CPC_TAPE))), tk = (k, sh) => { if (sh) x.key('Shift', true); x.run(80000); x.key(k, true); x.run(240000); x.key(k, false); if (sh) x.key('Shift', false); x.run(80000); };

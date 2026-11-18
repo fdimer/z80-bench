@@ -57,6 +57,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); fo
 .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px 28px; max-width: 1920px; margin: 0 auto; }
 #btnMaster { color: var(--warn); }
 #btnMaster.armed { background: var(--warn); border-color: var(--warn); color: #fff; }
+#cpTapeRec.armed { background: var(--warn); border-color: var(--warn); color: #fff; }
 .mono, input.mono, textarea { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-bottom: 12px; }
 header.top h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.02em; margin: 0; }
@@ -397,6 +398,8 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <button id="cpTapeIns" type="button" title="A CDT (or TZX) tape file. It is played as the signal it describes, into the cassette input.">Insert tape (.cdt)…</button><input type="file" id="cpTapeFile" accept=".cdt,.tzx" hidden>
           <button id="cpTapePlay" type="button" title="Press PLAY on the cassette. The tape moves while PLAY is down and the computer has the motor on." disabled>▶ Play</button>
           <button id="cpTapeRew" type="button" title="Rewind to the start of the tape" disabled>⏮ Rewind</button>
+          <button id="cpTapeRec" type="button" title="Press REC and PLAY on a blank tape: what the computer writes to the cassette (SAVE) is recorded while it has the motor on. Press again to stop; the recording is then the tape in the deck, ready to load back or save as a file.">● Record</button>
+          <button id="cpTapeSave" type="button" title="Save the tape in the deck as a CDT file" disabled>Save tape (.cdt)</button>
           <label class="inline" for="cpTapeBlk" title="Wind the tape to the start of a block">Block <select id="cpTapeBlk" disabled><option>no tape</option></select></label>
           <label class="inline" for="cpTapeFast" title="Run at full speed while the tape is playing and the motor is on, then back to real time."><input type="checkbox" id="cpTapeFast" checked> Fast loading</label>
         </div>
@@ -1675,7 +1678,7 @@ function masterReset() {
   for (const k of Object.keys(pins)) pins[k] = 1;
   cpu.nmiPending = false;
   cpc.rom.fill(0xFF); for (const a of [cpc.ram, cpc.keys, mem]) a.fill(0);
-  cpc.hasLo = cpc.hasHi = false; cpc.fb.fill(20); cpc.ejectTape(); cpTapeShow();
+  cpc.hasLo = cpc.hasHi = false; cpc.fb.fill(20); cpc.rec = null; cpc.ejectTape(); cpTapeBytes = null; cpTapeShow();
   try { localStorage.removeItem(CP_ROM_KEYS.lo); localStorage.removeItem(CP_ROM_KEYS.hi); } catch (e) {}
   cpHeld.clear(); cpLatched.clear(); cpQueue.length = 0; cpWant.clear(); cpShow(); $('cpMsg').className = 'msg'; $('cpMsg').textContent = '';
   resetCPU();
@@ -2012,19 +2015,22 @@ const MM = {
 // A CDT file is turned into the signal it holds (see CPCTape in src/cpc.js). PLAY is a key on the cassette deck:
 // the tape moves while it is down and the 8255 has the motor on. A "stop the tape" block releases it.
 let cpTapeName = '';
-function cpTurbo() { return $('cpTapeFast').checked && cpc.tapePlay && cpc.motorOn(); }
+let cpTapeBytes = null;
+function cpTurbo() { return $('cpTapeFast').checked && (cpc.tapePlay || !!cpc.rec) && cpc.motorOn(); }
 const cpTime = c => { const s = Math.floor(c / CPC.CPU_HZ); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 function cpTapeShow() {
   const tp = cpc.tape, has = !!tp;
-  for (const id of ['cpTapePlay', 'cpTapeRew', 'cpTapeBlk']) $(id).disabled = !has;
+  for (const id of ['cpTapePlay', 'cpTapeRew', 'cpTapeBlk']) $(id).disabled = !has || !!cpc.rec;
+  $('cpTapeSave').disabled = !has || !cpTapeBytes || !!cpc.rec; $('cpTapeRec').textContent = cpc.rec ? '■ Stop recording' : '● Record'; $('cpTapeRec').classList.toggle('armed', !!cpc.rec);
   const sel = $('cpTapeBlk'); sel.innerHTML = '';
-  if (!has) { sel.add(new Option('no tape')); $('cpTapeInfo').textContent = ''; cpTapeSig = ''; return; }
+  if (!has) { sel.add(new Option('no tape')); $('cpTapeInfo').textContent = cpc.rec ? '● REC' : ''; cpTapeSig = ''; return; }
   let c = 0, q = 0;
   tp.blocks.forEach((b, i) => { for (; q < b.seg; q++) c += tp.dur[q]; sel.add(new Option(`${i + 1}. ${b.desc} (${cpTime(c)})`, i)); });
   cpTapeRender();
 }
 let cpTapeSig = '';
 function cpTapeRender() {
+  if (cpc.rec) { const txt = `● REC · ${cpTime(cpc.rec.clock)} recorded · ${cpc.rec.pulses.length.toLocaleString()} pulses · motor ${cpc.motorOn() ? 'on' : 'off'}${cpc.motorOn() ? '' : ' (waiting for the computer: type SAVE "name" and press a key)'}`; if (txt !== cpTapeSig) { cpTapeSig = txt; $('cpTapeInfo').textContent = txt; } return; }
   const tp = cpc.tape; if (!tp) return;
   const k = cpc.tapeBlock(), playing = cpc.tapePlay, motor = cpc.motorOn();
   const end = cpc.tapeIdx >= tp.n;
@@ -2035,13 +2041,23 @@ $('cpTapeIns').onclick = () => $('cpTapeFile').click();
 $('cpTapeFile').onchange = async () => {
   const f = $('cpTapeFile').files[0]; $('cpTapeFile').value = ''; if (!f) return;
   try {
-    const tp = cpc.insertTape(new Uint8Array(await f.arrayBuffer())); cpTapeName = f.name;
+    if (cpc.rec) cpc.recStop();
+    const bytes = new Uint8Array(await f.arrayBuffer()); const tp = cpc.insertTape(bytes); cpTapeName = f.name; cpTapeBytes = bytes;
     $('cpMsg').className = 'msg ok';
     $('cpMsg').textContent = `Tape inserted: ${f.name}, ${tp.blocks.length} blocks, ${cpTime(tp.total)} long. Type RUN"" and press RETURN, then press Play here and any key on the CPC.` + (tp.notes.length ? ' Notes on the tape: ' + tp.notes.join('; ') : '');
   } catch (e) { $('cpMsg').className = 'msg err'; $('cpMsg').textContent = 'Could not read the tape: ' + e.message; }
   cpTapeShow();
 };
-$('cpTapePlay').onclick = () => { if (!cpc.tape) return; cpc.tapePlay = !cpc.tapePlay && cpc.tapeIdx < cpc.tape.n; cpTapeRender(); cscr.focus(); };
+$('cpTapePlay').onclick = () => { if (!cpc.tape || cpc.rec) return; cpc.tapePlay = !cpc.tapePlay && cpc.tapeIdx < cpc.tape.n; cpTapeRender(); cscr.focus(); };
+$('cpTapeRec').onclick = () => {
+  if (!cpc.rec) { cpc.recStart(); $('cpMsg').className = 'msg ok'; $('cpMsg').textContent = 'Recording: type SAVE "name" and press RETURN, then any key on the CPC. Press Stop recording when it says Ready.'; cpTapeShow(); cscr.focus(); return; }
+  const bytes = cpc.recStop();
+  if (!bytes) { $('cpMsg').className = 'msg err'; $('cpMsg').textContent = 'Nothing was recorded: the computer did not write to the tape.'; cpTapeShow(); return; }
+  const tp = cpc.insertTape(bytes); cpTapeBytes = bytes; cpTapeName = `recording-${cpStamp()}.cdt`;
+  $('cpMsg').className = 'msg ok'; $('cpMsg').textContent = `Recorded ${cpTime(tp.total)} of tape (${bytes.length.toLocaleString()} bytes as a CDT file). It is now the tape in the deck, rewound: LOAD it back, or press Save tape to keep it.`;
+  cpTapeShow();
+};
+$('cpTapeSave').onclick = () => { if (!cpTapeBytes) return; const name = /\.(cdt|tzx)$/i.test(cpTapeName) ? cpTapeName : cpTapeName + '.cdt'; cpSaved(cpDownload(name, cpTapeBytes.slice(), 'application/octet-stream'), f => `Tape saved as ${f}: ${cpTapeBytes.length.toLocaleString()} bytes.`); };
 $('cpTapeRew').onclick = () => { if (!cpc.tape) return; cpc.tapePlay = false; cpc.tapeSeek(0); cpTapeRender(); };
 $('cpTapeBlk').onchange = () => { const tp = cpc.tape, b = tp && tp.blocks[+$('cpTapeBlk').value]; if (!b) return; cpc.tapeSeek(b.seg); cpTapeRender(); };
 
