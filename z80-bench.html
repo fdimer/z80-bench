@@ -388,12 +388,13 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <button id="cpRestart" type="button">Power on / restart</button>
           <button id="cpDumpBin" type="button">Dump RAM (.bin)</button>
           <label class="inline" for="cpGa" title="The gate array fitted at IC116. The two types behave alike; their pins are arranged differently.">Gate array <select id="cpGa"><option value="40010">40010</option><option value="40007">40007</option></select></label>
+          <label class="inline" for="cpSound" title="The AY-3-8912 sound chip, played while the machine runs in real time: through the built-in speaker (all three channels together), or as from the stereo socket (A left, C right, B in both).">Sound <select id="cpSound"><option value="speaker" selected>Speaker</option><option value="stereo">Stereo socket</option><option value="off">Off</option></select></label>
           <span class="osbkeys mono" id="cpKeysDown"></span>
         </div>
         <div class="msg" id="cpMsg"></div>
         <div class="cpkb" id="cpKb" aria-label="Keyboard"></div>
         <p class="hint" id="cpHint">Click the picture and type: letters, digits and symbols come out as typed (the page presses the CPC key, with or without SHIFT, that gives that character). Backspace is DEL, Delete is CLR, Alt is COPY, the numeric keypad gives the function keys f0–f9 and its Enter is the small ENTER key. On the keyboard above, SHIFT and CTRL stay down for the next key. Load ROM takes the 464's two 16 KB images, the firmware (OS_464, CRC 815752DF) and BASIC 1.0 (CRC 7D9A3BAC), together or one at a time, or one 32 KB image of both. They are not included; your browser keeps them, so you only load them once.</p>
-        <p class="hint">The picture is built the way the machine builds it: the 6845 counts characters and lines, the gate array turns two bytes of RAM into dots for each character, in the screen mode and colours it holds at that moment, with the border outside the display and black during the sync pulses. The monitor starts a new line at every HSYNC and a new picture at every VSYNC. When the machine is paused, the white mark shows where the beam is. Sound and the cassette are not emulated yet.</p>
+        <p class="hint">The picture is built the way the machine builds it: the 6845 counts characters and lines, the gate array turns two bytes of RAM into dots for each character, in the screen mode and colours it holds at that moment, with the border outside the display and black during the sync pulses. The monitor starts a new line at every HSYNC and a new picture at every VSYNC. When the machine is paused, the white mark shows where the beam is. The cassette is not emulated yet.</p>
       </section>
       <section class="panel" id="pPinout">
         <h2>Processor, gate array and 6845 <span class="aside">top view · live pins · ringed pins can be given a fault</span></h2>
@@ -534,9 +535,9 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
       </section>
 
       <section class="panel" id="pMach">
-        <h2>CPC hardware<button class="fold" type="button" aria-expanded="true" title="Collapse">»</button> <span class="aside">memory · gate array · 6845 · 8255</span></h2>
+        <h2>CPC hardware<button class="fold" type="button" aria-expanded="true" title="Collapse">»</button> <span class="aside">memory · gate array · 6845 · sound · 8255</span></h2>
         <div class="zxstate" id="cpState"></div>
-        <p class="hint">The gate array (IC116) decides what the CPU reads: the 32K ROM lies over the RAM at 0000h–3FFFh (firmware) and C000h–FFFFh (BASIC), and two bits of its mode register switch each half off to reach the RAM underneath. It also makes READY, which holds the Z80 in wait states so that every bus cycle lines up with the video circuit: instructions take whole microseconds. I/O devices are picked by single address lines, so the port numbers are 16 bits: 7Fxxh gate array, BCxxh–BFxxh 6845, F4xxh–F7xxh 8255. The 6845 (IC108) times the picture: its HSYNC also feeds the gate array's interrupt counter, which asks for an interrupt every 52 lines, 300 times a second. Sound and the cassette are not emulated yet.</p>
+        <p class="hint">The gate array (IC116) decides what the CPU reads: the 32K ROM lies over the RAM at 0000h–3FFFh (firmware) and C000h–FFFFh (BASIC), and two bits of its mode register switch each half off to reach the RAM underneath. It also makes READY, which holds the Z80 in wait states so that every bus cycle lines up with the video circuit: instructions take whole microseconds. I/O devices are picked by single address lines, so the port numbers are 16 bits: 7Fxxh gate array, BCxxh–BFxxh 6845, F4xxh–F7xxh 8255. The 6845 (IC108) times the picture: its HSYNC also feeds the gate array's interrupt counter, which asks for an interrupt every 52 lines, 300 times a second. The sound chip (AY-3-8912) is written through the 8255: port A carries the data and two bits of port C drive the chip's bus. It runs on the gate array's 1 MHz CCLK, so a tone period p gives 62,500 / p Hz, and it also reads the keyboard through its own port. The cassette is not emulated yet.</p>
       </section>
 
       <section class="panel" id="pSystem" hidden>
@@ -1707,6 +1708,11 @@ function drawCp() {
   $('cpScrInfo').textContent = `mode ${cpc.vmode} · ${[20, 40, 80][cpc.vmode] || 20} columns · line ${cpc.line} · frame ${cpc.frames}`;
 }
 let cpSig = '';
+// one sound channel: its tone (Hz and note) or off, whether noise is mixed in, and its volume
+function cpTone(ch) {
+  const g = cpc.psg, p = g[ch * 2] | (g[ch * 2 + 1] & 15) << 8, on = !(g[7] & (1 << ch)), nz = !(g[7] & (8 << ch)), v = g[8 + ch];
+  return `${'ABC'[ch]} <b>${on ? (p ? Math.round(CPCMachine.toneHz(p)) + ' Hz ' + CPCMachine.note(p) : 'period 0') : 'tone off'}</b>${nz ? ' + noise' : ''} · volume <b>${v & 16 ? 'envelope' : v & 15}</b>`;
+}
 function renderCpState() {
   const keys = []; CPC.KEYS.forEach((row, r) => row.forEach((k, i) => { if (cpc.keys[r] & (1 << i)) keys.push(k); }));
   const g = cpc.gaMode, R = cpc.crtc, c = cpc.ppiC, none = '<span class="none">nothing fitted (reads FFh)</span>';
@@ -1717,7 +1723,8 @@ function renderCpState() {
     <div class="blk"><div class="hd">READY (the Z80's WAIT)</div><div class="kv">Clock <b>${cpc.t.toLocaleString('en-AU')}</b> · wait states added <b>${cpc.waits.toLocaleString('en-AU')}</b>${cpc.t ? ' (' + (100 * cpc.waits / cpc.t).toFixed(1) + '%)' : ''}<br>${cpc.held() ? '<b>Z80 held: ' + esc(cpc.held()) + '</b>' : cpc.rdy === 1 ? '<b>No wait states (READY or the Z80\'s WAIT pin is high): RAM accesses out of step</b>' : 'READY is high one clock in four; each cycle waits for it'}</div></div>
     <div class="blk"><div class="hd">6845 IC108 · ports BCxxh–BFxxh</div><div class="kv">R0–R7 <b>${[...R.subarray(0, 8)].map(h2).join(' ')}</b><br>R8–R15 <b>${[...R.subarray(8, 16)].map(h2).join(' ')}</b><br>Character <b>${cpc.hcc}</b> of ${R[0] + 1} · row <b>${cpc.vcc}</b> line <b>${cpc.vlc}</b> · scan line <b>${cpc.line}</b> of ${cpc.frameLines()}<br>Display address <b>${h4((cpc.maRow + cpc.hcc) & 0x3FFF)}h</b> · DISPEN <b>${cpc.de ? 'high' : 'low'}</b> · HSYNC <b>${cpc.hs ? 'high' : 'low'}</b> · VSYNC <b>${cpc.vsync ? 'high' : 'low'}</b><br>Screen memory at <b>${h4((R[12] & 0x30) << 10)}h</b> · frame <b>${cpc.frames}</b></div></div>
     <div class="blk"><div class="hd">Monitor</div><div class="kv">Beam <b>${cpc.mx}</b> characters after HSYNC, <b>${cpc.my}</b> lines after VSYNC · picture <b>${cpc.pictures}</b><br>Colour out <b>${CPC.COLOUR_NAMES[cpc.rgb]}</b></div></div>
-    <div class="blk"><div class="hd">8255 IC107 · ports F4xxh–F7xxh</div><div class="kv">Port A <b>${h2(cpc.ppiA)}h</b> · port C <b>${h2(c)}h</b>: keyboard row <b>${c & 15}</b> · cassette motor <b>${c & 0x10 ? 'on' : 'off'}</b> · sound chip <b>${['idle', 'read', 'write', 'address'][c >> 6]}</b> (register ${cpc.psgSel})<br>Keys down <b>${keys.join(' ') || 'none'}</b></div></div>`;
+    <div class="blk"><div class="hd">Sound chip AY-3-8912 · through the 8255</div><div class="kv">${[0, 1, 2].map(cpTone).join('<br>')}<br>Noise period <b>${cpc.psg[6] & 31}</b> · envelope period <b>${cpc.psg[11] | cpc.psg[12] << 8}</b> shape <b>${cpc.psg[13] & 15}</b> · selected register <b>${cpc.psgSel}</b>${cpc.soundClock() ? '' : '<br><b>No CCLK: the sound chip stands still</b>'}</div></div>
+    <div class="blk"><div class="hd">8255 IC107 · ports F4xxh–F7xxh</div><div class="kv">Port A <b>${h2(cpc.ppiA)}h</b> · port C <b>${h2(c)}h</b>: keyboard row <b>${c & 15}</b> · cassette motor <b>${c & 0x10 ? 'on' : 'off'}</b> · sound chip bus <b>${['idle', 'read', 'write', 'address'][c >> 6]}</b><br>Keys down <b>${keys.join(' ') || 'none'}</b></div></div>`;
   if (html !== cpSig) { cpSig = html; $('cpState').innerHTML = html; }
 }
 // ---------- the gate array and the 6845 beside the CPU: live pins, and faults on the pins that have a ring ----------
@@ -1991,6 +1998,36 @@ const MM = {
   },
   markers() { const cs = getComputedStyle(document.documentElement); return [[cpu.sp, cs.getPropertyValue('--sel').trim() || '#2a6fb0'], [cpu.pc, '#e0322d']]; }
 };
+// ---------- sound ----------
+// The machine model fills two ring buffers (left, right) with samples as emulated time passes; a script processor
+// plays them. Sound is only played in real time, and browsers only allow it to start from a click or a key press.
+let cpAudio = null, cpAr = 0, cpLastL = 0, cpLastR = 0, cpHpL = 0, cpHpR = 0;
+function cpSoundMode() { return $('cpSound').value; }
+function cpAudioStart() {
+  if (cpSoundMode() === 'off') return;
+  if (cpAudio) { if (cpAudio.state === 'suspended') cpAudio.resume().catch(() => {}); return; }
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    cpAudio = new AC(); const node = cpAudio.createScriptProcessor(1024, 0, 2);
+    node.onaudioprocess = e => {
+      const L = e.outputBuffer.getChannelData(0), R = e.outputBuffer.getChannelData(1), mode = cpSoundMode();
+      const live = running && runRate === 'real' && mode !== 'off', rate = cpc.audioRate;
+      if (cpc.aw - cpAr > rate * 0.2 || cpc.aw < cpAr) cpAr = Math.max(0, cpc.aw - Math.round(rate * 0.06));      // fell behind: skip ahead
+      for (let i = 0; i < L.length; i++) {
+        if (live && cpAr < cpc.aw) { const j = cpAr++ & 32767; cpLastL = cpc.abufL[j]; cpLastR = cpc.abufR[j]; }
+        else if (!live) { cpLastL = cpLastR = 0; cpAr = cpc.aw; }
+        let l = cpLastL, r = cpLastR; if (mode !== 'stereo') l = r = (l + r) / 2;      // the speaker: all three channels
+        cpHpL += (l - cpHpL) * 0.002; cpHpR += (r - cpHpR) * 0.002;                           // remove the DC level
+        L[i] = Math.max(-1, Math.min(1, (l - cpHpL) * 2)); R[i] = Math.max(-1, Math.min(1, (r - cpHpR) * 2));
+      }
+    };
+    node.connect(cpAudio.destination); cpc.audioRate = cpAudio.sampleRate; cpAr = cpc.aw;
+  } catch (e) { cpAudio = null; }
+}
+for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, cpAudioStart, { passive: true });
+$('cpSound').onchange = () => { try { localStorage.setItem('cpc.sound', cpSoundMode()); } catch (e) {} if (cpSoundMode() !== 'off') cpAudioStart(); else if (cpAudio) cpAudio.suspend().catch(() => {}); };
+try { const v = localStorage.getItem('cpc.sound'); if (v === 'off' || v === 'stereo' || v === 'speaker') $('cpSound').value = v; } catch (e) {}
+
 // ---------- file downloads ----------
 // Files leave through the claude.ai viewer's save prompt when this page runs there (it accepts .txt and .zip, so
 // binary files go inside a .zip); anywhere else, through an ordinary browser download.

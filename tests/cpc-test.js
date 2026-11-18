@@ -30,6 +30,23 @@ for (const [name, bytes, want, setup] of [
   m.output(0x7F00, 0x8C); ok('both off', m.read(0x0001) === 0x77 && m.read(0xC001) === 0x88);
   m.reset(); ok('reset switches both on', m.read(0x0001) === 0x11 && m.read(0xC001) === 0x22);
 }
+{ // sound: registers written through the 8255 (port A data, port C bits 7-6 the bus control), 1 MHz clock
+  const m = new CPCMachine(); m.gaMode = 0x0C; m.audioRate = 48000;     // NOPs in RAM
+  const reg = (r, v) => { m.output(0xF400, r); m.output(0xF600, 0xC0); m.output(0xF600, 0); m.output(0xF400, v); m.output(0xF600, 0x80); m.output(0xF600, 0); };
+  m.output(0xF700, 0x82);
+  const cycles = (buf, from, to) => { let n = 0; for (let i = from + 1; i < to; i++) if (buf[i & 32767] > buf[(i - 1) & 32767]) n++; return n; };   // rising edges
+  reg(0, 142); reg(1, 0); reg(4, 71); reg(5, 0); reg(7, 0x3A); reg(8, 15); reg(10, 15);     // A 440 Hz, C 880 Hz, B off, no noise
+  ok('sound registers written through the 8255', m.psg[0] === 142 && m.psg[7] === 0x3A && m.psg[8] === 15);
+  m.run(400000); let a0 = m.aw; m.run(4000000); let a1 = m.aw;
+  ok('one second of samples', Math.abs(a1 - a0 - 48000) <= 2, a1 - a0);
+  const fl = cycles(m.abufL, a0, Math.min(a1, a0 + 32000)) * 48000 / Math.min(a1 - a0, 32000), fr = cycles(m.abufR, a0, Math.min(a1, a0 + 32000)) * 48000 / Math.min(a1 - a0, 32000);
+  ok('tone A (period 142) on the left: 440 Hz', Math.abs(fl - 62500 / 142) < 4, fl.toFixed(1)); ok('tone C (period 71) on the right: 880 Hz', Math.abs(fr - 62500 / 71) < 8, fr.toFixed(1));
+  ok('note names', CPCMachine.note(142) === 'A4' && CPCMachine.note(71) === 'A5');
+  memSetFault(m, 'IC116', 'CCLK', 0); m.run(40000); a0 = m.aw; m.run(400000);
+  ok('no CCLK: the sound chip stands still', !m.soundClock() && cycles(m.abufL, a0, m.aw) === 0); memSetFault(m, 'IC116', 'CCLK', null);
+  m.run(400000); ok('CCLK back: sound again', m.soundClock() && cycles(m.abufL, m.aw - 4000, m.aw) > 20);
+  m.reset(); ok('reset clears the sound chip', m.psg.every(v => v === 0));
+}
 { // RAM chips: data bit and address pin faults follow the selectors' wiring
   const m = new CPCMachine(); m.gaMode = 0x0C;
   memSetFault(m, 'IC120', 'DOUT', 0); ok('IC120 is data bit 0', (m.write(0x1234, 0xFF), m.read(0x1234) === 0xFE)); memSetFault(m, 'IC120', 'DOUT', null);
@@ -126,6 +143,8 @@ if (dir) {
   const type = s => { for (const ch of s) { const k = ch === '\n' ? 'Return' : ch === ' ' ? 'Space' : ch === '"' ? '2' : ch === '?' ? '/' : ch === '*' ? ':' : ch.toUpperCase(); const sh = '"?*'.includes(ch); if (sh) m.key('Shift', true); m.run(80000); m.key(k, true); m.run(240000); m.key(k, false); if (sh) m.key('Shift', false); m.run(160000); } };
   type('?3*4\n'); m.run(2000000); const s2 = m.screenText(); console.log(s2.slice(4, 10).map(l => '  |' + l).join('\n'));
   ok('BASIC computes 3*4', s2.some(l => l.trim() === '12'));
+  { m.audioRate = 48000; type('SOUND 1,142,200,15\n'); let hit = false; for (let i = 0; i < 40 && !hit; i++) { m.run(100000); hit = m.psg[0] === 142 && (m.psg[8] & 15) > 0 && !(m.psg[7] & 1); }
+    ok('BASIC SOUND 1,142 plays tone A at 440 Hz', hit, [...m.psg].join(',')); m.audioRate = 0; }
   // a RAM fault stops it
   const b = new CPCMachine(); b.rom.set(m.rom); b.hasLo = b.hasHi = true; memSetFault(b, 'IC120', 'DOUT', 0); b.run(4000000 * 3);
   ok('dead data bit 0: no Ready', !b.screenText().includes('Ready'));

@@ -1,6 +1,5 @@
 // Amstrad CPC 464 machine model for Z80 Bench: the processor, the memory, the 6845 and the gate array's video,
-// with enough of the rest (8255, sound chip registers, keyboard matrix) for the firmware and BASIC to run.
-// No sound or cassette yet.
+// with the 8255, the sound chip and the keyboard matrix. No cassette yet.
 // From the CPC 464 circuit diagram:
 //   IC111  Z80A, 4 MHz clock from the gate array.
 //   IC116  gate array (40007, 40008 or 40010; 16 MHz crystal). It makes the CPU clock, the RAM's RAS, CAS and MWE,
@@ -55,6 +54,7 @@
 // is lost. That last part is an approximation of what the board would do.
 const CPC = {
   CPU_HZ: 4000000,
+  PSG_TICK_HZ: 125000,      // the sound chip runs on CCLK (1 MHz); a tone output flips every (period) of these ticks, noise and envelope step every 2 x period
   ROM_LO: 0x815752DF, ROM_HI: 0x7D9A3BAC,          // CRC32 of the 464's firmware (OS_464) and BASIC 1.0
   // keyboard matrix: row (PPI port C bits 0-3, through the 74LS145), bit (sound chip port A), active low
   KEYS: [
@@ -145,6 +145,12 @@ class CPCChip {
   }
 }
 function cpcCrc32(b) { let c = ~0; for (let i = 0; i < b.length; i++) { c ^= b[i]; for (let k = 0; k < 8; k++) c = c >>> 1 ^ (c & 1 ? 0xEDB88320 : 0); } return ~c >>> 0; }
+// Sound: the AY-3-8912 (the 8910 with one I/O port) is clocked by the gate array's CCLK, 1 MHz,
+// so a tone period p gives 62,500 / p Hz. Its three square-wave channels, noise generator and envelope are computed
+// sample by sample as emulated time passes (when audioRate is set), into two ring buffers the page plays: the
+// stereo socket's left (A, with half of B) and right (C, with half of B); the built-in speaker gets all three.
+// Without CCLK (no 16 MHz, or a fault on the CCLK line or the gate array's CCLK pin) the sound chip stands still.
+const CPC_PSG_VOL = [0, 0.0078, 0.011, 0.0156, 0.0221, 0.0313, 0.0442, 0.0625, 0.0884, 0.125, 0.1768, 0.25, 0.3536, 0.5, 0.7071, 1];
 class CPCMachine {
   constructor() {
     this.rom = new Uint8Array(0x8000).fill(0xFF); this.hasLo = false; this.hasHi = false;
@@ -164,6 +170,7 @@ class CPCMachine {
     this.acc = new Uint32Array(3);                    // accesses: 0 ROM, 1 RAM, 2 writes to the gate array
     this.crtc = new Uint8Array(18); this.crtcSel = 0;
     this.psg = new Uint8Array(16); this.keys = new Uint8Array(10);      // keys: bit set = key down
+    this.audioRate = 0; this.abufL = new Float32Array(32768); this.abufR = new Float32Array(32768); this.aw = 0; this.audioT = 0;
     this.pens = new Uint8Array(17);                   // gate array colours for pens 0-15 and the border
     this.fb = new Uint8Array(CPC.FW * CPC.FH).fill(20);   // the picture, as gate array colour numbers
     this.bus = { read: a => this.read(a), write: (a, v) => this.write(a, v), input: p => this.input(p), output: (p, v) => this.output(p, v) };
@@ -194,6 +201,7 @@ class CPCMachine {
     if (this.ga.lv.RESET !== 1) { this.gaMode = 0; this.gaPen = 0; this.intCnt = 0; this.intReq = false; this.vsDelay = 0; }
     if (this.vdu.lv.RESET !== 1) { this.hcc = 0; this.vcc = 0; this.vlc = 0; this.adj = -1; this.maRow = 0; this.vde = true; this.hs = false; this.hsw = 0; this.vsw = 0; this.de = false; this.vsync = false; this.line = 0; }
     this.ppiA = 0; this.ppiC = 0; this.ppiCtl = 0x9B; this.psgSel = 0; this.printer = 0; this.romSel = 0;
+    this.psg.fill(0); this.toneCnt = [0, 0, 0]; this.toneOut = [0, 0, 0]; this.noiseCnt = 0; this.lfsr = 1; this.envCnt = 0; this.envPos = 0;   // the sound chip's RESET is on the line too
     this.cpu.intLine = false;
   }
   // a reset from the bench: the RESET line, and the bench's own clocks and counters back to zero
@@ -327,7 +335,7 @@ class CPCMachine {
   psgBus() {                                           // PPI port C bits 7-6 are the sound chip's BDIR and BC1
     switch (this.ppiC >> 6) {
       case 3: this.psgSel = this.ppiA & 15; break;                               // latch address
-      case 2: this.psg[this.psgSel] = this.ppiA; break;                          // write
+      case 2: this.psg[this.psgSel] = this.ppiA; if (this.psgSel === 13) { this.envPos = 0; this.envCnt = 0; } break;   // write; writing the envelope shape restarts it
     }
   }
   keyRow() { const r = this.ppiC & 15; return r < 10 ? ~this.keys[r] & 0xFF : 0xFF; }
@@ -480,6 +488,7 @@ class CPCMachine {
       c.w = w; c.t0 = this.t + t; this.waits += w; t += len + w;
     }
     this.t += t;
+    if (this.audioRate) { this.audioT += t * this.audioRate; while (this.audioT >= CPC.CPU_HZ) { this.audioT -= CPC.CPU_HZ; this.audioSample(); } }
     // the gate array recognises the acknowledge by IORQ and M1 both low
     if (this.cpu.lastEvent === 'INT') { this.ints++; if (!(this.gf && (this.gv.IORQ === 1 || this.gv.M1 === 1))) { this.intCnt &= 31; this.intReq = false; } }
     // keep the last recorded character: the first clocks of this instruction still belong to it
@@ -489,6 +498,34 @@ class CPCMachine {
     return t;
   }
   preStep() {}
+  // ---- sound ----
+  soundClock() { return !(this.gaDead() || (this.gf && 'CCLK' in this.gv)); }     // does CCLK reach the sound chip?
+  envLevel() {      // 0-15 from the envelope shape (register 13: continue, attack, alternate, hold) and position
+    const sh = this.psg[13], cyc = this.envPos >> 4, i = this.envPos & 15, up0 = !!(sh & 4), alt = !!(sh & 2);
+    if (cyc >= 1) { if (!(sh & 8)) return 0; if (sh & 1) return up0 !== alt ? 15 : 0; }
+    const up = alt && (cyc & 1) ? !up0 : up0;
+    return up ? i : 15 - i;
+  }
+  // one sample of each channel's level (0-1), into the left and right buffers
+  audioSample() {
+    const g = this.psg, mix = g[7], ticks = this.soundClock() ? CPC.PSG_TICK_HZ / this.audioRate : 0;
+    const np = ((g[6] & 31) || 1) * 2; this.noiseCnt += ticks;
+    while (this.noiseCnt >= np) { this.noiseCnt -= np; const b = (this.lfsr ^ (this.lfsr >> 3)) & 1; this.lfsr = (this.lfsr >> 1) | (b << 16); }
+    const ep = ((g[11] | g[12] << 8) || 1) * 2; this.envCnt += ticks;
+    while (this.envCnt >= ep) { this.envCnt -= ep; if (++this.envPos >= 64) this.envPos -= 32; }
+    const noise = this.lfsr & 1, lv = [0, 0, 0];
+    for (let ch = 0; ch < 3; ch++) {
+      const p = (g[ch * 2] | (g[ch * 2 + 1] & 15) << 8) || 1;
+      this.toneCnt[ch] += ticks;
+      if (this.toneCnt[ch] >= p) { const n = Math.floor(this.toneCnt[ch] / p); this.toneCnt[ch] -= n * p; if (n & 1) this.toneOut[ch] ^= 1; }
+      const on = (this.toneOut[ch] | ((mix >> ch) & 1)) & (noise | ((mix >> (ch + 3)) & 1));
+      if (on) { const v = g[8 + ch]; lv[ch] = CPC_PSG_VOL[v & 16 ? this.envLevel() : v & 15]; }
+    }
+    const i = this.aw++ & 32767; this.abufL[i] = (lv[0] + lv[1] / 2) / 1.5; this.abufR[i] = (lv[2] + lv[1] / 2) / 1.5;
+  }
+  // a tone period as Hz, and the nearest note
+  static toneHz(p) { return p ? 62500 / p : 0; }
+  static note(p) { if (!p) return ''; const n = Math.round(12 * Math.log2(62500 / p / 440)) + 57; return n < 0 || n > 119 ? '' : ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][n % 12] + Math.floor(n / 12); }
   intOut() { const zi = this.z80.lv.INT; if (zi !== undefined) return zi === 0; const f = this.gv.INT; return f === undefined ? this.intReq : f === 0; }   // what the Z80 sees on its INT pin
   syncInt() { this.cpu.intLine = this.intOut(); }
   step() { this.syncInt(); return this.afterStep(this.cpu.step()); }
