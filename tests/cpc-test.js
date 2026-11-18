@@ -68,6 +68,27 @@ for (const [name, bytes, want, setup] of [
   m.run(400000); ok('tape: the stop block releases PLAY', !m.tapePlay && m.tapeIdx === 22, m.tapeIdx);
   m.tapePlay = true; m.run(40000); ok('tape: played to the end', !m.tapePlay && m.tapeIdx >= tp.n);
   m.tapeSeek(0); ok('tape: rewind', m.tapeIdx === 0 && m.tapePos === 0 && inB() === 1);
+  { // instant loading: a firmware data record (sync 16h, one 256-byte segment and its CRC) read through CAS READ
+    const seg = Array.from({ length: 256 }, (_, i) => (i * 7 + 3) & 255); let crc = 0xFFFF;
+    for (const v of seg) { crc ^= v << 8; for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF; }
+    crc = ~crc & 0xFFFF; const rec = [0x16, ...seg, crc >> 8, crc & 255, 255, 255, 255, 255];
+    const tzx2 = new Uint8Array(hdr.concat([0x11], w(2000), w(500), w(600), w(300), w(600), w(10), [8], w(100), [rec.length & 255, rec.length >> 8, 0], rec));
+    const casCall = (bytes, hl, de) => {
+      const x = new CPCMachine(); x.gaMode = 0x08; x.instant = true; x.insertTape(bytes);
+      x.ram[0xBCA1] = 0xCF; x.ram[0xBCA2] = 0x36; x.ram[0xBCA3] = 0xA8;              // the firmware's jump block: CAS READ at 2836h
+      x.ram[0xBFFE] = 0x34; x.ram[0xBFFF] = 0x12; x.cpu.sp = 0xBFFE; x.cpu.pc = 0x2836;
+      x.cpu.h = hl >> 8; x.cpu.l = hl & 255; x.cpu.d = de >> 8; x.cpu.e = de & 255; x.cpu.a = 0x16; x.cpu.f = 0; x.preStep(); return x;
+    };
+    let x = casCall(tzx2, 0x4000, 200);
+    ok('instant loading: CAS READ returns at once with carry set', x.cpu.pc === 0x1234 && x.cpu.sp === 0xC000 && (x.cpu.f & 1) === 1, x.cpu.pc.toString(16));
+    ok('instant loading: the record is in RAM, only the length asked for', seg.slice(0, 200).every((v, i) => x.ram[0x4000 + i] === v) && x.ram[0x4000 + 200] === 0);
+    ok('instant loading: the tape is wound past the record', x.tapeIdx === x.tape.blocks[0].end && x.tapeIdx > 0);
+    const bad2 = tzx2.slice(); bad2[bad2.length - 6] ^= 1; x = casCall(bad2, 0x4000, 256);
+    ok('instant loading: a CRC error returns carry clear, A = 2', x.cpu.pc === 0x1234 && (x.cpu.f & 1) === 0 && x.cpu.a === 2);
+    x = casCall(tzx2, 0x4000, 256); x.cpu.a = 0x2C; x.tapeSeek(0); x.cpu.pc = 0x2836; x.cpu.sp = 0xBFFE; x.preStep();
+    ok('instant loading: no record with that sync byte, so the firmware reads the signal', x.cpu.pc === 0x2836);
+    x = casCall(tzx2, 0x4000, 256); x.tapeSeek(0); x.cpu.pc = 0x2836; x.cpu.sp = 0xBFFE; x.instant = false; x.preStep(); ok('instant loading off: nothing happens', x.cpu.pc === 0x2836);
+  }
   let bad = false; try { new CPCTape(new Uint8Array(20)); } catch (e) { bad = /ZXTape/.test(e.message); } ok('tape: a file that is not a tape is refused', bad);
 }
 { // RAM chips: data bit and address pin faults follow the selectors' wiring
@@ -179,6 +200,15 @@ if (dir) {
     for (i = 0; i < 120 && !(i > 3 && !x.motorOn()); i++) x.run(4000000);
     x.run(4000000); typeX('RUN\n'); x.run(4000000 * 2);
     const scr = x.screenText();
+    { // and again with instant loading: no waiting for the tape
+      const y = new CPCMachine(); y.rom.set(m.rom); y.hasLo = y.hasHi = true; y.run(4000000 * 3); y.instant = true;
+      const tky = k => { y.run(80000); y.key(k, true); y.run(240000); y.key(k, false); y.run(80000); };
+      for (const k of ['L', 'O', 'A', 'D', 'Space']) tky(k); y.key('Shift', true); tky('2'); tky('2'); y.key('Shift', false); tky('Return'); y.run(4000000);
+      y.insertTape(bytes); tky('Space'); y.run(4000000 * 4);     // the firmware lets the motor run up to speed first
+      for (const k of ['R', 'U', 'N', 'Return']) tky(k); y.run(4000000);
+      const s2 = y.screenText();
+      ok('instant loading: the recording loads at once once the motor is up to speed, without PLAY', y.casLoads >= 2 && s2.some(l => l.trim().toUpperCase() === 'TAPE OK'), y.casLoads + ' ' + s2.filter(l => l.trim()).slice(-4).join(' | '));
+    }
     ok('the recording loads back: the program runs', scr.some(l => /Loading T block 1/.test(l)) && scr.some(l => l.trim().toUpperCase() === 'TAPE OK'), scr.filter(l => l.trim()).join(' | '));
   }
   if (process.env.CPC_TAPE) {   // load a real tape: CPC_TAPE=/path/to/file.cdt

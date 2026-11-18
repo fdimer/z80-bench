@@ -401,6 +401,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <button id="cpTapeRec" type="button" title="Press REC and PLAY on a blank tape: what the computer writes to the cassette (SAVE) is recorded while it has the motor on. Press again to stop; the recording is then the tape in the deck, ready to load back or save as a file.">● Record</button>
           <button id="cpTapeSave" type="button" title="Save the tape in the deck as a CDT file" disabled>Save tape (.cdt)</button>
           <label class="inline" for="cpTapeBlk" title="Wind the tape to the start of a block">Block <select id="cpTapeBlk" disabled><option>no tape</option></select></label>
+          <label class="inline" for="cpTapeInstant" title="Records the firmware reads (BASIC programs, RUN&quot;&quot;, and the files of most games) go straight from the tape file into memory, with no waiting. Programs with their own loaders still load from the tape's signal, so keep PLAY down."><input type="checkbox" id="cpTapeInstant" checked> Instant loading</label>
           <label class="inline" for="cpTapeFast" title="Run at full speed while the tape is playing and the motor is on, then back to real time."><input type="checkbox" id="cpTapeFast" checked> Fast loading</label>
         </div>
         <div class="msg mono" id="cpTapeInfo"></div>
@@ -2058,6 +2059,9 @@ $('cpTapeRec').onclick = () => {
   cpTapeShow();
 };
 $('cpTapeSave').onclick = () => { if (!cpTapeBytes) return; const name = /\.(cdt|tzx)$/i.test(cpTapeName) ? cpTapeName : cpTapeName + '.cdt'; cpSaved(cpDownload(name, cpTapeBytes.slice(), 'application/octet-stream'), f => `Tape saved as ${f}: ${cpTapeBytes.length.toLocaleString()} bytes.`); };
+$('cpTapeInstant').onchange = () => { cpc.instant = $('cpTapeInstant').checked; try { localStorage.setItem('cpc.instant', cpc.instant ? '1' : '0'); } catch (e) {} };
+try { if (localStorage.getItem('cpc.instant') === '0') $('cpTapeInstant').checked = false; } catch (e) {}
+cpc.instant = $('cpTapeInstant').checked;
 $('cpTapeRew').onclick = () => { if (!cpc.tape) return; cpc.tapePlay = false; cpc.tapeSeek(0); cpTapeRender(); };
 $('cpTapeBlk').onchange = () => { const tp = cpc.tape, b = tp && tp.blocks[+$('cpTapeBlk').value]; if (!b) return; cpc.tapeSeek(b.seg); cpTapeRender(); };
 

@@ -177,9 +177,37 @@ class CPCTape {
     const w = i => b[i] | b[i + 1] << 8, w3 = i => b[i] | b[i + 1] << 8 | b[i + 2] << 16, dw = i => (b[i] | b[i + 1] << 8 | b[i + 2] << 16 | b[i + 3] << 24) >>> 0;
     const text = (i, len) => String.fromCharCode(...b.subarray(i, i + len)).replace(/[^\x20-\x7E]/g, ' ').trim();
     // what a data block holds: a CPC header record (sync byte 2Ch) names the file
-    const what = (off, len) => {
-      if (b[off] === 0x2C && len > 20) { const name = text(off + 1, 16); return `header "${name || '(no name)'}" block ${b[off + 17]}`; }
-      return (b[off] === 0x16 ? 'data' : 'block') + `, ${len} bytes`;
+    const what = (off, len, d = b) => {
+      if (d[off] === 0x2C && len > 20) { const name = String.fromCharCode(...d.subarray(off + 1, off + 17)).replace(/[^\x20-\x7E]/g, ' ').trim(); return `header "${name || '(no name)'}" block ${d[off + 17]}`; }
+      return (d[off] === 0x16 ? 'data' : 'block') + `, ${len} bytes`;
+    };
+    // a run of plain pulses (a recording, or a tape made from one) may hold a record in the firmware's format: a leader
+    // of equal pulses (1 bits), a short pulse pair (the 0 sync bit), then bytes, each bit a pulse pair, a 1 twice as
+    // long as a 0. It is kept only if every 256-byte segment's CRC checks.
+    let run = null;
+    const endRun = () => {
+      const r = run; run = null; if (!r || r.p.length < 600) return;
+      const p = r.p, found = []; let i = 0;
+      while (i + 256 < p.length) {
+        let L = p[i], j = i + 1, sum = L;
+        while (j < p.length && Math.abs(p[j] - sum / (j - i)) < sum / (j - i) * 0.25) { sum += p[j]; j++; }
+        const lead = sum / (j - i);
+        if (j - i >= 256 && j + 1 < p.length && p[j] + p[j + 1] < lead * 1.5) {
+          const out = []; let k = j + 2, v = 0, nb = 0;
+          while (k + 1 < p.length && p[k] < lead * 2.5 && p[k + 1] < lead * 2.5) { v = v << 1 | (p[k] + p[k + 1] > lead * 1.5 ? 1 : 0); k += 2; if (++nb === 8) { out.push(v); v = 0; nb = 0; } }
+          const d = new Uint8Array(out); let good = d.length >= 259;
+          for (let s = 0; good && s * 258 + 258 <= d.length - 1; s++) good = CPCTape.crc(d.subarray(1 + s * 258, 257 + s * 258)) === (d[257 + s * 258] << 8 | d[258 + s * 258]);
+          if (good) found.push({ data: d, i0: i, i1: k });
+          i = k;
+        } else i = j;
+      }
+      // each record found becomes a listed block (the first takes over the run's own entry); pulses map one to one to stretches of tape
+      const at = blocks.indexOf(r.blk), runEnd = r.blk.end;
+      found.forEach((f, q) => {
+        const bl = q ? { block: r.blk.block, seg: r.seg0 + f.i0 } : r.blk;
+        bl.data = f.data; bl.desc = (q ? '' : r.blk.desc.replace(/(tone and )?pulses$/, '')) + 'recorded ' + what(0, f.data.length, f.data); bl.end = q + 1 < found.length ? r.seg0 + found[q + 1].i0 : runEnd;
+        if (q) blocks.splice(at + q, 0, bl);
+      });
     };
     // first pass: where each block starts
     const offs = []; let i = 10;
@@ -199,14 +227,14 @@ class CPCTape {
     let group = '', loopAt = -1, loopN = 0, fresh = true;     // fresh: at the start or after a pause or data block, so a run of plain pulses is listed as a block
     for (let k = 0; k < offs.length; k++) {
       const o = offs[k], t = b[o], j = o + 1; if (j >= b.length) break;
-      const start = n, mark = d => blocks.push({ seg: start, block: k, desc: (group ? group + ': ' : '') + d });
-      const wasFresh = fresh; if (t === 0x12 || t === 0x13) fresh = false; else if ([0x10, 0x11, 0x14, 0x15, 0x20].includes(t)) fresh = true;
+      const start = n, mark = (d, off, len) => blocks.push({ seg: start, block: k, desc: (group ? group + ': ' : '') + d, off, len });
+      const wasFresh = fresh; if (t === 0x12 || t === 0x13) fresh = false; else if ([0x10, 0x11, 0x14, 0x15, 0x20].includes(t)) { fresh = true; endRun(); }
       switch (t) {
-        case 0x10: { const len = w(j + 2), off = j + 4; mark('standard ' + what(off, len)); for (let p = b[off] < 128 ? 8063 : 3223; p > 0; p--) pulse(2168); pulse(667); pulse(735); data(off, len, 855, 1710, 8); pause(w(j)); break; }
-        case 0x11: { const len = w3(j + 15), off = j + 18; mark('turbo ' + what(off, len)); for (let p = w(j + 10); p > 0; p--) pulse(w(j)); pulse(w(j + 2)); pulse(w(j + 4)); data(off, len, w(j + 6), w(j + 8), b[j + 12]); pause(w(j + 13)); break; }
-        case 0x12: { if (wasFresh) mark('tone and pulses'); for (let p = w(j + 2); p > 0; p--) pulse(w(j)); break; }
-        case 0x13: { if (wasFresh) mark('pulses'); for (let p = 0; p < b[j]; p++) pulse(w(j + 1 + 2 * p)); break; }
-        case 0x14: { const len = w3(j + 7), off = j + 10; mark('pure ' + what(off, len)); data(off, len, w(j), w(j + 2), b[j + 4]); pause(w(j + 5)); break; }
+        case 0x10: { const len = w(j + 2), off = j + 4; mark('standard ' + what(off, len), off, len); for (let p = b[off] < 128 ? 8063 : 3223; p > 0; p--) pulse(2168); pulse(667); pulse(735); data(off, len, 855, 1710, 8); pause(w(j)); break; }
+        case 0x11: { const len = w3(j + 15), off = j + 18; mark('turbo ' + what(off, len), off, len); for (let p = w(j + 10); p > 0; p--) pulse(w(j)); pulse(w(j + 2)); pulse(w(j + 4)); data(off, len, w(j + 6), w(j + 8), b[j + 12]); pause(w(j + 13)); break; }
+        case 0x12: { if (wasFresh) { mark('tone and pulses'); run = { p: [], blk: blocks[blocks.length - 1], seg0: n }; } for (let p = w(j + 2); p > 0; p--) { pulse(w(j)); if (run) run.p.push(w(j)); } break; }
+        case 0x13: { if (wasFresh) { mark('pulses'); run = { p: [], blk: blocks[blocks.length - 1], seg0: n }; } for (let p = 0; p < b[j]; p++) { pulse(w(j + 1 + 2 * p)); if (run) run.p.push(w(j + 1 + 2 * p)); } break; }
+        case 0x14: { const len = w3(j + 7), off = j + 10; mark('pure ' + what(off, len), off, len); data(off, len, w(j), w(j + 2), b[j + 4]); pause(w(j + 5)); break; }
         case 0x15: { const tps = w(j), len = w3(j + 5), off = j + 8, last = b[j + 4] || 8; mark(`direct recording, ${len} bytes`);
           for (let q = 0; q < len; q++) for (let r = 0; r < (q === len - 1 ? last : 8); r++) { level = b[off + q] & (0x80 >> r) ? 1 : 0; push(tps, level); }
           pause(w(j + 2)); break; }
@@ -221,13 +249,20 @@ class CPCTape {
         case 0x18: case 0x19: notes.push(`block type ${t.toString(16).toUpperCase()}h is not supported and was skipped`); break;
         default: break;      // information only, or not needed for a CPC
       }
+      const lb = blocks[blocks.length - 1]; if (lb && lb.block === k) lb.end = n;
+      if (run && lb) lb.end = n;
     }
+    endRun();
+    this.bytes = b; for (const bl of blocks) if (bl.off !== undefined) bl.data = b.subarray(bl.off, bl.off + bl.len);
+    for (let q = 0; q < blocks.length; q++) if (blocks[q].end === undefined || blocks[q].end < blocks[q].seg) blocks[q].end = q + 1 < blocks.length ? blocks[q + 1].seg : n;
     this.dur = dur.subarray(0, n); this.lvl = lvl.subarray(0, n); this.n = n; this.blocks = blocks; this.stops = stops; this.notes = notes;
     this.total = 0; for (let q = 0; q < n; q++) this.total += this.dur[q];
   }
 }
 // A recording as a CDT file: the pulses (in CPC clocks) as TZX pulse-sequence blocks, at 3.5 MHz T-states; a gap
 // longer than a pulse can be becomes a pause block. Returns null if nothing was recorded.
+// the firmware's CRC of a 256-byte segment: CCITT (polynomial 1021h) from FFFFh, inverted
+CPCTape.crc = seg => { let c = 0xFFFF; for (const v of seg) { c ^= v << 8; for (let i = 0; i < 8; i++) c = c & 0x8000 ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF; } return ~c & 0xFFFF; };
 CPCTape.fromPulses = (pulses, note = 'Recorded on the Z80 Bench Amstrad CPC 464 emulator') => {
   const out = [...'ZXTape!'].map(c => c.charCodeAt(0)).concat([0x1A, 1, 20]);
   const t = [...note].map(c => c.charCodeAt(0) & 0x7F).slice(0, 255); out.push(0x30, t.length, ...t);
@@ -261,6 +296,7 @@ class CPCMachine {
     this.acc = new Uint32Array(3);                    // accesses: 0 ROM, 1 RAM, 2 writes to the gate array
     this.crtc = new Uint8Array(18); this.crtcSel = 0;
     this.psg = new Uint8Array(16); this.keys = new Uint8Array(10);      // keys: bit set = key down
+    this.rec = null; this.instant = false;     // instant: records the firmware reads come straight from the tape file (see casTrap)
     this.rec = null;     // a recording: { pulses: clocks between edges, clock: tape time while recording, last: time of the last edge, level }
     this.tape = null; this.tapePlay = false; this.tapeIdx = 0; this.tapeRem = 0; this.tapeLevel = 0; this.tapePos = 0;
     this.audioRate = 0; this.abufL = new Float32Array(32768); this.abufR = new Float32Array(32768); this.aw = 0; this.audioT = 0;
@@ -593,7 +629,35 @@ class CPCMachine {
     else { this.dark = false; while (this.vt < this.t) { this.char(); this.vt += 4; } }
     return t;
   }
-  preStep() {}
+  // ---- instant loading. The firmware reads each tape record with CAS READ (jump block BCA1h: HL address, DE length,
+  // A sync byte). When the Z80 is about to run that routine in the lower ROM, the next record on the tape with that
+  // sync byte is decoded from the file (256-byte segments, each with its CRC), written to RAM, the tape is wound past
+  // it, and the routine returns as if it had read it: carry set, or carry clear and A = 2 for a CRC error. Programs
+  // with their own loaders do not call it, and still load from the signal.
+  casReadAddr() { const r = this.ram; return r[0xBCA1] === 0xCF ? (r[0xBCA2] | r[0xBCA3] << 8) & 0x3FFF : -1; }
+  preStep() {
+    if (!this.instant || !this.tape || this.rec || this.gf || this.busF) return;
+    const pc = this.cpu.pc; if (pc >= 0x4000 || (this.gaMode & 4) || pc !== this.casReadAddr()) return;
+    this.casTrap();
+  }
+  casTrap() {
+    const c = this.cpu, tp = this.tape, sync = c.a, want = (c.d << 8 | c.e) || 0x10000;
+    const k0 = Math.max(0, this.tapeBlock()); let k = -1;
+    for (let q = k0; q < tp.blocks.length; q++) { const bl = tp.blocks[q]; if (!bl.data || bl.end <= this.tapeIdx) continue; if (bl.data[0] === sync) { k = q; break; } }
+    if (k < 0) return false;                                       // nothing to read: let the firmware wait for the signal
+    const bl = tp.blocks[k], d = bl.data.subarray(1);
+    let ok = true, a = c.h << 8 | c.l, got = 0;
+    for (let s = 0; got < want; s++) {
+      const seg = d.subarray(s * 258, s * 258 + 256); if (seg.length < 256 || d.length < s * 258 + 258) { ok = false; break; }
+      if (CPCTape.crc(seg) !== (d[s * 258 + 256] << 8 | d[s * 258 + 257])) { ok = false; break; }
+      for (let i = 0; i < 256 && got < want; i++, got++) this.ram[(a + i) & 0xFFFF] = seg[i];
+      a += 256;
+    }
+    this.tapeSeek(bl.end); this.casLoads = (this.casLoads || 0) + 1;
+    c.f = ok ? c.f | 1 : c.f & ~1; if (!ok) c.a = 2;
+    c.pc = this.peek(c.sp) | this.peek((c.sp + 1) & 0xFFFF) << 8; c.sp = (c.sp + 2) & 0xFFFF;   // RET
+    return true;
+  }
   // ---- cassette ----
   insertTape(bytes) { this.tape = new CPCTape(bytes); this.tapePlay = false; this.tapeSeek(0); return this.tape; }
   ejectTape() { this.tape = null; this.tapePlay = false; this.tapeLevel = 0; }
@@ -650,7 +714,7 @@ class CPCMachine {
   static note(p) { if (!p) return ''; const n = Math.round(12 * Math.log2(62500 / p / 440)) + 57; return n < 0 || n > 119 ? '' : ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][n % 12] + Math.floor(n / 12); }
   intOut() { const zi = this.z80.lv.INT; if (zi !== undefined) return zi === 0; const f = this.gv.INT; return f === undefined ? this.intReq : f === 0; }   // what the Z80 sees on its INT pin
   syncInt() { this.cpu.intLine = this.intOut(); }
-  step() { this.syncInt(); return this.afterStep(this.cpu.step()); }
+  step() { this.preStep(); this.syncInt(); return this.afterStep(this.cpu.step()); }
   run(tStates) { let t = 0; while (t < tStates) t += this.step(); return t; }
   key(name, down) { const p = CPC.KEYPOS[name]; if (!p) return; if (down) this.keys[p[0]] |= 1 << p[1]; else this.keys[p[0]] &= ~(1 << p[1]); }
   // ---- the screen memory as text: the firmware's own 8 x 8 characters in ink 1 ----
