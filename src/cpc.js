@@ -111,7 +111,7 @@ const CPC_CRTC_PINS = [[1, 'GND', 'g'], [2, 'RESET', 'i'], [3, 'LPSTB', 'o'], ..
   [21, 'CLK', 'i'], [22, 'R/W', 'i'], [23, 'E', 'i'], [24, 'RS', 'i'], [25, 'CS', 'i'], ...[7, 6, 5, 4, 3, 2, 1, 0].map((d, k) => [26 + k, 'D' + d, 'i']), [34, 'RA4', 'o'], [35, 'RA3', 'o'], [36, 'RA2', 'i'], [37, 'RA1', 'i'], [38, 'RA0', 'i'], [39, 'HSYNC', 'i'], [40, 'VSYNC', 'i']];
 // Z80: the pins that can carry a fault (kind 'i') are the bus lines and the clock
 const CPC_Z80_PINS = [[1, 'A11'], [2, 'A12'], [3, 'A13'], [4, 'A14'], [5, 'A15'], [6, 'CLK'], [7, 'D4'], [8, 'D3'], [9, 'D5'], [10, 'D6'], [11, '+5V', 'p'], [12, 'D2'], [13, 'D7'], [14, 'D0'], [15, 'D1'],
-  [16, 'INT'], [17, 'NMI'], [18, 'HALT', 'o'], [19, 'MREQ'], [20, 'IORQ'], [21, 'RD'], [22, 'WR'], [23, 'BUSACK', 'o'], [24, 'WAIT'], [25, 'BUSREQ'], [26, 'RESET'], [27, 'M1'], [28, 'RFSH', 'o'], [29, 'GND', 'g'],
+  [16, 'INT'], [17, 'NMI'], [18, 'HALT'], [19, 'MREQ'], [20, 'IORQ'], [21, 'RD'], [22, 'WR'], [23, 'BUSACK', 'o'], [24, 'WAIT'], [25, 'BUSREQ'], [26, 'RESET'], [27, 'M1'], [28, 'RFSH', 'o'], [29, 'GND', 'g'],
   ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => [30 + n, 'A' + n])].map(([n, name, k]) => [n, name, k || 'i']);
 if (typeof MEM_PINOUTS !== 'undefined') { Object.assign(MEM_PINOUTS, CPC_GA_PINS); MEM_PINOUTS.HD6845 = CPC_CRTC_PINS; MEM_PINOUTS.Z80 = CPC_Z80_PINS; for (const n of ['SYNC', 'RESET', 'CPU', 'MREQ', 'IORQ', 'M1', 'RD', '244EN', 'ROMEN', 'RAMRD', 'CASAD', 'INT', 'MWE']) MEM_ACTIVE_LOW.add(n); }
 // The 74LS153 address selectors (IC109, IC104, IC113, IC105): two 4-to-1 selectors each, sharing the select inputs
