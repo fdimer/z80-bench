@@ -25,6 +25,8 @@
 // sample as emulated time passes (when audioRate is set) into a ring buffer the page plays; the 1-bit key click
 // on PPI port C bit 7 is mixed in.
 // The Z80 on an MSX gets one wait state in every opcode fetch, so M1 cycles take 5 T-states.
+// The three support chips are board chips with pins too, from the same schematic: IC2 the TMS9929ANL video processor,
+// IC16 the uPD8255AC-5 PPI, IC48 the AY-3-8910 sound chip. See ioFaults for what their pin faults do.
 
 const MSX = {
   CPU_HZ: 3579545,
@@ -53,6 +55,15 @@ const MSX_KEYPOS = {}; MSX_KEYS.forEach((row, r) => row.forEach((k, c) => { MSX_
 const MSX_CAS_HDR = [0x1F, 0xA6, 0xDE, 0xBA, 0xCC, 0x13, 0x7D, 0x74];
 const MSX_PSG_VOL = [0, 0.0078, 0.011, 0.0156, 0.0221, 0.0313, 0.0442, 0.0625, 0.0884, 0.125, 0.1768, 0.25, 0.3536, 0.5, 0.7071, 1];
 const MSX_PSG_TICK_HZ = MSX.CPU_HZ / 16;      // a tone output flips every (period) of these ticks; noise and envelope step every 2 x period
+// the support chips' pinouts
+MEM_PINOUTS.uPD8255 = [[1, 'PA3'], [2, 'PA2'], [3, 'PA1'], [4, 'PA0'], [5, 'RD'], [6, 'CS'], [7, 'GND', 'g'], [8, 'A1'], [9, 'A0'], [10, 'PC7'], [11, 'PC6'], [12, 'PC5'], [13, 'PC4'], [14, 'PC0'], [15, 'PC1'], [16, 'PC2'], [17, 'PC3'],
+  [18, 'PB0'], [19, 'PB1'], [20, 'PB2'], [21, 'PB3'], [22, 'PB4'], [23, 'PB5'], [24, 'PB6'], [25, 'PB7'], [26, 'VCC', 'p'], [27, 'D7'], [28, 'D6'], [29, 'D5'], [30, 'D4'], [31, 'D3'], [32, 'D2'], [33, 'D1'], [34, 'D0'],
+  [35, 'RESET'], [36, 'WR'], [37, 'PA7'], [38, 'PA6'], [39, 'PA5'], [40, 'PA4']].map(([n, name, k]) => [n, name, k || 'i']);
+MEM_PINOUTS['AY-3-8910'] = [[1, 'GND', 'g'], [2, 'NC', 'c'], [3, 'B'], [4, 'A'], [5, 'NC', 'c'], ...[7, 6, 5, 4, 3, 2, 1, 0].map((n, k) => [6 + k, 'IOB' + n]), ...[7, 6, 5, 4, 3, 2, 1, 0].map((n, k) => [14 + k, 'IOA' + n]),
+  [22, 'CLOCK'], [23, 'RESET'], [24, 'A9'], [25, 'A8'], [26, 'TEST2', 'c'], [27, 'BDIR'], [28, 'BC2'], [29, 'BC1'], ...[7, 6, 5, 4, 3, 2, 1, 0].map((n, k) => [30 + k, 'DA' + n]), [38, 'C'], [39, 'TEST1', 'c'], [40, 'VCC', 'p']].map(([n, name, k]) => [n, name, k || 'i']);
+MEM_PINOUTS.TMS9929A = [[1, 'RAS'], [2, 'CAS'], ...[7, 6, 5, 4, 3, 2, 1, 0].map((n, k) => [3 + k, 'AD' + n]), [11, 'R/W'], [12, 'VSS', 'g'], [13, 'MODE'], [14, 'CSW'], [15, 'CSR'], [16, 'INT'],
+  ...[7, 6, 5, 4, 3, 2, 1, 0].map((n, k) => [17 + k, 'CD' + n]), ...[7, 6, 5, 4, 3, 2, 1, 0].map((n, k) => [25 + k, 'RD' + n]), [33, 'VCC', 'p'], [34, 'RESET'], [35, 'B-Y'], [36, 'Y'], [37, 'CPUCLK', 'c'], [38, 'R-Y'], [39, 'XTAL1'], [40, 'XTAL2']].map(([n, name, k]) => [n, name, k || 'i']);
+for (const n of ['CSW', 'CSR', 'INT', 'RD', 'WR', 'CS']) MEM_ACTIVE_LOW.add(n);
 const MSX_CYC_T = { M1: 5, MR: 3, MW: 3, IR: 4, IW: 4, IA: 7 };
 
 // MSX BASIC keywords: tokens 81h-FCh, and the functions that follow an FFh prefix (81h-B0h)
@@ -144,6 +155,9 @@ class MSXMachine {
     this.vBank = [3, 4, 5, 6, 9, 10, 11, 12].map((ic, k) => C('IC' + ic, '4116', `video RAM, data bit ${7 - k} (RD${k})`, 'video RAM 0000h-3FFFh, reached through the video processor', this.vram, 0, 14, { dram: true, bit: 7 - k, mux: 7, amap: vmap }));
     this.acc = new Uint32Array(5);                  // accesses: 0 BIOS, 1 BASIC, 2 firmware, 3 main RAM, 4 video RAM
     this.z80c = new BoardChip('IC41', 'Z80', 'processor (Sharp LH0080A, a Z80A)', 'address, data and control lines', { label: 'IC41' });
+    this.vdpC = new BoardChip('IC2', 'TMS9929A', 'video processor (TMS9929ANL)', 'ports 98h (data) and 99h (control and status)', { label: 'IC2' });
+    this.ppiC8 = new BoardChip('IC16', 'uPD8255', 'PPI (uPD8255AC-5): slot select, keyboard, cassette, CAPS lamp, key click', 'ports A8h-ABh', { label: 'IC16' });
+    this.psgC = new BoardChip('IC48', 'AY-3-8910', 'sound chip: three tone channels, noise, envelope; its port A reads the joysticks and the tape', 'ports A0h (address), A1h (write), A2h (read)', { label: 'IC48' });
     this.pinF = {}; this.netF = {}; this.heldWhy = null; this.fx = false;
     this.faulty = false; this.vview = null;
     this.setMachine('hb55p');
@@ -173,7 +187,7 @@ class MSXMachine {
   setMachine(m) {
     this.machine = m; this.ramSlot = m === 'hb75p' ? 2 : 0; this.ramBase = m === 'hb75p' ? 0 : 0xC000; this.ramSize = 0x10000 - this.ramBase;
     this.ramBank = m === 'hb75p' ? this.ram64 : this.ram16;
-    this.chips = [...this.romChips, ...this.ramBank, ...this.vBank, this.z80c];      // the processor last, so the other indexes stay put
+    this.chips = [...this.romChips, ...this.ramBank, ...this.vBank, this.z80c, this.vdpC, this.ppiC8, this.psgC];      // the processor and the support chips last, so the other indexes stay put
     this.banks = [[this.romChips[0]], [this.romChips[1]], [this.romChips[2]], this.ramBank, this.vBank];
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
     this.vview = null;
@@ -197,7 +211,17 @@ class MSXMachine {
     for (const k of ['RAS', 'CAS', 'WE']) N[k] = { label: `main RAM ${k} line`, d: -1, pins: ram.map(r => [r, k]) };
     for (let n = 0; n < 7; n++) N['VA' + n] = { label: `video RAM address line ${n} (the video processor's AD${n + 1})`, d: -1, pins: vram.map(r => [r, 'A' + n]) };
     for (let k = 0; k < 8; k++) N['RD' + k] = { label: `video RAM data line RD${k}`, d: -1, pins: [[vram[k], 'DIN'], [vram[k], 'DOUT']] };
-    for (const k of ['RAS', 'CAS', 'WE']) N['V' + k] = { label: `video RAM ${k === 'WE' ? 'R/W' : k} line`, d: -1, pins: vram.map(r => [r, k]) };
+    for (const k of ['RAS', 'CAS', 'WE']) N['V' + k] = { label: `video RAM ${k === 'WE' ? 'R/W' : k} line (from the video processor)`, d: 0, pins: [['IC2', k === 'WE' ? 'R/W' : k], ...vram.map(r => [r, k])] };
+    // the support chips (MAIN 1/2): the video processor's CD7-CD0 are D0-D7 (reversed), the PPI's D0-D7 and the sound
+    // chip's DA0-DA7 are D0-D7; AB0 is the PPI's A0 and the video processor's MODE, AB1 the PPI's A1. The video processor
+    // drives the video RAM's address lines (its AD1-AD7 on the RAMs' A0-A6), reads RD0-RD7 and pulls INT.
+    for (let n = 0; n < 8; n++) N['D' + n].pins.push(['IC2', 'CD' + (7 - n)], ['IC16', 'D' + n], ['IC48', 'DA' + n]);
+    N.AB0.pins.push(['IC16', 'A0'], ['IC2', 'MODE']); N.AB1.pins.push(['IC16', 'A1']);
+    for (let n = 0; n < 7; n++) { N['VA' + n].pins.unshift(['IC2', 'AD' + (n + 1)]); N['VA' + n].d = 0; }
+    for (let k = 0; k < 8; k++) N['RD' + k].pins.push(['IC2', 'RD' + k]);
+    N.INT = { label: 'INT (the Z80\'s interrupt line)', d: -1, pins: [[Z, 'INT'], ['IC2', 'INT']] };
+    N.RESETN = { label: 'RESET (to the video processor and the sound chip)', d: -1, pins: [['IC2', 'RESET'], ['IC48', 'RESET']] };
+    N.V5 = { label: '+5 V (the sound chip\'s BC2 and A8)', d: -1, pins: [['IC48', 'BC2'], ['IC48', 'A8']] };
     this.NETS = N; this.netSig = this.machine; return N;
   }
   // Faults changed: what the Z80's pins do. An address pin at a level changes the buffered address for everything; a
@@ -209,13 +233,92 @@ class MSXMachine {
     this.heldWhy = 'CLK' in z ? 'no clock at the Z80\'s CLK pin' : z.RESET === 0 ? 'RESET is low at the Z80: it is held in reset' : z.BUSREQ === 0 ? 'BUSREQ is low at the Z80: it has released the bus' : z.WAIT === 0 ? 'WAIT is low at the Z80: it waits' : null;
     if (z.NMI === 0 && !this.nmiLow && this.cpu) this.cpu.nmiPending = true;     // the pin going low is one falling edge
     this.nmiLow = z.NMI === 0;
+    if (this.psgC) this.ioFaults();
   }
   held() { return this.heldWhy; }
+  // ---- what the support chips' pin faults do ----
+  // PPI: CS low selects it (from the decoder, ports A8h-ABh), A0 and A1 pick the port, RD and WR the direction;
+  // RESET is active high, so held high (or floating) the 8255 stays in reset with every port an input, and the slot
+  // select lines float high. A port pin at a level is what the chip and its line see: port A selects the slots,
+  // PB0-PB7 read the keyboard columns, PC0-PC3 pick the keyboard row, PC4 runs the cassette motor, PC5 is the cassette
+  // output, PC6 the CAPS lamp and PC7 the key click.
+  // Sound chip: BDIR, BC2 and BC1 say what a cycle does (gates make them from A0 and A1 on ports A0h-A2h; BC2 and A8 are
+  // tied high, A9 to ground: A8 low or A9 high and the chip never answers). RESET low holds it in reset; without CLOCK
+  // it makes no sound; an IOA pin at a level is what port A reads (the joysticks, the keyboard layout bit and the tape
+  // input); an output (A, B, C) at a level is silent.
+  // Video processor: CSW and CSR low select it for a write or a read (ports 98h and 99h), MODE picks data or control;
+  // a select held low makes it take every I/O write or answer every I/O read. RESET low holds it, and with no clock it
+  // stops: no picture and no interrupt. INT cut off: no interrupts reach the Z80. RD pins: the bits it reads from video
+  // RAM. Y at a level: a black or white picture.
+  ioFaults() {
+    const mask = (L, pre, map) => { let a = 0xFF, o = 0; for (let n = 0; n < 8; n++) { const k = pre + n; if (k in L) { const b = map ? map(n) : n; if (L[k]) o |= 1 << b; else a &= ~(1 << b); } } return [a, o]; };
+    const P = this.ppiC8.lv, Y = this.psgC.lv, V = this.vdpC.lv;
+    this.ppiF = this.ppiC8.faulty; this.ppiHeld = P.RESET === 1;
+    [this.paAnd, this.paOr] = mask(P, 'PA'); [this.pbAnd, this.pbOr] = mask(P, 'PB'); [this.pcAnd, this.pcOr] = mask(P, 'PC');
+    this.psgF = this.psgC.faulty; this.psgHeld = Y.RESET === 0; this.psgNoClk = 'CLOCK' in Y;
+    [this.daAnd, this.daOr] = mask(Y, 'DA'); [this.ioaAnd, this.ioaOr] = mask(Y, 'IOA'); this.chOff = [0, 1, 2].map(c => 'ABC'[c] in Y);
+    if (this.psgHeld) this.psg.fill(0);
+    this.vdpF = this.vdpC.faulty; this.vdpHeld = V.RESET === 0; this.vdpStop = this.vdpHeld || 'XTAL1' in V || 'XTAL2' in V;
+    [this.cdAnd, this.cdOr] = mask(V, 'CD', n => 7 - n); [this.rdAnd, this.rdOr] = mask(V, 'RD', n => 7 - n);
+    this.intCut = 'INT' in V; this.yLevel = 'Y' in V ? V.Y : -1;
+    if (this.vdpHeld) { this.vreg.fill(0); this.vstat = 0; }
+    this.ioF = this.ppiF || this.psgF || this.vdpF;
+    this.slots();
+  }
+  // the slot select lines (PPI port A) and port C as the board sees them
+  slots() { this.slotReg = this.ppiF ? (this.ppiHeld || this.ppiCtl & 0x10 ? 0xFF : this.ppiA) & this.paAnd | this.paOr : this.ppiA; }
+  pcOut() { return this.ppiF ? (this.ppiHeld ? 0xFF : this.ppiC) & this.pcAnd | this.pcOr : this.ppiC; }
+  // ---- I/O with faults on the support chips ----
+  ioIn(p) {
+    const lo = p & 0xFF; let v = 0xFF;
+    const P = this.ppiC8.lv, pSel = 'CS' in P ? P.CS === 0 : (lo & 0xFC) === 0xA8;
+    if (pSel && !this.ppiHeld && P.RD !== 1) {
+      if (P.WR === 0) this.ppiPut(this.ppiPort(lo), 0xFF);                   // WR held low too: it stores the floating bus
+      else { let d = this.ppiGet(this.ppiPort(lo)); if (this.ppiF) d = this.ppiC8.busD(d); v &= d; }
+    }
+    const m = this.psgMode(lo, false);
+    if (m === 'read') { let d = this.psgGet(); if (this.psgF) d = d & this.daAnd | this.daOr; v &= d; } else if (m === 'addr') this.psgAddr = 0xFF & this.daAnd & 15; else if (m === 'write') this.psgPut(0xFF & this.daAnd | this.daOr);
+    const V = this.vdpC.lv;
+    if ((V.CSR !== undefined ? V.CSR === 0 : (lo & 0xFE) === 0x98) && !this.vdpHeld && !this.vdpStop) v &= this.vdpGet((V.MODE !== undefined ? V.MODE : lo & 1)) & this.cdAnd | this.cdOr;
+    return v;
+  }
+  ioOut(p, v) {
+    const lo = p & 0xFF, P = this.ppiC8.lv, pSel = 'CS' in P ? P.CS === 0 : (lo & 0xFC) === 0xA8;
+    if (pSel && !this.ppiHeld && P.WR !== 1) this.ppiPut(this.ppiPort(lo), this.ppiF ? this.ppiC8.busD(v) : v);
+    const m = this.psgMode(lo, true), d = v & this.daAnd | this.daOr;
+    if (m === 'addr') this.psgAddr = d & 15; else if (m === 'write') this.psgPut(d);
+    const V = this.vdpC.lv;
+    if ((V.CSW !== undefined ? V.CSW === 0 : (lo & 0xFE) === 0x98) && !this.vdpHeld && !this.vdpStop) this.vdpPut(V.MODE !== undefined ? V.MODE : lo & 1, v & this.cdAnd | this.cdOr);
+  }
+  ppiPort(lo) { const P = this.ppiC8.lv; return (P.A1 !== undefined ? P.A1 : lo >> 1 & 1) << 1 | (P.A0 !== undefined ? P.A0 : lo & 1); }
+  ppiGet(r) { return r === 0 ? (this.ppiF ? this.slotReg : this.ppiA) : r === 1 ? this.keyCols() : r === 2 ? this.pcOut() : this.ppiCtl; }
+  ppiPut(r, v) {
+    if (r === 0) this.ppiA = v; else if (r === 2) this.ppiC = v;
+    else if (r === 3) { if (v & 0x80) { this.ppiCtl = v; this.ppiC = 0; } else { const b = 1 << ((v >> 1) & 7); this.ppiC = v & 1 ? this.ppiC | b : this.ppiC & ~b; } }
+    this.slots();
+  }
+  keyCols() { const row = this.pcOut() & 15, v = row < 11 ? ~this.keys[row] & 0xFF : 0xFF; return this.ppiF ? v & this.pbAnd | this.pbOr : v; }
+  // the sound chip's BDIR, BC2 and BC1 for this cycle, as it sees them, and what they make it do
+  psgMode(lo, wr) {
+    const Y = this.psgC.lv; if (this.psgHeld || (Y.A8 !== undefined && Y.A8 === 0) || Y.A9 === 1) return null;
+    const bdir = Y.BDIR !== undefined ? Y.BDIR : wr && (lo === 0xA0 || lo === 0xA1) ? 1 : 0, bc1 = Y.BC1 !== undefined ? Y.BC1 : lo === 0xA0 && wr || lo === 0xA2 && !wr ? 1 : 0, bc2 = Y.BC2 !== undefined ? Y.BC2 : 1;
+    const k = bdir << 2 | bc2 << 1 | bc1; return k === 1 || k === 4 || k === 7 ? 'addr' : k === 6 ? 'write' : k === 3 ? 'read' : null;
+  }
+  psgGet() { const v = this.psgAddr === 14 ? (this.joy & 0x3F) | 0x40 | 0x80 : this.psg[this.psgAddr & 15]; return this.psgAddr === 14 && this.psgF ? v & this.ioaAnd | this.ioaOr : v; }
+  psgPut(v) { this.psg[this.psgAddr] = v; if (this.psgAddr === 13) { this.envPos = 0; this.envCnt = 0; } }
+  vdpGet(mode) { if (mode) { const v = this.vstat; this.vstat &= 0x1F; this.vlatch = -1; return v; } const v = this.vbuf; this.vbuf = this.vget(this.vaddr); this.vaddr = (this.vaddr + 1) & 0x3FFF; this.vlatch = -1; return v; }
+  vdpPut(mode, v) {
+    if (!mode) { this.vput(this.vaddr, v); this.vbuf = v; this.vaddr = (this.vaddr + 1) & 0x3FFF; this.vlatch = -1; this.vdpWrites++; return; }
+    if (this.vlatch < 0) { this.vlatch = v; return; }
+    if (v & 0x80) this.vreg[v & 7] = this.vlatch;
+    else { this.vaddr = ((v & 0x3F) << 8) | this.vlatch; if (!(v & 0x40)) { this.vbuf = this.vget(this.vaddr); this.vaddr = (this.vaddr + 1) & 0x3FFF; } }
+    this.vlatch = -1;
+  }
   busA(a) { return this.fx ? this.z80c.busA(a) : a; }
   reset() {
     this.cpu.reset();
     this.t = 0; this.nextLine = MSX.LINE_T; this.line = 0; this.frames = 0;
-    this.ppiA = 0; this.ppiC = 0; this.ppiCtl = 0x82;
+    this.ppiA = 0; this.ppiC = 0; this.ppiCtl = 0x82; this.slotReg = 0; if (this.ioF) this.ioFaults();
     this.vreg.fill(0); this.vstat = 0; this.vaddr = 0; this.vbuf = 0; this.vlatch = -1;
     this.psg.fill(0); this.psgAddr = 0; this.psg[7] = 0xFF;
     this.toneCnt = [0, 0, 0]; this.toneOut = [0, 0, 0]; this.noiseCnt = 0; this.lfsr = 1; this.envCnt = 0; this.envPos = 0;
@@ -224,7 +327,7 @@ class MSXMachine {
     this.vdpWrites = 0; this.ints = 0;
   }
   // ---- memory: page -> primary slot -> device ----
-  slotOf(page) { return (this.ppiA >> (page * 2)) & 3; }
+  slotOf(page) { return (this.slotReg >> (page * 2)) & 3; }
   // what a slot holds at an address: 'bios', 'fw', 'ram', 'cart' or null (nothing: reads FFh)
   device(slot, a) {
     if (slot === this.ramSlot && a >= this.ramBase) return 'ram';
@@ -244,14 +347,14 @@ class MSXMachine {
     return v;
   }
   read(a) {
-    if (this.fx) { const z = this.z80c.lv; if (z.MREQ === 1 || z.RD === 1) return this.z80c.busD(0xFF); a = this.z80c.busA(a); return this.z80c.busD(this.readSlot((this.ppiA >> ((a >> 14) * 2)) & 3, a)); }
-    return this.readSlot((this.ppiA >> ((a >> 14) * 2)) & 3, a);
+    if (this.fx) { const z = this.z80c.lv; if (z.MREQ === 1 || z.RD === 1) return this.z80c.busD(0xFF); a = this.z80c.busA(a); return this.z80c.busD(this.readSlot((this.slotReg >> ((a >> 14) * 2)) & 3, a)); }
+    return this.readSlot((this.slotReg >> ((a >> 14) * 2)) & 3, a);
   }
-  peek(a) { return this.readSlot((this.ppiA >> ((a >> 14) * 2)) & 3, a, true); }
+  peek(a) { return this.readSlot((this.slotReg >> ((a >> 14) * 2)) & 3, a, true); }
   peekW(a) { return this.read(a) | this.read((a + 1) & 0xFFFF) << 8; }
   write(a, v) {
     if (this.fx) { const z = this.z80c.lv; if (z.MREQ === 1 || z.WR === 1) return; a = this.z80c.busA(a); v = this.z80c.busD(v); }
-    const slot = (this.ppiA >> ((a >> 14) * 2)) & 3, d = this.device(slot, a);
+    const slot = (this.slotReg >> ((a >> 14) * 2)) & 3, d = this.device(slot, a);
     if (d === 'ram') { this.acc[3]++; if (this.faulty && this.ramBank.faulty) memBankWrite(this.ramBank, a - this.ramBase, v); else this.ram[a] = v; } else if (d === 'cart') this.carts[slot].write(a, v);
   }
   // ---- I/O ports ----
@@ -260,6 +363,7 @@ class MSXMachine {
     return this.inputPort(p);
   }
   inputPort(p) {
+    if (this.ioF) return this.ioIn(p);
     switch (p & 0xFF) {
       case 0x98: { const v = this.vbuf; this.vbuf = this.vget(this.vaddr); this.vaddr = (this.vaddr + 1) & 0x3FFF; this.vlatch = -1; return v; }
       case 0x99: { const v = this.vstat; this.vstat &= 0x1F; this.vlatch = -1; return v; }
@@ -273,6 +377,7 @@ class MSXMachine {
   }
   output(p, v) {
     if (this.fx) { const z = this.z80c.lv; if (z.IORQ === 1 || z.WR === 1) return; p = this.z80c.busA(p); v = this.z80c.busD(v); }
+    if (this.ioF) return this.ioOut(p, v);
     switch (p & 0xFF) {
       case 0x98: this.vput(this.vaddr, v); this.vbuf = v; this.vaddr = (this.vaddr + 1) & 0x3FFF; this.vlatch = -1; this.vdpWrites++; break;
       case 0x99:
@@ -282,7 +387,7 @@ class MSXMachine {
         this.vlatch = -1; break;
       case 0xA0: this.psgAddr = v & 15; break;
       case 0xA1: this.psg[this.psgAddr] = v; if (this.psgAddr === 13) { this.envPos = 0; this.envCnt = 0; } break;      // writing the shape restarts the envelope
-      case 0xA8: this.ppiA = v; break;
+      case 0xA8: this.ppiA = v; this.slotReg = v; break;
       case 0xAA: this.ppiC = v; break;
       case 0xAB:
         if (v & 0x80) { this.ppiCtl = v; this.ppiC = 0; }                       // mode word: outputs are cleared
@@ -291,7 +396,7 @@ class MSXMachine {
     }
   }
   // the video processor's own reads and writes of its RAM
-  vget(a) { this.acc[4]++; return this.faulty && this.vBank.faulty ? memBankRead(this.vBank, a, false) : this.vram[a]; }
+  vget(a) { this.acc[4]++; const v = this.faulty && this.vBank.faulty ? memBankRead(this.vBank, a, false) : this.vram[a]; return this.vdpF ? v & this.rdAnd | this.rdOr : v; }
   vput(a, v) { this.acc[4]++; if (this.faulty && this.vBank.faulty) memBankWrite(this.vBank, a, v); else this.vram[a] = v; }
   // with a video RAM fault, the display reads a copy of the RAM as seen through the faulty chips, refreshed every frame
   videoView() {
@@ -373,6 +478,7 @@ class MSXMachine {
   endFrame() {
     const bd = this.vreg[7] & 15 || 1, B = MSX.BORDER, FW = MSX.FW;
     this.fb.fill(bd, 0, B * FW); this.fb.fill(bd, (B + 192) * FW);
+    if (this.vdpF && this.yLevel >= 0) this.fb.fill(this.yLevel ? 15 : 1);      // Y (the brightness signal) at a level: a white or black picture
     const f = this.front; this.front = this.fb; this.fb = f;
     this.frames++; this.videoView();
   }
@@ -396,9 +502,9 @@ class MSXMachine {
       this.toneCnt[ch] += ticks;
       if (this.toneCnt[ch] >= p) { const n = Math.floor(this.toneCnt[ch] / p); this.toneCnt[ch] -= n * p; if (n & 1) this.toneOut[ch] ^= 1; }
       const on = (this.toneOut[ch] | ((mix >> ch) & 1)) & (noise | ((mix >> (ch + 3)) & 1));
-      if (on) { const v = g[8 + ch]; out += MSX_PSG_VOL[v & 16 ? this.envLevel() : v & 15]; }
+      if (on && !(this.psgF && (this.chOff[ch] || this.psgNoClk))) { const v = g[8 + ch]; out += MSX_PSG_VOL[v & 16 ? this.envLevel() : v & 15]; }
     }
-    return out / 3 + (this.ppiC & 0x80 ? 0.25 : 0);
+    return out / 3 + (this.pcOut() & 0x80 ? 0.25 : 0);
   }
   // ---- cassette ----
   insertTape(bytes) { this.tape = bytes; this.tapePos = 0; }
@@ -417,7 +523,7 @@ class MSXMachine {
   }
   tapeTrap() {
     const c = this.cpu, pc = c.pc;
-    if (pc < 0xE1 || pc > 0xF0 || (pc - 0xE1) % 3 || !this.hasBios || (this.ppiA & 3) !== 0 || c.halted) return;
+    if (pc < 0xE1 || pc > 0xF0 || (pc - 0xE1) % 3 || !this.hasBios || (this.slotReg & 3) !== 0 || c.halted) return;
     let cy = 0;
     switch (pc) {
       case 0xE1: {   // TAPION: find the next block; returns with interrupts off, carry set on failure
@@ -435,13 +541,14 @@ class MSXMachine {
     c.pc = this.read(c.sp) | this.read((c.sp + 1) & 0xFFFF) << 8; c.sp = (c.sp + 2) & 0xFFFF;                          // RET
   }
   preStep() { this.tapeTrap(); }
-  intOut() { return !!(this.vstat & 0x80) && !!(this.vreg[1] & 0x20); }      // the VDP's /INT pin: frame flag and interrupt enable
+  intOut() { return !(this.vdpF && this.intCut) && !!(this.vstat & 0x80) && !!(this.vreg[1] & 0x20); }      // the VDP's /INT pin: frame flag and interrupt enable
   syncInt() { const i = this.z80c.lv.INT; this.cpu.intLine = i !== undefined ? i === 0 : this.intOut(); }
   afterStep(cyc) {
     let t = 0; for (const c of cyc) t += MSX_CYC_T[c.k] || c.n || 0;
     this.t += t;
     if (this.audioRate) { this.audioT += t * this.audioRate; while (this.audioT >= MSX.CPU_HZ) { this.audioT -= MSX.CPU_HZ; this.abuf[this.aw++ & 32767] = this.audioSample(); } }
     if (this.cpu.lastEvent === 'INT') this.ints++;
+    if (this.vdpF && this.vdpStop) { while (this.t >= this.nextLine) this.nextLine += MSX.LINE_T; return t; }      // the video processor stopped: no lines, no frame flag
     while (this.t >= this.nextLine) {
       this.nextLine += MSX.LINE_T;
       if (this.line < 192) this.renderLine(this.line);

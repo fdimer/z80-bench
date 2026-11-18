@@ -413,7 +413,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         <p class="hint" id="mxHint">Click the picture and type: the PC keyboard is mapped by key position to the MSX international layout. F1–F5 are the function keys, F8 (or End) is STOP, F7 is SELECT, left Alt is GRAPH and right Alt is CODE; CTRL+STOP breaks into a running BASIC program. On the keyboard above, SHIFT, CTRL, GRAPH and CODE stay down for the next key. Load ROM takes the 32 KB BIOS (hb-55p_basicbios1.rom) and, if you want Sony's built-in Personal Data Bank, the 16 KB firmware (hb-55p_firmware.rom); you can pick both files at once. Untick Built-in software to start in MSX BASIC. Cartridge ROMs go in slot 1; plain ROMs and the four common mega-ROM mappers are supported. Listing gives the system variables, the BASIC program as text, the screen and hex dumps. Cassette: insert a .cas tape file and type the command shown (CLOAD for BASIC programs, BLOAD"CAS:",R for machine code, RUN"CAS:" for ASCII files); loading is instant and the tape moves on to the next file each time. CSAVE, BSAVE and SAVE"CAS:" record to a new tape that Save recording downloads as a .cas file. Many tape programs need more than 16K: choose the HB-75P for those. Sound plays while the machine runs in real time (it starts with your first click or key press, as browsers require); the sound chip's registers are also shown in the MSX hardware panel. The ROMs are not included; your browser keeps the BIOS and firmware once loaded.</p>
       </section>
       <section class="panel" id="pMemChips">
-        <h2>Memory chips <span class="aside" id="mcInfo">live pins · click a pin for its fault menu</span></h2>
+        <h2>Memory and I/O chips <span class="aside" id="mcInfo">live pins · click a pin for its fault menu</span></h2>
         <div class="mcwrap">
           <div class="mctiles" id="mcTiles"></div>
           <figure class="mcfig" id="mcFig">
@@ -425,6 +425,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
         </div>
         <p class="hint">The machine's memory chips, from the Sony service manual's schematic: the system ROM (IC42 BIOS and IC43 BASIC) and the firmware ROM (IC44); the main RAM, IC58–IC61 and IC65–IC68, one chip per data bit (4116s in the HB-55P, 64K chips in the HB-75P); and the eight 4116s of the video RAM (IC3–IC6 and IC9–IC12). A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the bus on every clock. The video RAM belongs to the video processor: its pins are shown for the CPU's reads and writes through port 98h, not for the picture being drawn. Cartridges are not included.</p>
         <p class="hint">To simulate a fault, click a pin for its menu. A pin on a line shared with other chips gets a tick box: without it, the buttons hold the whole line high or low, and every pin on that line, on every chip, sees the level; with it ("Disconnected from the line"), the fault is on this chip's pin alone. A pin with a line of its own has the plain choices: Disconnected (an input then floats high), High or Low. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. A chip with a fault is marked in red, and every fault is listed in the Debug panel, where it can be removed. The memory view and the disassembly show what the CPU reads through the faults.</p>
+        <p class="hint"><b>Support chips</b> (the same schematic): IC2 is the TMS9929ANL video processor, IC16 the µPD8255AC-5 PPI and IC48 the AY-3-8910 sound chip. All three sit on the Z80's own data bus (the video processor's CD7–CD0 are D0–D7, in reverse order); AB0 is the PPI's A0 and the video processor's MODE, AB1 the PPI's A1. The video processor drives the video RAM's address lines (its AD1–AD7 on the RAMs' A0–A6), RAS, CAS and R/W, reads RD0–RD7, and pulls the Z80's INT; it and the sound chip share the RESET line. The PPI's port A selects the slots, port B reads the keyboard columns, PC0–PC3 pick the keyboard row, PC4 runs the cassette motor, PC5 is the cassette output, PC6 the CAPS lamp and PC7 the key click; its RESET is active high. The sound chip's BC2 and A8 are tied high and A9 to ground; BC1 and BDIR come from gates on A0 and A1. Faults: a chip select held high (CSW, CSR, CS) and the chip never answers, held low and it takes every I/O write or answers every I/O read; MODE or A0/A1 at a level picks the wrong register; a data pin fixes that bit; the video processor with no clock, or RESET low, stops: no picture and no interrupt; its INT cut off and no interrupts reach the Z80; its RD pins fix bits of what it reads from video RAM, and its AD, RAS, CAS and R/W pins act on the video RAM chips through their lines; Y at a level gives a black or white picture. The PPI with RESET high (or floating) stays in reset and every slot line floats high; a port A pin fixes a slot select bit, a port B pin a keyboard column, PC0–PC3 the row. The sound chip's BDIR, BC1 and BC2 decide whether a cycle latches an address, writes or reads (held at the wrong level it misses cycles or answers every I/O read); A8 low or A9 high and it never answers; RESET low holds it; no clock or a channel output at a level silences it or that channel; an IOA pin fixes a bit of port A (the joysticks and the tape input). The video processor's colour-difference outputs (R-Y, B-Y), the PPI's PC4–PC6 (nothing is attached) and the sound chip's IOB pins show their faults on the pins only.</p>
       </section>
   </div>
 
@@ -2096,9 +2097,10 @@ try { if (localStorage.getItem('msx.sound') === '0') $('mxSound').checked = fals
 // ---------- memory chips: what this machine has, and what each pin's board net is doing ----------
 const MC = {
   m: msx,
-  groups() { return [['System ROM and firmware', [0, 1, 2]], [`Main RAM · ${msx.machine === 'hb75p' ? '64K' : '16K'} · one chip per data bit`, [10, 9, 8, 7, 6, 5, 4, 3]], ['Video RAM · 16K · one 4116 per data bit (IC3 is the most significant)', [11, 12, 13, 14, 15, 16, 17, 18]]]; },
-  tile(c, i) { return i < 3 ? [c.id, (i === 0 ? 'BIOS' : i === 1 ? 'BASIC' : 'firmware') + ((i < 2 ? msx.hasBios : msx.hasFw && msx.fwOn) ? '' : ' · empty')] : i < 11 ? [c.id, c.part + ' · D' + c.bit] : [c.id, '4116 · RD' + (7 - c.bit)]; },
-  acc(i) { return i < 3 ? i : i < 11 ? 3 : 4; },
+  groups() { return [['System ROM and firmware', [0, 1, 2]], [`Main RAM · ${msx.machine === 'hb75p' ? '64K' : '16K'} · one chip per data bit`, [10, 9, 8, 7, 6, 5, 4, 3]], ['Video RAM · 16K · one 4116 per data bit (IC3 is the most significant)', [11, 12, 13, 14, 15, 16, 17, 18]], ['Support chips', MC_IO()]]; },
+  tile(c, i) { if (c === msx.vdpC) return ['IC2', 'TMS9929A · video']; if (c === msx.ppiC8) return ['IC16', '8255 · PPI']; if (c === msx.psgC) return ['IC48', 'AY-3-8910 · sound'];
+    return i < 3 ? [c.id, (i === 0 ? 'BIOS' : i === 1 ? 'BASIC' : 'firmware') + ((i < 2 ? msx.hasBios : msx.hasFw && msx.fwOn) ? '' : ' · empty')] : i < 11 ? [c.id, c.part + ' · D' + c.bit] : [c.id, '4116 · RD' + (7 - c.bit)]; },
+  acc(i) { if (i > 18) return -1; return i < 3 ? i : i < 11 ? 3 : 4; },
   bus() {
     const T = curT, A = T.a === null || T.a === 'z' ? null : msx.busA(T.a), mem = T.mreq === 0 && T.rfsh !== 0 && A !== null;
     const dev = mem ? msx.device(msx.slotOf(A >> 14), A) : null, vio = T.iorq === 0 && T.m1 !== 0 && A !== null && (A & 0xFF) === 0x98;
@@ -2106,6 +2108,7 @@ const MC = {
   },
   net(c, i, name, B) {
     const A = B.A, D = n => pinValue('D' + n); let m = /^A(\d+)$/.exec(name), d;
+    if (i > 19) return msxIoNet(c, name, B);
     // a multiplexed address pin: the lower of its two address bits first (row), the higher once the column is strobed
     const mux = (addr, n, col) => { const bits = c.amap[n]; let lo = 0; while (!(bits & (1 << lo))) lo++; let hi = 15; while (!(bits & (1 << hi))) hi--; return (addr >> (col ? hi : lo)) & 1; };
     if (i < 3) {                        // the ROMs
@@ -2127,6 +2130,36 @@ const MC = {
     }
   }
 };
+const MC_IO = () => [msx.vdpC, msx.ppiC8, msx.psgC].map(c => msx.chips.indexOf(c));
+// the support chips' pins on this clock
+function msxIoNet(c, name, B) {
+  const T = B.T, A = B.A, lo = A === null ? -1 : A & 0xFF, io = T.iorq === 0 && T.m1 !== 0 && A !== null, D = n => pinValue('D' + n); let d;
+  if (c === msx.vdpC) {
+    const csw = io && T.wr === 0 && (lo & 0xFE) === 0x98, csr = io && T.rd === 0 && (lo & 0xFE) === 0x98;
+    if ((d = /^CD(\d)$/.exec(name))) return csw || csr ? D(7 - +d[1]) : 'z';
+    if ((d = /^AD(\d)$/.exec(name))) return msx.vaddr >> (14 - +d[1]) & 1;
+    if ((d = /^RD(\d)$/.exec(name))) return msx.vram[msx.vaddr] >> (7 - +d[1]) & 1;
+    switch (name) { case 'CSW': return csw ? 0 : 1; case 'CSR': return csr ? 0 : 1; case 'MODE': return A === null ? 'z' : A & 1; case 'INT': return msx.intOut() ? 0 : 1; case 'RESET': return 1;
+      case 'RAS': case 'CAS': return B.vio ? 0 : 1; case 'R/W': return B.vwr ? 0 : 1; case 'XTAL1': case 'XTAL2': return clk; case 'Y': case 'B-Y': case 'R-Y': return 'z'; }
+    return 'z';
+  }
+  if (c === msx.ppiC8) {
+    const sel = io && (lo & 0xFC) === 0xA8;
+    if ((d = /^D(\d)$/.exec(name))) return sel && (T.rd === 0 || T.wr === 0) ? D(+d[1]) : 'z';
+    if ((d = /^PA(\d)$/.exec(name))) return msx.slotReg >> +d[1] & 1;
+    if ((d = /^PB(\d)$/.exec(name))) return msx.keyCols() >> +d[1] & 1;
+    if ((d = /^PC(\d)$/.exec(name))) return msx.pcOut() >> +d[1] & 1;
+    switch (name) { case 'CS': return sel ? 0 : 1; case 'RD': return sel && T.rd === 0 ? 0 : 1; case 'WR': return sel && T.wr === 0 ? 0 : 1; case 'A0': return A === null ? 'z' : A & 1; case 'A1': return A === null ? 'z' : A >> 1 & 1; case 'RESET': return 0; }
+    return 'z';
+  }
+  const ps = io && lo >= 0xA0 && lo <= 0xA2;
+  if ((d = /^DA(\d)$/.exec(name))) return ps ? D(+d[1]) : 'z';
+  if ((d = /^IOA(\d)$/.exec(name))) { const v = (msx.joy & 0x3F) | 0xC0; return v >> +d[1] & 1; }
+  if ((d = /^IOB(\d)$/.exec(name))) return msx.psg[15] >> +d[1] & 1;
+  switch (name) { case 'BDIR': return io && T.wr === 0 && (lo === 0xA0 || lo === 0xA1) ? 1 : 0; case 'BC1': return io && (lo === 0xA0 && T.wr === 0 || lo === 0xA2 && T.rd === 0) ? 1 : 0; case 'BC2': case 'A8': return 1; case 'A9': return 0;
+    case 'RESET': return 1; case 'CLOCK': return clk; case 'A': case 'B': case 'C': return 'z'; }
+  return 'z';
+}
 // ---------- the processor's pins take faults too ----------
 const CPU_FAULT_PINS = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13', 'A14', 'A15', 'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'MREQ', 'IORQ', 'RD', 'WR', 'M1', 'HALT', 'INT', 'NMI', 'WAIT', 'BUSREQ', 'RESET'], MCCPU = msx.chips.indexOf(msx.chipById['IC41']);
 let cpuFaultsDone = false;

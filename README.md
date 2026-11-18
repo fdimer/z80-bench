@@ -9,6 +9,7 @@ This branch turns Z80 Bench into an MSX1 computer: the Z80 with its pinout, bus 
 - **Debugging**: memory bitmap of the ROMs, RAM and video RAM tinted by use (BASIC's areas, the VDP's tables), an MSX hardware panel (slots, VDP registers, PPI, sound chip registers), RAM and video RAM dumps, and a text listing with the system variables and the BASIC program.
 - **Cassette**: `.cas` tape files load instantly through the BIOS tape routines (CLOAD, BLOAD, LOAD/RUN "CAS:"); CSAVE, BSAVE and SAVE record to a new `.cas` file.
 - **Sound**: the AY-3-8910's three tone channels, noise and envelope, and the key click, played in real time.
+- **Memory and I/O chips, with faults**: the ROMs, the main and video RAM chips, the Z80 and the three support chips (IC2 TMS9929A, IC16 8255 PPI, IC48 AY-3-8910) have live pins wired as on the Sony service manual's schematic; click a pin to hold its line high or low or to disconnect it. `node tests/msx-test.js` checks the faults.
 
 **ROMs are not included.** Load your own 32 KB BIOS (`hb-55p_basicbios1.rom`) and, optionally, the 16 KB Personal Data Bank firmware (`hb-55p_firmware.rom`) with the Load ROM button; the browser keeps them. Open `z80-bench.html` from this folder. The model is `src/msx.js`; `node tests/msx-test.js` checks it with a small synthetic program.
 

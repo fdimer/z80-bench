@@ -82,7 +82,7 @@ ok(m.rec.length === 9 && m.rec[8] === 0x77, 'TAPOON and TAPOUT record a block');
 // lines and the two kinds of fault (a line held, a pin disconnected), on the HB-55P (16K of RAM at C000h in slot 0)
 { const z = new ctx.MSXMachine(); for (const c of r.chunks) z.bios.set(c.bytes, c.addr); z.hasBios = true; z.reset();
   const N = z.nets();
-  ok(N.D3.pins.join() === 'IC41,D3,IC42,O3,IC43,O3,IC44,O3,IC61,DIN,IC61,DOUT' && N.AB5.pins.length === 3 && N.MA0.pins.length === 8 && !N.MA7, 'HB-55P lines: D3 joins the Z80, the three ROMs and one RAM chip; AB5 the three ROMs; seven RAM address lines');
+  ok(N.D3.pins.join() === 'IC41,D3,IC42,O3,IC43,O3,IC44,O3,IC61,DIN,IC61,DOUT,IC2,CD4,IC16,D3,IC48,DA3' && N.AB5.pins.length === 3 && N.AB0.pins.join().endsWith('IC16,A0,IC2,MODE') && N.MA0.pins.length === 8 && !N.MA7, 'HB-55P lines: D3 joins the Z80, the three ROMs, one RAM chip and the three support chips (the video processor on CD4); AB0 also reaches the PPI and MODE; AB5 the three ROMs; seven RAM address lines');
   z.setMachine('hb75p'); ok(z.nets().MA7.pins.length === 8 && z.chipById.IC58.part === '4164', 'HB-75P: 64K chips with an eighth address line'); z.setMachine('hb55p'); z.reset();
   z.write(0xC010, 0x5A); const r0 = z.read(0x0100);
   z.setNetFault('D3', 1); ok(z.read(0xC010) === 0x5A && z.read(0x0100) === (r0 | 8) && z.read(0xC011) === (z.ram[0xC011] | 8), 'D3 held high: bit 3 reads high from the ROM and the RAM');
@@ -100,4 +100,23 @@ ok(m.rec.length === 9 && m.rec[8] === 0x77, 'TAPOON and TAPOUT record a block');
   z.setNetFault('D7', 0); z.setPinFault('IC61', 'A3', 'z'); ok(z.faultList().length === 2 && z.chipFaults('IC41').join() === 'D7: line held low', 'faults are listed as lines and as pins');
   z.clearChip('IC42'); ok(z.faultList().length === 1, "clearing a chip's faults releases the lines its pins are on");
   z.setMachine('hb75p'); ok(z.faultList().length === 0, 'changing the machine clears the faults'); }
+// the support chips: the video processor (IC2), the PPI (IC16) and the sound chip (IC48)
+{ const mk = setup => { const q = new ctx.MSXMachine(); for (const c of r.chunks) q.bios.set(c.bytes, c.addr); q.hasBios = true; q.reset(); if (setup) setup(q); q.key('Return', true); q.run(ctx.MSX.LINE_T * ctx.MSX.LINES * 10 + 5000); return q; };
+  let q = mk(); ok(q.ram[0xE000] >= 9 && q.vram[0x808] === 0xFC && q.ram[0xE001] === 0x7F, 'support chips: no faults, interrupts counted, the pattern written, Return read on row 7');
+  q = mk(t => t.setPinFault('IC2', 'INT', 'z')); ok(q.ram[0xE000] === 0, 'video processor INT cut off: no interrupts');
+  q = mk(t => t.setPinFault('IC2', 'XTAL1', 'z')); ok(q.ram[0xE000] === 0 && q.frames === 0, 'video processor with no clock: no frames and no interrupts');
+  q = mk(t => t.setPinFault('IC2', 'CD0', 0)); ok(q.vram[0x808] === 0x7C, 'video processor CD0 (D7) cut off and low: the pattern is written without bit 7');
+  q = mk(t => t.setPinFault('IC2', 'MODE', 1)); ok(q.vram[0x808] !== 0xFC, 'video processor MODE stuck high: data writes go to the control port');
+  q = mk(t => t.setPinFault('IC2', 'RESET', 0)); ok(q.ram[0xE000] === 0 && q.vreg[1] === 0, 'video processor RESET low: held in reset');
+  q = mk(t => t.setPinFault('IC16', 'PC0', 0)); ok(q.ram[0xE001] === 0xFF, 'PPI PC0 stuck low: the program reads row 6, where nothing is pressed');
+  q = mk(t => t.setPinFault('IC16', 'PB7', 1)); ok(q.ram[0xE001] === 0xFF, 'PPI PB7 stuck high: Return is never seen');
+  q = mk(t => t.setPinFault('IC16', 'PA1', 1)); ok(q.slotOf(0) === 2 && q.ram[0xE000] === 0, 'PPI PA1 stuck high: page 0 shows slot 2 and the program never runs');
+  q = mk(t => t.setPinFault('IC16', 'RESET', 'z')); ok(q.slotOf(3) === 3 && q.ram[0xE000] === 0, 'PPI RESET floating (active high): held in reset, every slot line floats high');
+  { const t = new ctx.MSXMachine(); t.output(0xA0, 8); t.output(0xA1, 0x0F); ok(t.psg[8] === 15, 'sound chip: register 8 written through A0h and A1h');
+    t.setPinFault('IC48', 'BDIR', 0); t.output(0xA0, 9); t.output(0xA1, 0x0C); ok(t.psg[9] === 0 && t.psgAddr === 8, 'sound chip BDIR stuck low: the address and the data are lost'); t.clearFaults();
+    t.setPinFault('IC48', 'A9', 1); t.output(0xA0, 9); t.output(0xA1, 0x0C); ok(t.psg[9] === 0, 'sound chip A9 high: it never answers'); t.clearFaults();
+    t.setPinFault('IC48', 'IOA7', 0); t.output(0xA0, 14); ok((t.input(0xA2) & 0x80) === 0, 'sound chip IOA7 low: the tape input reads low'); t.clearFaults();
+    t.setPinFault('IC48', 'DA0', 1); t.output(0xA0, 2); t.output(0xA1, 0x10); t.clearFaults(); ok(t.psg[3] === 0x11, 'sound chip DA0 stuck high: the address 2 became 3, and the data has bit 0 set');
+    t.setNetFault('RESETN', 0); ok(t.psg[8] === 0 && t.vreg[1] === 0, 'RESET line held low: the sound chip and the video processor are in reset'); t.clearFaults();
+    ok(!t.ioF && t.faultList().length === 0, 'all cleared'); } }
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);
