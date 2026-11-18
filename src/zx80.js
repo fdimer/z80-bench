@@ -88,6 +88,30 @@ const ZX_ULA_PINS = [[1, "A7'"], [2, "A8'"], [3, "A2'"], [4, "A1'"], [5, "A0'"],
 const ZX_Z80_PINS = [[1, 'A11'], [2, 'A12'], [3, 'A13'], [4, 'A14'], [5, 'A15'], [6, 'CLK'], [7, 'D4'], [8, 'D3'], [9, 'D5'], [10, 'D6'], [11, '+5V', 'p'], [12, 'D2'], [13, 'D7'], [14, 'D0'], [15, 'D1'],
   [16, 'INT'], [17, 'NMI'], [18, 'HALT'], [19, 'MREQ'], [20, 'IORQ'], [21, 'RD'], [22, 'WR'], [23, 'BUSACK', 'o'], [24, 'WAIT'], [25, 'BUSREQ'], [26, 'RESET'], [27, 'M1'], [28, 'RFSH', 'o'], [29, 'GND', 'g'],
   ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => [30 + n, 'A' + n])].map(([n, name, k]) => [n, name, k || 'i']);
+// ---- the ZX80's video and decoding chips (from the redrawn ZX80 circuit diagram, with its chip table) ----
+// IC5 74LS373 latches the character code from the data lines (D0~-D7~, the memory side of the 1K resistors R4-R11);
+// its OE is grounded. IC6-IC8 are 74LS157 multiplexers whose S is RFSH: outside a refresh cycle they pass the Z80's
+// A0-A8 (and A14, A15) to the ROM and RAM as A0~-A8~ (A14~, A15~); in a refresh cycle they pass the line counter
+// (A0~-A2~) and the latched character code (A3~-A8~) instead, so the ROM gives that character's row. Their E is
+// grounded. IC9 74LS165 loads the ROM byte from the data lines and shifts it out as the dots (SER and CKINH grounded;
+// link A takes QH). IC21 74LS93 counts the character's lines, clocked by SYNC and cleared during vertical sync
+// (CP0 and Q0 are not used). IC10 74LS365 puts the keyboard's five lines and the tape input on the data lines when
+// KBD is low. Which multiplexer input and which buffer output carries which bit follows what the circuit does; the
+// bus lines on the redrawn diagram cannot all be traced with certainty.
+const ZX_TTL_PINS = {
+  '74LS373': [[1, 'OE'], [2, 'Q0'], [3, 'D0'], [4, 'D1'], [5, 'Q1'], [6, 'Q2'], [7, 'D2'], [8, 'D3'], [9, 'Q3'], [10, 'GND', 'g'], [11, 'LE'], [12, 'Q4'], [13, 'D4'], [14, 'D5'], [15, 'Q5'], [16, 'Q6'], [17, 'D6'], [18, 'D7'], [19, 'Q7'], [20, 'VCC', 'p']],
+  '74LS157': [[1, 'S'], [2, 'I0a'], [3, 'I1a'], [4, 'Ya'], [5, 'I0b'], [6, 'I1b'], [7, 'Yb'], [8, 'GND', 'g'], [9, 'Yd'], [10, 'I1d'], [11, 'I0d'], [12, 'Yc'], [13, 'I1c'], [14, 'I0c'], [15, 'E'], [16, 'VCC', 'p']],
+  '74LS165': [[1, 'S/L'], [2, 'CK'], [3, 'D4'], [4, 'D5'], [5, 'D6'], [6, 'D7'], [7, '/QH'], [8, 'GND', 'g'], [9, 'QH'], [10, 'SER'], [11, 'D0'], [12, 'D1'], [13, 'D2'], [14, 'D3'], [15, 'CKINH'], [16, 'VCC', 'p']],
+  '74LS365': [[1, 'OE1'], [2, 'I1'], [3, 'Y1'], [4, 'I2'], [5, 'Y2'], [6, 'I3'], [7, 'Y3'], [8, 'GND', 'g'], [9, 'Y4'], [10, 'I4'], [11, 'Y5'], [12, 'I5'], [13, 'Y6'], [14, 'I6'], [15, 'OE2'], [16, 'VCC', 'p']],
+  '74LS93': [[1, 'CP1'], [2, 'MR1'], [3, 'MR2'], [4, 'NC', 'c'], [5, 'VCC', 'p'], [6, 'NC', 'c'], [7, 'NC', 'c'], [8, 'Q2'], [9, 'Q1'], [10, 'GND', 'g'], [11, 'Q3'], [12, 'Q0'], [13, 'NC', 'c'], [14, 'CP0']]
+};
+for (const k in ZX_TTL_PINS) ZX_TTL_PINS[k] = ZX_TTL_PINS[k].map(([n, name, kind]) => [n, name, kind || 'i']);
+// address bits 0-8, 14 and 15: the multiplexer, its section, and in a refresh cycle the source of the bit (chip, pin)
+const ZX_MUX = { 0: ['IC8', 'd', 'IC21', 'Q1'], 1: ['IC8', 'b', 'IC21', 'Q2'], 2: ['IC8', 'c', 'IC21', 'Q3'], 3: ['IC8', 'a', 'IC5', 'Q0'], 4: ['IC7', 'd', 'IC5', 'Q1'], 5: ['IC7', 'b', 'IC5', 'Q2'],
+  6: ['IC7', 'a', 'IC5', 'Q3'], 7: ['IC7', 'c', 'IC5', 'Q4'], 8: ['IC6', 'a', 'IC5', 'Q5'], 14: ['IC6', 'd', null, null], 15: ['IC6', 'c', null, null] };
+// IC10: input and output for each data bit it drives (D7 is the tape input)
+const ZX_KBUF = { 0: ['I2', 'Y2'], 1: ['I3', 'Y3'], 2: ['I4', 'Y4'], 3: ['I5', 'Y5'], 4: ['I6', 'Y6'], 7: ['I1', 'Y1'] };
+if (typeof MEM_PINOUTS !== 'undefined') { Object.assign(MEM_PINOUTS, ZX_TTL_PINS); for (const n of ['OE1', 'OE2', '/QH', 'MR1', 'MR2']) MEM_ACTIVE_LOW.add(n); MEM_ACTIVE_LOW.delete('/QH'); }
 if (typeof MEM_PINOUTS !== 'undefined') { MEM_PINOUTS.ULA = ZX_ULA_PINS; MEM_PINOUTS.Z80 = ZX_Z80_PINS; for (const n of ['RAMCS', 'ROMCS', 'NMI', 'HALT', 'MREQ', 'IORQ', 'RD', 'WR', 'M1']) MEM_ACTIVE_LOW.add(n); }
 // A chip that is not memory, with pin faults in the same shape as a MemChip: f[pin] is 'z' (disconnected), 0 or 1.
 // lv[pin] is the level a faulty pin sits at (a disconnected pin floats high); undefined = no fault.
@@ -117,6 +141,7 @@ class ZX80 {
     const C = (id, part, what, range, arr, base, abits, extra) => new MemChip(id, part, what, range, arr, base, abits, extra);
     this.romChips = [C('IC2', '2332', 'ROM: 4K BASIC', '0000h-0FFFh, repeated up to 3FFFh', this.rom, 0, 12, { rom: true, en: 'CS' }), C('IC2-8K', '2364', 'ROM: 8K BASIC', '0000h-1FFFh, repeated up to 3FFFh', this.rom, 0, 13, { rom: true, en: 'CS', label: 'IC2' })];
     this.ram1k = [C('IC3', '2114', 'built-in RAM, data bits 0-3', '4000h-43FFh, repeated', this.ram, 0, 10, { nib: 0, en: 'CS' }), C('IC4', '2114', 'built-in RAM, data bits 4-7', '4000h-43FFh, repeated', this.ram, 0, 10, { nib: 4, en: 'CS' })];
+    this.ramBits();
     this.ram2k = [C('IC4-2K', '4016', 'built-in RAM: one 2K static RAM (Timex Sinclair 1000)', '4000h-47FFh, repeated', this.ram, 0, 11, { en: 'CE', label: 'IC4' })];
     this.packs = [0, 1, 2].map(k => [0, 1, 2, 3, 4, 5, 6, 7].map(bit => C(`PACK${k + 1}.D${bit}`, '4116', `RAM pack: ${k ? ['', 'second', 'third'][k] + ' 16K' : '16K'}, data bit ${bit}`, `${(0x4000 + k * 0x4000).toString(16).toUpperCase()}h-${(0x7FFF + k * 0x4000).toString(16).toUpperCase()}h`, this.ram, k * 0x4000, 14, { dram: true, bit, mux: 7, pack: k })));
     this.chips = [...this.romChips, ...this.ram1k, ...this.packs[0], ...this.packs[1], ...this.packs[2], ...this.ram2k];   // the 2K chip is last so the other indexes stay put
@@ -126,6 +151,11 @@ class ZX80 {
     this.ulaC = new ZXChip('ULA', 'ULA', 'Sinclair computer logic (Ferranti ULA): clock, memory selects, keyboard, tape, NMI and video', 'ports with A0 low (read: keyboard; write: NMI on) and A1 low (write: NMI off)', { label: 'IC1' });
     this.z80c = new ZXChip('CPU', 'Z80', 'processor', 'address, data and control lines', { label: 'IC3' });
     this.chips.push(this.ulaC, this.z80c);
+    // the ZX80's video and decoding chips, after the others so their indexes stay put
+    const T = (id, part, what) => new ZXChip(id, part, what, 'ZX80 board', { ttl: true });
+    this.ttl = [T('IC5', '74LS373', 'character code latch'), T('IC6', '74LS157', 'address multiplexer: A8, A14, A15'), T('IC7', '74LS157', 'address multiplexer: A4-A7'), T('IC8', '74LS157', 'address multiplexer: A0-A3'),
+      T('IC9', '74LS165', 'shift register: a character row\'s eight dots'), T('IC10', '74LS365', 'keyboard and tape input buffer'), T('IC21', '74LS93', 'line counter: the row of the character')];
+    this.chips.push(...this.ttl);
     this.pinF = {}; this.netF = {}; this.uv = {}; this.fx = false; this.heldWhy = null;
     this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
     this.acc = new Uint32Array(5);             // accesses: 0 the ROM, 1 the built-in RAM (1K or 2K), 2-4 the RAM pack's 16K banks
@@ -155,8 +185,12 @@ class ZX80 {
     this.rom8k = m !== 'zx80';          // ZX81 BASIC in an 8K ROM
     this.ula = m === 'zx81';            // NMI generator, free-running sync
     this.romMask = this.rom8k ? 0x1FFF : 0x0FFF;
+    // the ZX80's two 2114s, as drawn: IC3 holds D7, D1, D0, D2 on I/O1-I/O4 and IC4 D4, D3, D5, D6. (The ZX81's pair is
+    // taken as bits 0-3 and 4-7.)
+    this.ramBits();
     if (this.pinF) this.applyFaults();
   }
+  ramBits() { if (this.ram1k) { const z = this.machine !== 'zx81'; this.ram1k[0].setDbits(z ? [7, 1, 0, 2] : null); this.ram1k[1].setDbits(z ? [4, 3, 5, 6] : null); } }
   // ---- lines and faults ----
   // Which pins share a line on the ZX81 board, for the memory fitted now. d: the pin that drives the line (index into
   // pins), or -1 when several pins drive it in turn. The ZX80 (discrete logic, no diagram filed) and the RAM pack's
@@ -186,6 +220,27 @@ class ZX80 {
       N.ROMCS = { label: 'ROM select ROMCS', d: 0, pins: [[U, 'ROMCS'], [rom, 'CS']] };
       N.RAMCS = { label: 'RAM select RAMCS', d: 0, pins: [[U, 'RAMCS'], ...(one ? [[ram[0], 'CE'], [ram[0], 'OE']] : ram.map(r => [r, 'CS']))] };
     }
+    if (this.machine !== 'zx81') {                                             // the ZX80 board (the redrawn diagram)
+      const rom = this.rom8k ? 'IC2-8K' : 'IC2', ram = this.ramSize <= 0x400 ? ['IC3', 'IC4'] : [], C = this.ram1k;
+      for (const k in ZX_MUX) {
+        const [mx, sec, src, q] = ZX_MUX[k], n = +k;
+        N['A' + n] = { label: `address line A${n} at the Z80`, d: 0, pins: [[Z, 'A' + n], [mx, 'I1' + sec], ...(n >= 14 ? [[mx, 'I0' + sec]] : [])] };
+        N[`A${n}~`] = { label: `address line A${n}~ (from the multiplexer ${mx})`, d: 0, pins: [[mx, 'Y' + sec], ...(n <= 8 ? [[rom, 'A' + n], ...ram.map(r => [r, 'A' + n])] : [])] };
+        if (src) N[`V${n}`] = { label: `refresh address bit ${n} (${src} ${q} to ${mx})`, d: 0, pins: [[src, q], [mx, 'I0' + sec]] };
+      }
+      N.A9 = { label: 'address line A9', d: 0, pins: [[Z, 'A9'], [rom, 'A9'], ...ram.map(r => [r, 'A9'])] };
+      for (const n of [10, 11, ...(this.rom8k ? [12] : [])]) N['A' + n] = { label: `address line A${n}`, d: 0, pins: [[Z, 'A' + n], [rom, 'A' + n]] };
+      for (let n = 0; n < 8; n++) {
+        const io = ram.map((r, k) => [r, 'I/O' + (C[k].dbits.indexOf(n) + 1)]).filter(p => !p[1].endsWith('0'));
+        N[`D${n}~`] = { label: `data line D${n}~ (the memory side of the 1K resistor)`, d: -1, pins: [[rom, 'D' + n], ...io, ['IC5', 'D' + n], ['IC9', 'D' + n], ...(n in ZX_KBUF ? [['IC10', ZX_KBUF[n][1]]] : [])] };
+      }
+      N.RFSH = { label: 'RFSH (the multiplexers\' select)', d: -1, pins: [['IC6', 'S'], ['IC7', 'S'], ['IC8', 'S']] };
+      N.MUXE = { label: '0 V (the multiplexers\' E)', d: -1, pins: [['IC6', 'E'], ['IC7', 'E'], ['IC8', 'E']] };
+      N.KBD = { label: 'KBD (port read with A0 low)', d: -1, pins: [['IC10', 'OE1'], ['IC10', 'OE2']] };
+      N.MR = { label: 'the vertical sync latch, to the line counter\'s reset', d: -1, pins: [['IC21', 'MR1'], ['IC21', 'MR2']] };
+      N.ROMCS = { label: 'ROM select', d: -1, pins: [[rom, 'CS']] };
+      if (ram.length) { N.RAMCS = { label: 'RAM select (through R19)', d: -1, pins: ram.map(r => [r, 'CS']) }; N.WR = { label: 'WR line', d: 0, pins: [[Z, 'WR'], ...ram.map(r => [r, 'WE'])] }; }
+    }
     const O = {}; for (const k in N) for (const [id, pin] of N[k].pins) O[id + '.' + pin] = k;
     this.NETS = N; this.NET_OF = O; this.netSig = sig; return N;
   }
@@ -213,6 +268,7 @@ class ZX80 {
     }
     for (const k in this.pinF) { const i = k.indexOf('.'); if (f[k.slice(0, i)]) f[k.slice(0, i)][k.slice(i + 1)] = this.pinF[k]; }
     if (this.machine !== 'zx81') f.ULA = {};                                     // no ULA on a ZX80
+    else for (const c of this.ttl) f[c.id] = {};                                 // and no TTL chips on a ZX81
     for (const c of this.chips) { c.f = f[c.id]; c.recalc(); }
     for (const b of this.banks) memBankFlag(b);
     this.faulty = this.chips.some(c => c.faulty);
@@ -224,7 +280,7 @@ class ZX80 {
     for (const net in this.netF) if (N[net]) out.push(['net', net, `${N[net].label} held ${this.netF[net] ? 'high' : 'low'} (${N[net].pins.length} pin${N[net].pins.length === 1 ? '' : 's'})`]);
     for (const k in this.pinF) {
       const i = k.indexOf('.'), id = k.slice(0, i), pin = k.slice(i + 1), v = this.pinF[k], shared = this.NET_OF[k] && N[this.NET_OF[k]].pins.length > 1;
-      if (id === 'ULA' && this.machine !== 'zx81') continue;
+      if (id === 'ULA' && this.machine !== 'zx81' || this.chipById[id].ttl && this.machine === 'zx81') continue;
       out.push([id, pin, `${this.chipName(id)} pin ${pin} ${shared ? 'disconnected from its line' + (v === 'z' ? '' : v ? ', at high' : ', at low') : v === 'z' ? 'disconnected' : v ? 'stuck high' : 'stuck low'}`]);
     }
     return out;
@@ -252,8 +308,53 @@ class ZX80 {
       : z.RESET === 0 ? 'RESET is low at the Z80: it is held in reset' : z.BUSREQ === 0 ? 'BUSREQ is low at the Z80: it has released the bus' : z.WAIT === 0 ? 'WAIT is low at the Z80: it waits' : null;
     if (z.NMI === 0 && !this.nmiLow) this.cpu.nmiPending = true;                 // the pin going low is one falling edge
     this.nmiLow = z.NMI === 0;
+    this.tx = this.machine !== 'zx81' && this.ttl.some(c => c.faulty);
   }
   held() { return this.heldWhy; }
+  // ---- the ZX80's chips with faults (used only while one of them has a fault) ----
+  // pin level as chip id sees it, or d when the pin has no fault
+  tp(id, pin, d) { const L = this.chipById[id].lv; return pin in L ? L[pin] : d; }
+  // the latch's outputs: what it holds (an E pin fault: latched at that level), with its D and Q faults and OE
+  latchQ(v) {
+    const L = this.chipById.IC5.lv; if ('OE' in L && L.OE) return 0xFF;      // outputs off: the lines float high
+    let q = v; for (let n = 0; n < 8; n++) { const d = this.tp('IC5', 'D' + n, -1); if (d >= 0) q = d ? q | 1 << n : q & ~(1 << n); const o = this.tp('IC5', 'Q' + n, -1); if (o >= 0) q = o ? q | 1 << n : q & ~(1 << n); }
+    return q;
+  }
+  counterQ() { let c = this.lcntr << 1; for (let n = 0; n < 4; n++) { const o = this.tp('IC21', 'Q' + n, -1); if (o >= 0) c = o ? c | 1 << n : c & ~(1 << n); } return c; }
+  // the address the ROM and RAM see: a is the Z80's address; refresh = the multiplexers pass the video address, made of
+  // the latched character q and the line counter c (as counterQ gives it: bit n is Qn)
+  ttlAddr(a, refresh, q, c) {
+    for (const k in ZX_MUX) {
+      const [mx, sec, src, pin] = ZX_MUX[k], n = +k, L = this.chipById[mx].lv; let y;
+      if ('Y' + sec in L) y = L['Y' + sec];
+      else if (L.E === 1) y = 0;                                                  // the strobe high holds every output low
+      else {
+        const sel = 'S' in L ? L.S : refresh ? 0 : 1;
+        if (sel) y = this.tp(mx, 'I1' + sec, a >> n & 1);
+        else y = this.tp(mx, 'I0' + sec, src === 'IC5' ? q >> +pin.slice(1) & 1 : src === 'IC21' ? c >> +pin.slice(1) & 1 : a >> n & 1);
+      }
+      a = y ? a | 1 << n : a & ~(1 << n);
+    }
+    return a;
+  }
+  // the shift register's eight dots from the byte on the data lines
+  shiftDots(b) {
+    const L = this.chipById.IC9.lv;
+    for (let n = 0; n < 8; n++) if ('D' + n in L) b = L['D' + n] ? b | 1 << n : b & ~(1 << n);
+    if ('QH' in L) return L.QH ? 0xFF : 0;
+    if (L['S/L'] === 1) return 0;                                                 // never loaded: only SER's 0s shift out
+    if (L['S/L'] === 0 || 'CK' in L || L.CKINH === 1) return b & 0x80 ? 0xFF : 0; // loading all the time, or not clocked: the first dot stays
+    return b;
+  }
+  // the keyboard buffer: the byte it puts on the data lines (bits it does not drive are 1)
+  kbufByte(p) {
+    let d = 0x1F; for (let r = 0; r < 8; r++) if (!(p & (0x100 << r))) d &= ~this.keys[r];
+    d |= 0x60 | (this.rom8k ? 0 : 0x80);
+    for (const k in ZX_KBUF) { const [i, y] = ZX_KBUF[k], n = +k, lv = this.tp('IC10', y, this.tp('IC10', i, -1)); if (lv >= 0) d = lv ? d | 1 << n : d & ~(1 << n); }
+    return d;
+  }
+  kbufOff() { const L = this.chipById.IC10.lv; return L.OE1 === 1 || L.OE2 === 1; }
+  kbufAlways() { const L = this.chipById.IC10.lv; return L.OE1 === 0 && L.OE2 === 0; }
   // an address or data byte as it stands on the Z80's side of the bus
   busA(a) { return this.busF ? a & this.bAAnd | this.bAOr : a; }
   busD(v) { return this.busF ? v & this.bDAnd | this.bDOr : v; }
@@ -322,6 +423,10 @@ class ZX80 {
     return u.A14 ? this.ramGet(A & (this.ramSize - 1), quiet) : this.romGet(A & this.romMask, quiet);
   }
   mread(a, m1, quiet) {
+    if (this.tx) { a = this.ttlAddr(a, false); if (this.kbufAlways() && !quiet) return this.mread0(a, m1, quiet) & this.kbufByte(a); }
+    return this.mread0(a, m1, quiet);
+  }
+  mread0(a, m1, quiet) {
     const i = this.ramAt(a, m1); if (i >= 0) return this.ramGet(i, quiet);
     a &= 0x7FFF;
     return this.hires && a >= 0x2000 ? this.lowRam[a - 0x2000] : this.romGet(a & this.romMask, quiet);
@@ -334,6 +439,7 @@ class ZX80 {
       const u = this.uv;
       if (this.ramSize < 0x4000 && (u.MREQ === 1 || u.A14 !== undefined)) { if (u.MREQ === 1 || !u.A14) return; a = 0x4000 | a & 0x3FFF; }
     }
+    if (this.tx) a = this.ttlAddr(a, false);
     const i = this.ramAt(a, false);
     if (i >= 0) { this.acc[this.ramSize < 0x4000 ? 1 : 2 + (i >> 14)]++; const bank = this.faulty ? this.ramBank(i) : null; if (bank && bank.faulty) memBankWrite(bank, i & 0x3FFF, v); else this.ram[i] = v; return; }
     a &= 0x7FFF; if (this.hires && a >= 0x2000) this.lowRam[a - 0x2000] = v;
@@ -354,7 +460,7 @@ class ZX80 {
       return this.busD(this.mreadF(a, true, true) & this.uCutD);
     }
     const v = this.read(a, true);
-    if ((a & 0x8000) && !(v & 0x40)) { this.latch = v; return 0x00; }
+    if ((a & 0x8000) && !(v & 0x40)) { if (!this.tx || this.tp('IC5', 'LE', -1) !== 0) this.latch = v; return 0x00; }      // a latch whose LE is held low keeps its old code
     return v;
   }
   // ---- I/O: only A0 is decoded ----
@@ -368,8 +474,9 @@ class ZX80 {
       const tape = u['TAPE IN'] !== undefined ? u['TAPE IN'] : this.rom8k ? 0 : 1;
       return this.busD(d | 0x20 | (u['USA/UK'] === 0 ? 0 : 0x40) | tape << 7 | this.uCutD);
     }
-    if (p & 1) return 0xFF;
+    if (p & 1) return this.tx && this.kbufAlways() ? this.kbufByte(p) : 0xFF;
     if (!this.vsync && !(this.ula && this.nmiGen)) { this.vsync = true; this.vsyncStart = this.t; }   // a read with A0 low starts vertical sync (not while the ZX81's NMIs run)
+    if (this.tx) return this.kbufOff() ? 0xFF : this.kbufByte(p);
     let d = 0x1F;
     for (let r = 0; r < 8; r++) if (!(p & (0x100 << r))) d &= ~this.keys[r];
     // D5 unused; D6 high = 50 Hz (the 8K ROM sets a 55-line MARGIN from it); D7 is the tape input, no signal = low
@@ -386,8 +493,12 @@ class ZX80 {
       else if (!(p & 2)) this.nmiGen = false;
     }
     if (this.vsync) this.endVsync();
-    this.lcntr = 0;                       // any port write clears the line counter
+    if (!this.tx || this.mrClears()) this.lcntr = 0;                       // any port write clears the line counter
   }
+  // the ZX80's line counter: cleared only when both reset pins see high; clocked only through CP1
+  mrClears() { const L = this.chipById.IC21.lv; return L.MR1 !== 0 && L.MR2 !== 0; }
+  mrHeld() { const L = this.chipById.IC21.lv; return L.MR1 === 1 && L.MR2 === 1; }
+  countLine() { if (this.tx) { if ('CP1' in this.chipById.IC21.lv || this.mrHeld()) { if (this.mrHeld()) this.lcntr = 0; return; } } this.lcntr = (this.lcntr + 1) & 7; }
   endVsync() {
     this.vsync = false;
     if (this.t - this.vsyncStart > 400) this.newFrame();   // a real vertical sync (long pulse)
@@ -552,13 +663,19 @@ class ZX80 {
       if (this.fx ? c.k === 'M1' : c.k === 'M1' && !c.halt && (c.a & 0x8000) && c.d === 0x00) {
         const v = this.fx ? this.ulaChar(c.a, c.halt) : this.read(c.a, true);
         if (v >= 0 && !(v & 0x40)) {   // a character: font byte from I:R with the character code and line counter
-          let rf = c.rf, fa = (rf & 0xFE00) | ((v & 0x3F) << 3) | this.lcntr;
+          let rf = c.rf, fa = (rf & 0xFE00) | ((v & 0x3F) << 3) | this.lcntr, inv = v & 0x80;
           if (this.fx) { rf = this.busA(rf); fa = (rf & 0xFE00) | (fa & ~this.uCutA | rf & this.uCutA) & 0x1FF; }   // an address pin the ULA has lost keeps the refresh address
           const hr = this.refreshRam(rf);
           let bits = hr >= 0 ? hr : fa & 0x4000 ? 0 : this.romGet(fa & this.romMask, true);
+          if (this.tx && hr < 0) {           // ZX80 with chip faults: the latch, multiplexers and line counter make the ROM address; the shift register the dots
+            let q = this.latchQ(this.latch), cq = this.counterQ();
+            fa = this.ttlAddr(this.busA(rf), true, q, cq); bits = this.mread0(fa, false, true);
+            if (this.tp('IC5', 'LE', -1) === 1) { q = this.latchQ(bits); fa = this.ttlAddr(this.busA(rf), true, q, cq); bits = this.mread0(fa, false, true); }   // a transparent latch passes the ROM byte back round
+            bits = this.shiftDots(bits); inv = q & 0x80;
+          }
           if (this.fx) bits = bits & this.uDAnd | this.uDOr;
           if (hr >= 0) this.hiresBytes++;
-          if (v & 0x80) bits ^= 0xFF;
+          if (inv) bits ^= 0xFF;
           this.plot(t0 + off + 4, bits); this.lastChar = v; c.ch = v; c.fa = fa;
         }
       }
@@ -567,7 +684,7 @@ class ZX80 {
     this.t = t0 + off;
     if (this.cpu.lastEvent === 'INT' && this.ackLost) { if (this.nextH === Infinity) this.nextH = t0 + ZX.LINE_T; }      // the ULA misses the acknowledge: its sync counter runs free
     else if (this.cpu.lastEvent === 'INT') {   // acknowledge: next character row line, then horizontal sync
-      this.lcntr = (this.lcntr + 1) & 7;
+      this.countLine();
       if (this.ula) this.nextH = t0 + ZX.HSYNC_DELAY;          // ZX81: the acknowledge re-phases the ULA's sync counter
       else this.newLine(t0 + ZX.HSYNC_DELAY + ZX.HSYNC_LEN);
     }

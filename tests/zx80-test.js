@@ -80,7 +80,7 @@ ok((m.input(0xFEFE) & 0x1F) === 0x1F, 'other half-rows unaffected'); m.key('3', 
   ok(N.A6.pins.join() === 'CPU,A6,CPU,INT' && N.WR.pins.length === 4 && N.RAMCS.pins.length === 3, 'ZX81 lines: INT is on A6; WR reaches both 2114s; RAMCS the ULA and both 2114s');
   z.ramSize = 0x800; z.applyFaults(); ok(z.nets().RAMCS.pins.join() === 'ULA,RAMCS,IC4-2K,CE,IC4-2K,OE' && z.nets().A10.pins.length === 3, '2K RAM: CE and OE are both on RAMCS, and A10 reaches the chip');
   z.ramSize = 0x400; z.applyFaults();
-  ok(Object.keys(new ctx.ZX80(rom).nets()).length === 0, 'ZX80: no lines (every pin a line of its own)');
+  { const N0 = new ctx.ZX80(rom).nets(); ok(N0['A3~'].pins.join() === 'IC8,Ya,IC2,A3,IC3,A3,IC4,A3' && N0.V3.pins.join() === 'IC5,Q0,IC8,I0a' && N0['D7~'].pins.join() === 'IC2,D7,IC3,I/O1,IC5,D7,IC9,D7,IC10,Y1', 'ZX80 lines: A3~ from IC8 to the ROM and RAMs; the latch\'s Q0 to IC8; D7~ to IC3 I/O1, the latch, the shift register and the tape input'); }
   z.write(0x4010, 0xFF); const r0 = z.read(0x0E08);
   z.setNetFault("D7'", 0); ok(z.read(0x4010) === 0x7F && z.read(0x0E08) === (r0 & 0x7F), "line D7' held low: bit 7 reads low from the RAM and from the ROM");
   ok(z.chipById.IC4.f['I/O4'] === 0 && z.chipById['IC2-8K'].f.D7 === 0 && !('D7' in z.z80c.f), "the held line shows on the pins on it, and not on the Z80's D7");
@@ -114,4 +114,25 @@ ok((m.input(0xFEFE) & 0x1F) === 0x1F, 'other half-rows unaffected'); m.key('3', 
   z.setPinFault('CPU', 'NMI', 'z'); z.output(0xFE); z.cpu.nmiPending = false; z.t += 1000; z.hsyncs(); ok(!z.cpu.nmiPending, "the Z80's NMI pin disconnected: no NMI arrives"); z.clearFaults();
   z.setNetFault('NMI', 1); z.setPinFault('ULA', 'NMI', 'z'); ok(z.faultList().length === 2 && z.chipFaults('CPU').join() === 'NMI: line held high', 'faults are listed as lines and as pins');
   z.clearChip('ULA'); ok(z.faultList().length === 0, "clearing a chip's faults releases its pins and the lines they are on"); }
+// ---- the ZX80's video and decoding chips ----
+{ const pic = setup => { const t = new ctx.ZX80(rom); [0x01, 0x02, 0x81, 0x02, 0x76].forEach((v, i) => { t.ram[i] = v; }); if (setup) setup(t); t.run(200000);
+    const rs = []; for (let y = 0; y < ctx.ZX.H; y++) { let s = ''; for (let x = 0; x < W; x++) s += t.front[y * W + x] ? '#' : '.'; rs.push(s); }
+    const y0 = rows.length ? rows[1][0] : 0; return [1, 2, 3, 4, 5, 6, 7].map(i => rs[y0 + i - 1].slice(x1, x1 + 32)); };
+  const want = f => [1, 2, 3, 4, 5, 6, 7].map(f), b = v => v.toString(2).padStart(8, '0').replace(/1/g, '#').replace(/0/g, '.'), line = (d, x) => b(d) + b(x) + b(d ^ 0xFF) + b(x);
+  const same = (got, exp) => got.every((g, i) => g === exp[i]);
+  ok(same(pic(), want(r => line(0x80 >> r, r === 7 ? 0xFF : 0x81))), 'TTL: no faults, the picture as before');
+  ok(same(pic(t => t.setPinFault('IC9', 'D7', 0)), want(r => line((0x80 >> r) & 0x7F, (r === 7 ? 0xFF : 0x81) & 0x7F))), 'IC9 D7 stuck low: every character loses its first dot');
+  ok(same(pic(t => t.setPinFault('IC9', 'QH', 1)), want(() => line(0xFF, 0xFF))), 'IC9 QH stuck high: character cells solid (inverse ones blank)');
+  ok(same(pic(t => t.setPinFault('IC21', 'CP1', 'z')), want(() => line(0x80, 0xFF))), 'IC21 CP1 disconnected: the line counter stops, so every line shows row 0');
+  ok(same(pic(t => t.setPinFault('IC21', 'Q1', 1)), want(r => { const k = r | 1; return line(0x80 >> k, k === 7 ? 0xFF : 0x81); })), 'IC21 Q1 stuck high: rows 1, 1, 3, 3, 5, 5, 7');
+  ok(same(pic(t => t.setPinFault('IC5', 'Q0', 1)), want(r => line(0x80 >> r, 0))), 'IC5 Q0 stuck high: character 2 becomes character 3 (blank in this ROM)');
+  ok(same(pic(t => t.setPinFault('IC5', 'LE', 0)), want(() => '.'.repeat(32))), 'IC5 LE stuck low: the latch keeps character 0, so the line is blank');
+  ok(!same(pic(t => t.setPinFault('IC8', 'S', 1)), want(r => line(0x80 >> r, r === 7 ? 0xFF : 0x81))), 'IC8 S stuck high: the ROM sees the refresh address, not the row of the character');
+  { const t = new ctx.ZX80(rom); t.setPinFault('IC7', 'E', 1); ok(t.ttlAddr(0x00F3, false) === 0x0003, 'IC7 E high: A4~-A7~ held low'); t.clearFaults();
+    t.setNetFault('A5~', 1); ok(t.ttlAddr(0x0000, false) === 0x0020 && t.chipById.IC2.f.A5 === 1, 'line A5~ held high: the ROM and RAMs see A5 high'); t.clearFaults();
+    t.key('3', true); t.setPinFault('IC10', 'OE1', 'z'); ok(t.input(0xF7FE) === 0xFF, 'IC10 OE1 disconnected: no keys and no tape'); t.clearFaults();
+    t.setPinFault('IC10', 'Y3', 0); ok((t.input(0xFEFE) & 0x1F) === 0x1D, 'IC10 Y3 stuck low: D1 reads as a key down'); t.clearFaults();
+    t.ram.fill(0xFF, 0, 0x400); t.setNetFault('KBD', 0); ok(t.read(0xF710) === 0xFB && t.read(0xFF10) === 0xFF, 'KBD held low: the keyboard drives the data lines on every read, so key 3 clears D2 when A11 is low'); t.clearFaults(); t.key('3', false);
+    t.write(0x4010, 0xFF); t.setPinFault('IC3', 'I/O1', 0); ok(t.read(0x4010) === 0x7F, 'ZX80 IC3 I/O1 holds D7, as drawn'); t.clearFaults();
+    ok(!t.tx && t.faultList().length === 0, 'all cleared'); } }
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);

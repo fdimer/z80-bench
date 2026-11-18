@@ -412,7 +412,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
 
       </section>
       <section class="panel" id="pMemChips">
-        <h2>Memory chips <span class="aside" id="mcInfo">live pins · click a pin for its fault menu</span></h2>
+        <h2>Memory and I/O chips <span class="aside" id="mcInfo">live pins · click a pin for its fault menu</span></h2>
         <div class="mcwrap">
           <div class="mctiles" id="mcTiles"></div>
           <figure class="mcfig" id="mcFig">
@@ -422,8 +422,9 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
             <div class="row mcbtns"><button id="mcClear" type="button">Clear this chip's faults</button><button id="mcClearAll" type="button">Clear all faults</button></div>
           </figure>
         </div>
-        <p class="hint">The machine's memory chips: the ROM (IC2: the 4K 2332 of the ZX80, or the 8K 2364), the two 2114s of the built-in 1K (IC3 and IC4 on the ZX80, IC4a and IC4b on the ZX81), the single 2K 4016 that a Timex Sinclair 1000 has in position IC4 instead (read from a real board) or, with a RAM pack, its 4116 dynamic RAMs, one per data bit in each 16K. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the bus on every clock. Assumed: the first 2114 holds data bits 0–3, and the RAM pack is wired in the usual way (its chips have no board numbers here). The 8K of the hi-res board is not included.</p>
-        <p class="hint">To simulate a fault, click a pin for its menu. On the ZX81, hold the whole line high or low and every pin on that line is affected, on every chip: the ROM and the built-in RAM share the address lines A0'–A8' with the ULA, their data pins share D0'–D7', and each has its select line from the ULA. Or tick "Disconnected from the line" for a fault on this chip's pin alone. On the ZX80, and on a RAM pack's chips, every pin counts as a line of its own: Disconnected lifts it (an input then floats high), High and Low hold it at that level. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. A chip with a fault is marked in red, and every fault is listed in the Debug panel, where it can be removed. The memory view and the disassembly show what the CPU reads through the faults.</p>
+        <p class="hint">The machine's memory chips: the ROM (IC2: the 4K 2332 of the ZX80, or the 8K 2364), the two 2114s of the built-in 1K (IC3 and IC4 on the ZX80, IC4a and IC4b on the ZX81), the single 2K 4016 that a Timex Sinclair 1000 has in position IC4 instead (read from a real board) or, with a RAM pack, its 4116 dynamic RAMs, one per data bit in each 16K. A tile's dot lights while its chip is being accessed. Click a tile to see that chip's pins, which follow the bus on every clock. On the ZX80 the two 2114s hold the data bits as drawn on its circuit diagram: IC3 has D7, D1, D0 and D2 on I/O1–I/O4 and IC4 has D4, D3, D5 and D6. Assumed: on the ZX81 the first 2114 holds bits 0–3, and the RAM pack is wired in the usual way (its chips have no board numbers here). The 8K of the hi-res board is not included.</p>
+        <p class="hint">To simulate a fault, click a pin for its menu. On the ZX81, hold the whole line high or low and every pin on that line is affected, on every chip: the ROM and the built-in RAM share the address lines A0'–A8' with the ULA, their data pins share D0'–D7', and each has its select line from the ULA. Or tick "Disconnected from the line" for a fault on this chip's pin alone. On the ZX80 the lines follow its circuit diagram (see below). On a RAM pack's chips every pin counts as a line of its own: Disconnected lifts it (an input then floats high), High and Low hold it at that level. An address pin fault makes the chip use the wrong cell; a data pin fault changes that bit on reads and writes; chip select held high (or a fault on RAS or CAS of a dynamic RAM) takes the chip out of circuit; write enable held high loses writes, held low turns every access into a write. A chip with a fault is marked in red, and every fault is listed in the Debug panel, where it can be removed. The memory view and the disassembly show what the CPU reads through the faults.</p>
+        <p class="hint"><b>The ZX80's video and keyboard chips</b> (from the redrawn ZX80 circuit diagram; shown only on the ZX80): IC5, a 74LS373, latches the character code from the memory side of the data lines (D0~–D7~); IC6–IC8, three 74LS157s whose S is RFSH, pass the Z80's A0–A8, A14 and A15 to the ROM and RAM as A0~–A8~, A14~ and A15~, except in a refresh cycle, when they pass the line counter (A0~–A2~) and the latched code (A3~–A8~) so the ROM gives the character's row; IC9, a 74LS165, loads that byte and shifts it out as the dots; IC21, a 74LS93 clocked by the sync, counts the character's lines and is cleared by vertical sync; IC10, a 74LS365, puts the keyboard and the tape input on the data lines when KBD is low. Which multiplexer input and which buffer output carries which bit follows what the circuit does, as not every bus line on the redrawn diagram can be traced. Faults: an address multiplexer's output (or E high, which holds its outputs low) moves every access to the ROM and RAM, and the picture; one of its CPU inputs moves only the processor's accesses, one of its refresh inputs only the picture; S high gives the ROM the refresh address instead of the character's row, S low sends every processor access to the video address. A latch pin fixes one bit of every character code (Q7 is the inverse bit); LE low keeps the last code, LE high lets the ROM byte back through the latch; OE high floats all eight outputs high. A shift register data pin fixes one dot of every character; QH at a level fills the character cells; S/L high leaves them blank, S/L low or no clock repeats the first dot. A line counter output at a level fixes that bit of the row; no clock on CP1 shows only row 0; MR high holds it at row 0, and a reset pin held low stops vertical sync clearing it. A keyboard buffer pin fixes that bit of a keyboard read; an OE pin high and no key or tape signal can be read; both OE pins low and the keyboard drives the data lines on every read. The glue gates, flip-flops and clock circuit are part of the model and have no pins here; on the redrawn diagram /QH, SER, CKINH and CP0 have no effect in the emulation.</p>
       </section>
   </div>
 
@@ -2056,10 +2057,12 @@ const MC = {
     if (zx.ramSize <= 0x400) g.push(['Built-in 1K RAM · two 2114s, four bits each', [3, 2]]);
     else if (zx.ramSize < 0x4000) g.push(['Built-in 2K RAM · one 4016 in position IC4 (Timex Sinclair 1000)', [MC2K]]);
     else for (let k = 0; k < zx.ramSize >> 14; k++) g.push([`RAM pack · ${k ? ['', 'second', 'third'][k] + ' 16K' : '16K'} at ${h4(0x4000 + k * 0x4000)}h · one 4116 per data bit`, [7, 6, 5, 4, 3, 2, 1, 0].map(b => 4 + k * 8 + b)]);
+    if (zx.machine !== 'zx81') g.push(['Video and keyboard chips · from the ZX80 circuit diagram', MC_TTL]);
     return g;
   },
-  tile(c, i) { return i === MC2K ? ['IC4', '4016 · D0–7'] : i < 2 ? ['IC2', c.part + ' · ROM'] : i < 4 ? [zx.machine === 'zx81' ? 'IC4' + 'ab'[i - 2] : c.id, '2114 · D' + (c.nib ? '4–7' : '0–3')] : ['D' + c.bit, '4116']; },
-  acc(i) { return i < 2 ? 0 : i < 4 || i === MC2K ? 1 : 2 + ((i - 4) >> 3); },
+  tile(c, i) { if (c.ttl) return [c.id, c.part.replace('74', '') + ' · ' + ({ IC5: 'latch', IC6: 'A8 A14 A15', IC7: 'A4–A7', IC8: 'A0–A3', IC9: 'dots', IC10: 'keyboard', IC21: 'line count' })[c.id]];
+    return i === MC2K ? ['IC4', '4016 · D0–7'] : i < 2 ? ['IC2', c.part + ' · ROM'] : i < 4 ? [zx.machine === 'zx81' ? 'IC4' + 'ab'[i - 2] : c.id, '2114 · D' + (c.dbits ? c.dbits.join(',') : c.nib ? '4–7' : '0–3')] : ['D' + c.bit, '4116']; },
+  acc(i) { if (zx.chips[i].ttl) return -1; return i < 2 ? 0 : i < 4 || i === MC2K ? 1 : 2 + ((i - 4) >> 3); },
   bus() {
     const T = curT, A = T.a === null || T.a === 'z' ? null : zx.busA(T.a), mem = T.mreq === 0 && T.rfsh !== 0 && A !== null;
     const ri = mem ? zx.ramAt(A, T.m1 === 0) : -1, low = mem && ri < 0 && zx.hires && (A & 0x7FFF) >= 0x2000;
@@ -2067,6 +2070,7 @@ const MC = {
   },
   net(c, i, name, B) {
     const A = B.A, D = n => pinValue('D' + n); let m = /^A(\d+)$/.exec(name), d;
+    if (c.ttl) return ttlNet(c, name, B);
     if (i === MCULA) {                  // the ULA
       const T = B.T, at = T.at === undefined ? zx.t : T.at, u = zx.uv, mq = T.mreq === 0 && A !== null && u.MREQ !== 1, a14 = A === null ? 1 : u.A14 !== undefined ? u.A14 : A >> 14 & 1;
       if ((d = /^A(\d)'$/.exec(name))) return T.fa !== undefined ? T.fa >> +d[1] & 1 : A === null ? 'z' : A >> +d[1] & 1;
@@ -2102,7 +2106,7 @@ const MC = {
       const sel = B.ri >= 0 && zx.ramSize <= 0x400;
       if (m) return A === null ? 'z' : (A >> +m[1]) & 1;
       if (name === 'CS') return sel ? 0 : 1; if (name === 'WE') return sel && B.wr ? 0 : 1;
-      if ((d = /^I\/O(\d)$/.exec(name))) return sel && (B.rd || B.wr) ? D(+d[1] - 1 + c.nib) : 'z';
+      if ((d = /^I\/O(\d)$/.exec(name))) return sel && (B.rd || B.wr) ? D(c.ioBit(+d[1])) : 'z';
       return 'z';
     }
     {                                   // RAM pack 4116s: seven address pins carry the row, then the column
@@ -2113,6 +2117,38 @@ const MC = {
     }
   }
 };
+const MC_TTL = zx.ttl.map(c => zx.chips.indexOf(c));
+// the ZX80's video and keyboard chips: what their pins carry on this clock
+function ttlNet(c, name, B) {
+  const T = B.T, A = B.A, ab = n => A === null ? 'z' : A >> n & 1, ref = T.fa !== undefined, q = zx.latch, cq = zx.lcntr << 1;
+  let d;
+  switch (c.id) {
+    case 'IC5':
+      if ((d = /^D(\d)$/.exec(name))) return ref ? zx.romGet(T.fa & zx.romMask, true) >> +d[1] & 1 : T.d === null || T.d === undefined ? 'z' : T.d >> +d[1] & 1;
+      if ((d = /^Q(\d)$/.exec(name))) return q >> +d[1] & 1;
+      return name === 'LE' ? (T.ch !== undefined ? 1 : 0) : name === 'OE' ? 0 : 'z';
+    case 'IC6': case 'IC7': case 'IC8': {
+      if (name === 'S') return T.rfsh === undefined ? 1 : T.rfsh; if (name === 'E') return 0;
+      if (!(d = /^(I0|I1|Y)([a-d])$/.exec(name))) return 'z';
+      const n = +Object.keys(ZX_MUX).find(k => ZX_MUX[k][0] === c.id && ZX_MUX[k][1] === d[2]), [, , src, pin] = ZX_MUX[n];
+      const vid = src === 'IC5' ? q >> +pin.slice(1) & 1 : src === 'IC21' ? cq >> +pin.slice(1) & 1 : ab(n);
+      return d[1] === 'I1' ? ab(n) : d[1] === 'I0' ? vid : ref ? T.fa >> n & 1 : ab(n);
+    }
+    case 'IC9':
+      if ((d = /^D(\d)$/.exec(name))) return ref ? zx.romGet(T.fa & zx.romMask, true) >> +d[1] & 1 : 'z';
+      return name === 'CK' ? clk : name === 'S/L' ? (ref ? 0 : 1) : name === 'QH' ? 0 : name === '/QH' ? 1 : 0;      // SER and CKINH are grounded
+    case 'IC10': {
+      const on = T.iorq === 0 && T.rd === 0 && A !== null && !(A & 1); let k = 0; if (A !== null) for (let r = 0; r < 8; r++) if (!(A & (0x100 << r))) k |= zx.keys[r];
+      if (name === 'OE1' || name === 'OE2') return on ? 0 : 1;
+      if ((d = /^([IY])(\d)$/.exec(name))) { const bit = +Object.keys(ZX_KBUF).find(b => ZX_KBUF[b][0] === 'I' + d[2]), v = bit === 7 ? 0 : k >> bit & 1 ? 0 : 1; return d[1] === 'I' ? v : on ? v : 'z'; }
+      return 'z';
+    }
+    case 'IC21':
+      if ((d = /^Q(\d)$/.exec(name))) return cq >> +d[1] & 1;
+      return name === 'MR1' || name === 'MR2' ? (zx.vsync ? 1 : 0) : name === 'CP1' ? 0 : 'z';
+  }
+  return 'z';
+}
 // ---------- the ULA beside the Z80: live pins, and the fault menu on every ringed pin ----------
 const MCULA = zx.chips.indexOf(zx.ulaC), MCCPU = zx.chips.indexOf(zx.z80c);
 const zxSide = { ci: MCULA, s: $('zxChipUla'), fig: $('zxFigUla'), cap: $('zxCapUla'), els: {}, drawn: '' };
