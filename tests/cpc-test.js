@@ -57,7 +57,7 @@ for (const [name, bytes, want, setup] of [
   ok('tape: lengths scaled from 3.5 to 4 MHz', near(tp.dur[0], 1000) && near(tp.dur[2], 500) && near(tp.dur[4], 600) && near(tp.dur[5], 600) && near(tp.dur[6], 300), [...tp.dur.subarray(0, 8)].join());
   ok('tape: levels alternate, starting high', [...tp.lvl.subarray(0, 20)].every((l, i) => l === (i & 1 ? 0 : 1)));
   ok('tape: pause = 1 ms at the opposite level, then low', near(tp.dur[20], 3500) && tp.lvl[20] === 1 && near(tp.dur[21], 9 * 3500) && tp.lvl[21] === 0, tp.dur[20] + ' ' + tp.lvl[20]);
-  ok('tape: one block listed, a stop, a text note', tp.blocks.length === 2 && /turbo block, 1 bytes/.test(tp.blocks[0].desc) && tp.stops.has(22) && tp.notes.includes('test'), tp.blocks.map(b => b.desc).join('; '));
+  ok('tape: blocks listed (the data, the stop, the pulses after it), a text note', tp.blocks.length === 3 && /tone/.test(tp.blocks[2].desc) && /turbo block, 1 bytes/.test(tp.blocks[0].desc) && tp.stops.has(22) && tp.notes.includes('test'), tp.blocks.map(b => b.desc).join('; '));
   const m = new CPCMachine(); m.gaMode = 0x0C; m.insertTape(tzx);
   const inB = () => m.input(0xF500) >> 7 & 1;
   ok('tape: port B bit 7 reads the tape (high for the first pulse)', inB() === 1);

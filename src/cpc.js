@@ -196,15 +196,16 @@ class CPCTape {
     while (i < b.length) { const t = b[i]; offs.push(i); i += 1 + size(t, i + 1); }
     if (i > b.length + 0) notes.push('the last block is cut short');
     // second pass: the signal
-    let group = '', loopAt = -1, loopN = 0;
+    let group = '', loopAt = -1, loopN = 0, fresh = true;     // fresh: at the start or after a pause or data block, so a run of plain pulses is listed as a block
     for (let k = 0; k < offs.length; k++) {
       const o = offs[k], t = b[o], j = o + 1; if (j >= b.length) break;
       const start = n, mark = d => blocks.push({ seg: start, block: k, desc: (group ? group + ': ' : '') + d });
+      const wasFresh = fresh; if (t === 0x12 || t === 0x13) fresh = false; else if ([0x10, 0x11, 0x14, 0x15, 0x20].includes(t)) fresh = true;
       switch (t) {
         case 0x10: { const len = w(j + 2), off = j + 4; mark('standard ' + what(off, len)); for (let p = b[off] < 128 ? 8063 : 3223; p > 0; p--) pulse(2168); pulse(667); pulse(735); data(off, len, 855, 1710, 8); pause(w(j)); break; }
         case 0x11: { const len = w3(j + 15), off = j + 18; mark('turbo ' + what(off, len)); for (let p = w(j + 10); p > 0; p--) pulse(w(j)); pulse(w(j + 2)); pulse(w(j + 4)); data(off, len, w(j + 6), w(j + 8), b[j + 12]); pause(w(j + 13)); break; }
-        case 0x12: { for (let p = w(j + 2); p > 0; p--) pulse(w(j)); break; }
-        case 0x13: { for (let p = 0; p < b[j]; p++) pulse(w(j + 1 + 2 * p)); break; }
+        case 0x12: { if (wasFresh) mark('tone and pulses'); for (let p = w(j + 2); p > 0; p--) pulse(w(j)); break; }
+        case 0x13: { if (wasFresh) mark('pulses'); for (let p = 0; p < b[j]; p++) pulse(w(j + 1 + 2 * p)); break; }
         case 0x14: { const len = w3(j + 7), off = j + 10; mark('pure ' + what(off, len)); data(off, len, w(j), w(j + 2), b[j + 4]); pause(w(j + 5)); break; }
         case 0x15: { const tps = w(j), len = w3(j + 5), off = j + 8, last = b[j + 4] || 8; mark(`direct recording, ${len} bytes`);
           for (let q = 0; q < len; q++) for (let r = 0; r < (q === len - 1 ? last : 8); r++) { level = b[off + q] & (0x80 >> r) ? 1 : 0; push(tps, level); }
