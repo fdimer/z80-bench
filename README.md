@@ -1,6 +1,6 @@
 # Z80 Bench: CPC branch (Amstrad CPC 464)
 
-This branch turns Z80 Bench into an Amstrad CPC 464, modelled from the CPC 464 circuit diagram: the Z80 with its pinout, bus timing, disassembly and debug points, wired to the gate array, the 6845 and the memory. It is work in progress: there is no cassette yet.
+This branch turns Z80 Bench into an Amstrad CPC 464, modelled from the CPC 464 circuit diagram: the Z80 with its pinout, bus timing, disassembly and debug points, wired to the gate array, the 6845 and the memory. It is work in progress: the 8255, the sound chip and the address selectors are not yet drawn as chips, and the cassette does not record.
 
 - **Processor timing**: the gate array's READY line (the Z80's WAIT) is high one clock in four, so every memory, I/O and interrupt cycle is stretched until it lines up; instructions take whole microseconds, as on the real machine. The wait states show in the clock-by-clock view.
 - **Memory**: the 32K ROM (IC103: firmware and BASIC) over 64K of RAM, with the gate array's two ROM enable bits; writes always reach the RAM. The eight 4164s (IC117-IC124) sit behind the 74LS153 address selectors as wired on the board.
@@ -12,9 +12,10 @@ This branch turns Z80 Bench into an Amstrad CPC 464, modelled from the CPC 464 c
 - **RESET** is one line for the Z80, the gate array, the 6845 and the 8255: held low they all stay in reset while the clocks run.
 - **Clock and READY faults**: without the 16 MHz clock the gate array and everything it times stop; without PHI, or with READY held low, the Z80 is held while the picture goes on; without CCLK the 6845 stands still. READY held high removes the wait states; what RAM accesses then return is an approximation.
 - **Sound**: the AY-3-8912's three tone channels, noise and envelope, clocked by the gate array's 1 MHz CCLK and played in real time, through the built-in speaker (all channels together) or as from the stereo socket (A left, C right, B in both). Without CCLK the sound chip stands still.
+- **Cassette**: insert a CDT (or TZX) tape file and it is played as the signal it describes into the 8255's cassette input, while PLAY is down and the computer has the motor on. The firmware's loader and the custom loaders of games (Speedlock and others) read it bit by bit, as from a real tape. Fast loading runs at full speed while the tape moves. Saving to tape is not built yet.
 - **Keyboard**: the CPC matrix through the 8255 and the sound chip's port; typed characters are translated to the CPC key that produces them, and there is an on-screen keyboard.
 
-**ROMs are not included.** Load your own firmware (`OS_464.ROM`, CRC 815752DF) and BASIC 1.0 (`BASIC_1.0.ROM`, CRC 7D9A3BAC) with the Load ROM button; the browser keeps them. Open `z80-bench.html` from this folder. The model is `src/cpc.js`; `node tests/cpc-test.js` checks timing, memory, faults and interrupts, and with `CPC_ROMS=/folder` also boots the real ROMs.
+**ROMs are not included.** Load your own firmware (`OS_464.ROM`, CRC 815752DF) and BASIC 1.0 (`BASIC_1.0.ROM`, CRC 7D9A3BAC) with the Load ROM button; the browser keeps them. Open `z80-bench.html` from this folder. The model is `src/cpc.js`; `node tests/cpc-test.js` checks timing, memory, faults and interrupts, and with `CPC_ROMS=/folder` also boots the real ROMs; add `CPC_TAPE=/path/to/file.cdt` to load a tape too.
 
 The rest of this file describes Z80 Bench itself.
 

@@ -203,6 +203,8 @@ textarea { width: 100%; min-height: 210px; resize: vertical; font-size: 12.5px; 
 .tapeinfo { font-size: 12px; color: var(--muted, #666); }
 .msg { font-size: 12.5px; margin-top: 8px; font-family: var(--font-mono); min-height: 1.4em; }
 .msg.err { color: var(--warn); } .msg.ok { color: var(--ok); }
+#cpTapeBlk { max-width: min(380px, 70vw); }
+#cpTapeInfo { margin-top: 4px; color: var(--muted, inherit); }
 .fieldgrid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; }
 .fieldgrid label { color: var(--muted); font-size: 13px; }
 .fieldgrid select, .fieldgrid input { min-width: 0; width: 100%; }
@@ -391,10 +393,18 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <label class="inline" for="cpSound" title="The AY-3-8912 sound chip, played while the machine runs in real time: through the built-in speaker (all three channels together), or as from the stereo socket (A left, C right, B in both).">Sound <select id="cpSound"><option value="speaker" selected>Speaker</option><option value="stereo">Stereo socket</option><option value="off">Off</option></select></label>
           <span class="osbkeys mono" id="cpKeysDown"></span>
         </div>
+        <div class="row cptape" id="cpTape">
+          <button id="cpTapeIns" type="button" title="A CDT (or TZX) tape file. It is played as the signal it describes, into the cassette input.">Insert tape (.cdt)…</button><input type="file" id="cpTapeFile" accept=".cdt,.tzx" hidden>
+          <button id="cpTapePlay" type="button" title="Press PLAY on the cassette. The tape moves while PLAY is down and the computer has the motor on." disabled>▶ Play</button>
+          <button id="cpTapeRew" type="button" title="Rewind to the start of the tape" disabled>⏮ Rewind</button>
+          <label class="inline" for="cpTapeBlk" title="Wind the tape to the start of a block">Block <select id="cpTapeBlk" disabled><option>no tape</option></select></label>
+          <label class="inline" for="cpTapeFast" title="Run at full speed while the tape is playing and the motor is on, then back to real time."><input type="checkbox" id="cpTapeFast" checked> Fast loading</label>
+        </div>
+        <div class="msg mono" id="cpTapeInfo"></div>
         <div class="msg" id="cpMsg"></div>
         <div class="cpkb" id="cpKb" aria-label="Keyboard"></div>
         <p class="hint" id="cpHint">Click the picture and type: letters, digits and symbols come out as typed (the page presses the CPC key, with or without SHIFT, that gives that character). Backspace is DEL, Delete is CLR, Alt is COPY, the numeric keypad gives the function keys f0–f9 and its Enter is the small ENTER key. On the keyboard above, SHIFT and CTRL stay down for the next key. Load ROM takes the 464's two 16 KB images, the firmware (OS_464, CRC 815752DF) and BASIC 1.0 (CRC 7D9A3BAC), together or one at a time, or one 32 KB image of both. They are not included; your browser keeps them, so you only load them once.</p>
-        <p class="hint">The picture is built the way the machine builds it: the 6845 counts characters and lines, the gate array turns two bytes of RAM into dots for each character, in the screen mode and colours it holds at that moment, with the border outside the display and black during the sync pulses. The monitor starts a new line at every HSYNC and a new picture at every VSYNC. When the machine is paused, the white mark shows where the beam is. The cassette is not emulated yet.</p>
+        <p class="hint">The picture is built the way the machine builds it: the 6845 counts characters and lines, the gate array turns two bytes of RAM into dots for each character, in the screen mode and colours it holds at that moment, with the border outside the display and black during the sync pulses. The monitor starts a new line at every HSYNC and a new picture at every VSYNC. When the machine is paused, the white mark shows where the beam is. The cassette input is port B bit 7 and the motor port C bit 4.</p>
       </section>
       <section class="panel" id="pPinout">
         <h2>Processor, gate array and 6845 <span class="aside">top view · live pins · ringed pins can be given a fault</span></h2>
@@ -537,7 +547,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
       <section class="panel" id="pMach">
         <h2>CPC hardware<button class="fold" type="button" aria-expanded="true" title="Collapse">»</button> <span class="aside">memory · gate array · 6845 · sound · 8255</span></h2>
         <div class="zxstate" id="cpState"></div>
-        <p class="hint">The gate array (IC116) decides what the CPU reads: the 32K ROM lies over the RAM at 0000h–3FFFh (firmware) and C000h–FFFFh (BASIC), and two bits of its mode register switch each half off to reach the RAM underneath. It also makes READY, which holds the Z80 in wait states so that every bus cycle lines up with the video circuit: instructions take whole microseconds. I/O devices are picked by single address lines, so the port numbers are 16 bits: 7Fxxh gate array, BCxxh–BFxxh 6845, F4xxh–F7xxh 8255. The 6845 (IC108) times the picture: its HSYNC also feeds the gate array's interrupt counter, which asks for an interrupt every 52 lines, 300 times a second. The sound chip (AY-3-8912) is written through the 8255: port A carries the data and two bits of port C drive the chip's bus. It runs on the gate array's 1 MHz CCLK, so a tone period p gives 62,500 / p Hz, and it also reads the keyboard through its own port. The cassette is not emulated yet.</p>
+        <p class="hint">The gate array (IC116) decides what the CPU reads: the 32K ROM lies over the RAM at 0000h–3FFFh (firmware) and C000h–FFFFh (BASIC), and two bits of its mode register switch each half off to reach the RAM underneath. It also makes READY, which holds the Z80 in wait states so that every bus cycle lines up with the video circuit: instructions take whole microseconds. I/O devices are picked by single address lines, so the port numbers are 16 bits: 7Fxxh gate array, BCxxh–BFxxh 6845, F4xxh–F7xxh 8255. The 6845 (IC108) times the picture: its HSYNC also feeds the gate array's interrupt counter, which asks for an interrupt every 52 lines, 300 times a second. The sound chip (AY-3-8912) is written through the 8255: port A carries the data and two bits of port C drive the chip's bus. It runs on the gate array's 1 MHz CCLK, so a tone period p gives 62,500 / p Hz, and it also reads the keyboard through its own port. The cassette input is port B bit 7 and the motor port C bit 4.</p>
       </section>
 
       <section class="panel" id="pSystem" hidden>
@@ -907,7 +917,7 @@ function frame(now) {
   // full speed
   const t0 = performance.now();
   let last = null, stall = null;
-  const budget = runRate === 'real' ? dt * CPC.CPU_HZ / 1000 : Infinity;
+  const budget = runRate === 'real' && !cpTurbo() ? dt * CPC.CPU_HZ / 1000 : Infinity;
   let spent = 0;
   while (performance.now() - t0 < 12 && spent < budget) {
     for (let k = 0; k < 400 && spent < budget; k++) {
@@ -933,7 +943,7 @@ function frame(now) {
     if (stall) break;
   }
   if (last) finishFast(last, last.pc);
-  if (stall) stalledMsg(stall); else setStatus(runRate === 'real' ? 'Running in real time (4 MHz)' : 'Running at full speed', false, true);
+  if (stall) stalledMsg(stall); else setStatus(cpTurbo() ? 'Loading from tape at full speed' : runRate === 'real' ? 'Running in real time (4 MHz)' : 'Running at full speed', false, true);
   render();
   requestAnimationFrame(frame);
 }
@@ -1665,7 +1675,7 @@ function masterReset() {
   for (const k of Object.keys(pins)) pins[k] = 1;
   cpu.nmiPending = false;
   cpc.rom.fill(0xFF); for (const a of [cpc.ram, cpc.keys, mem]) a.fill(0);
-  cpc.hasLo = cpc.hasHi = false; cpc.fb.fill(20);
+  cpc.hasLo = cpc.hasHi = false; cpc.fb.fill(20); cpc.ejectTape(); cpTapeShow();
   try { localStorage.removeItem(CP_ROM_KEYS.lo); localStorage.removeItem(CP_ROM_KEYS.hi); } catch (e) {}
   cpHeld.clear(); cpLatched.clear(); cpQueue.length = 0; cpWant.clear(); cpShow(); $('cpMsg').className = 'msg'; $('cpMsg').textContent = '';
   resetCPU();
@@ -1724,7 +1734,7 @@ function renderCpState() {
     <div class="blk"><div class="hd">6845 IC108 · ports BCxxh–BFxxh</div><div class="kv">R0–R7 <b>${[...R.subarray(0, 8)].map(h2).join(' ')}</b><br>R8–R15 <b>${[...R.subarray(8, 16)].map(h2).join(' ')}</b><br>Character <b>${cpc.hcc}</b> of ${R[0] + 1} · row <b>${cpc.vcc}</b> line <b>${cpc.vlc}</b> · scan line <b>${cpc.line}</b> of ${cpc.frameLines()}<br>Display address <b>${h4((cpc.maRow + cpc.hcc) & 0x3FFF)}h</b> · DISPEN <b>${cpc.de ? 'high' : 'low'}</b> · HSYNC <b>${cpc.hs ? 'high' : 'low'}</b> · VSYNC <b>${cpc.vsync ? 'high' : 'low'}</b><br>Screen memory at <b>${h4((R[12] & 0x30) << 10)}h</b> · frame <b>${cpc.frames}</b></div></div>
     <div class="blk"><div class="hd">Monitor</div><div class="kv">Beam <b>${cpc.mx}</b> characters after HSYNC, <b>${cpc.my}</b> lines after VSYNC · picture <b>${cpc.pictures}</b><br>Colour out <b>${CPC.COLOUR_NAMES[cpc.rgb]}</b></div></div>
     <div class="blk"><div class="hd">Sound chip AY-3-8912 · through the 8255</div><div class="kv">${[0, 1, 2].map(cpTone).join('<br>')}<br>Noise period <b>${cpc.psg[6] & 31}</b> · envelope period <b>${cpc.psg[11] | cpc.psg[12] << 8}</b> shape <b>${cpc.psg[13] & 15}</b> · selected register <b>${cpc.psgSel}</b>${cpc.soundClock() ? '' : '<br><b>No CCLK: the sound chip stands still</b>'}</div></div>
-    <div class="blk"><div class="hd">8255 IC107 · ports F4xxh–F7xxh</div><div class="kv">Port A <b>${h2(cpc.ppiA)}h</b> · port C <b>${h2(c)}h</b>: keyboard row <b>${c & 15}</b> · cassette motor <b>${c & 0x10 ? 'on' : 'off'}</b> · sound chip bus <b>${['idle', 'read', 'write', 'address'][c >> 6]}</b><br>Keys down <b>${keys.join(' ') || 'none'}</b></div></div>`;
+    <div class="blk"><div class="hd">8255 IC107 · ports F4xxh–F7xxh</div><div class="kv">Port A <b>${h2(cpc.ppiA)}h</b> · port C <b>${h2(c)}h</b>: keyboard row <b>${c & 15}</b> · cassette motor <b>${c & 0x10 ? 'on' : 'off'}</b> · cassette in <b>${cpc.tapeIn() ? 'high' : 'low'}</b> · sound chip bus <b>${['idle', 'read', 'write', 'address'][c >> 6]}</b><br>Keys down <b>${keys.join(' ') || 'none'}</b></div></div>`;
   if (html !== cpSig) { cpSig = html; $('cpState').innerHTML = html; }
 }
 // ---------- the gate array and the 6845 beside the CPU: live pins, and faults on the pins that have a ring ----------
@@ -1797,7 +1807,7 @@ function cpSideRender() {
     if (S.capSig !== sig) { S.capSig = sig; S.cap.innerHTML = `<b>${esc(c.id)} · ${esc(c.part)}</b><br>${esc(c.what)}` + (fl.length ? `<br><span class="mcfaults mono">${esc(fl.join(' · '))}</span>` : ''); }
   }
 }
-function renderCp() { drawCp(); renderCpState(); if (mcReady) cpSideRender(); }
+function renderCp() { drawCp(); renderCpState(); cpTapeRender(); if (mcReady) cpSideRender(); }
 // keyboard: the PC keyboard by key position, and the on-screen CPC 464 keyboard
 // each key: [matrix name, legend, shifted legend, width]
 const CP_LAYOUT = [
@@ -1998,6 +2008,43 @@ const MM = {
   },
   markers() { const cs = getComputedStyle(document.documentElement); return [[cpu.sp, cs.getPropertyValue('--sel').trim() || '#2a6fb0'], [cpu.pc, '#e0322d']]; }
 };
+// ---------- cassette ----------
+// A CDT file is turned into the signal it holds (see CPCTape in src/cpc.js). PLAY is a key on the cassette deck:
+// the tape moves while it is down and the 8255 has the motor on. A "stop the tape" block releases it.
+let cpTapeName = '';
+function cpTurbo() { return $('cpTapeFast').checked && cpc.tapePlay && cpc.motorOn(); }
+const cpTime = c => { const s = Math.floor(c / CPC.CPU_HZ); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+function cpTapeShow() {
+  const tp = cpc.tape, has = !!tp;
+  for (const id of ['cpTapePlay', 'cpTapeRew', 'cpTapeBlk']) $(id).disabled = !has;
+  const sel = $('cpTapeBlk'); sel.innerHTML = '';
+  if (!has) { sel.add(new Option('no tape')); $('cpTapeInfo').textContent = ''; cpTapeSig = ''; return; }
+  let c = 0, q = 0;
+  tp.blocks.forEach((b, i) => { for (; q < b.seg; q++) c += tp.dur[q]; sel.add(new Option(`${i + 1}. ${b.desc} (${cpTime(c)})`, i)); });
+  cpTapeRender();
+}
+let cpTapeSig = '';
+function cpTapeRender() {
+  const tp = cpc.tape; if (!tp) return;
+  const k = cpc.tapeBlock(), playing = cpc.tapePlay, motor = cpc.motorOn();
+  const end = cpc.tapeIdx >= tp.n;
+  const txt = `${cpTapeName} · ${end ? 'end of tape' : k >= 0 ? 'block ' + (k + 1) + ' of ' + tp.blocks.length + ': ' + tp.blocks[k].desc : 'leader'} · ${cpTime(cpc.tapePos)} of ${cpTime(tp.total)} · ${playing ? 'PLAY down' : 'stopped'} · motor ${motor ? 'on' : 'off'}${playing && !motor ? ' (waiting for the computer)' : ''}`;
+  if (txt !== cpTapeSig) { cpTapeSig = txt; $('cpTapeInfo').textContent = txt; $('cpTapePlay').textContent = playing ? '■ Stop' : '▶ Play'; if (k >= 0 && document.activeElement !== $('cpTapeBlk')) $('cpTapeBlk').value = k; }
+}
+$('cpTapeIns').onclick = () => $('cpTapeFile').click();
+$('cpTapeFile').onchange = async () => {
+  const f = $('cpTapeFile').files[0]; $('cpTapeFile').value = ''; if (!f) return;
+  try {
+    const tp = cpc.insertTape(new Uint8Array(await f.arrayBuffer())); cpTapeName = f.name;
+    $('cpMsg').className = 'msg ok';
+    $('cpMsg').textContent = `Tape inserted: ${f.name}, ${tp.blocks.length} blocks, ${cpTime(tp.total)} long. Type RUN"" and press RETURN, then press Play here and any key on the CPC.` + (tp.notes.length ? ' Notes on the tape: ' + tp.notes.join('; ') : '');
+  } catch (e) { $('cpMsg').className = 'msg err'; $('cpMsg').textContent = 'Could not read the tape: ' + e.message; }
+  cpTapeShow();
+};
+$('cpTapePlay').onclick = () => { if (!cpc.tape) return; cpc.tapePlay = !cpc.tapePlay && cpc.tapeIdx < cpc.tape.n; cpTapeRender(); cscr.focus(); };
+$('cpTapeRew').onclick = () => { if (!cpc.tape) return; cpc.tapePlay = false; cpc.tapeSeek(0); cpTapeRender(); };
+$('cpTapeBlk').onchange = () => { const tp = cpc.tape, b = tp && tp.blocks[+$('cpTapeBlk').value]; if (!b) return; cpc.tapeSeek(b.seg); cpTapeRender(); };
+
 // ---------- sound ----------
 // The machine model fills two ring buffers (left, right) with samples as emulated time passes; a script processor
 // plays them. Sound is only played in real time, and browsers only allow it to start from a click or a key press.
@@ -2011,7 +2058,7 @@ function cpAudioStart() {
     cpAudio = new AC(); const node = cpAudio.createScriptProcessor(1024, 0, 2);
     node.onaudioprocess = e => {
       const L = e.outputBuffer.getChannelData(0), R = e.outputBuffer.getChannelData(1), mode = cpSoundMode();
-      const live = running && runRate === 'real' && mode !== 'off', rate = cpc.audioRate;
+      const live = running && runRate === 'real' && !cpTurbo() && mode !== 'off', rate = cpc.audioRate;
       if (cpc.aw - cpAr > rate * 0.2 || cpc.aw < cpAr) cpAr = Math.max(0, cpc.aw - Math.round(rate * 0.06));      // fell behind: skip ahead
       for (let i = 0; i < L.length; i++) {
         if (live && cpAr < cpc.aw) { const j = cpAr++ & 32767; cpLastL = cpc.abufL[j]; cpLastR = cpc.abufR[j]; }

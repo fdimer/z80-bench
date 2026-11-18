@@ -2,7 +2,7 @@
 //   CPC_ROMS=/folder/with/OS_464.ROM/and/BASIC_1.0.ROM node tests/cpc-test.js
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ctx = { console }; vm.createContext(ctx);
-for (const f of ['z80core.js', 'memchips.js', 'cpc.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', f), 'utf8') + '\nthis.Z80 = Z80; this.CPCMachine = typeof CPCMachine !== "undefined" ? CPCMachine : undefined; this.CPC = typeof CPC !== "undefined" ? CPC : undefined; this.memSetFault = typeof memSetFault !== "undefined" ? memSetFault : undefined;', ctx);
+for (const f of ['z80core.js', 'memchips.js', 'cpc.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', f), 'utf8') + '\nthis.Z80 = Z80; this.CPCMachine = typeof CPCMachine !== "undefined" ? CPCMachine : undefined; this.CPC = typeof CPC !== "undefined" ? CPC : undefined; this.CPCTape = typeof CPCTape !== "undefined" ? CPCTape : undefined; this.memSetFault = typeof memSetFault !== "undefined" ? memSetFault : undefined;', ctx);
 const { CPCMachine, CPC } = ctx;
 // a fault on one pin: the pin disconnected from its line ('z': floating; 0 or 1: at that level), or an output stuck at a level
 const memSetFault = (m, id, pin, v) => m.setPinFault(id, pin, v);
@@ -46,6 +46,29 @@ for (const [name, bytes, want, setup] of [
   ok('no CCLK: the sound chip stands still', !m.soundClock() && cycles(m.abufL, a0, m.aw) === 0); memSetFault(m, 'IC116', 'CCLK', null);
   m.run(400000); ok('CCLK back: sound again', m.soundClock() && cycles(m.abufL, m.aw - 4000, m.aw) > 20);
   m.reset(); ok('reset clears the sound chip', m.psg.every(v => v === 0));
+}
+{ // cassette: a small tape built here. A turbo block (2 pilot pulses of 1000, syncs 500/600, bits 300/600), a pause, a stop, a pure tone
+  const { CPCTape } = ctx, hdr = [...'ZXTape!'].map(c => c.charCodeAt(0)).concat([0x1A, 1, 20]);
+  const w = v => [v & 255, v >> 8];
+  const tzx = new Uint8Array(hdr.concat([0x11], w(1000), w(500), w(600), w(300), w(600), w(2), [8], w(10), [1, 0, 0], [0xA5],
+    [0x20], w(0), [0x12], w(700), w(3), [0x30, 4], [...'test'].map(c => c.charCodeAt(0))));
+  const tp = new CPCTape(tzx), k = 8 / 7, near = (c, t) => Math.abs(c - t * k) <= 1;
+  ok('tape: pulses for pilot, sync, 8 bits, the pause edge, the pause, the tone', tp.n === 2 + 2 + 16 + 2 + 3, tp.n);
+  ok('tape: lengths scaled from 3.5 to 4 MHz', near(tp.dur[0], 1000) && near(tp.dur[2], 500) && near(tp.dur[4], 600) && near(tp.dur[5], 600) && near(tp.dur[6], 300), [...tp.dur.subarray(0, 8)].join());
+  ok('tape: levels alternate, starting high', [...tp.lvl.subarray(0, 20)].every((l, i) => l === (i & 1 ? 0 : 1)));
+  ok('tape: pause = 1 ms at the opposite level, then low', near(tp.dur[20], 3500) && tp.lvl[20] === 1 && near(tp.dur[21], 9 * 3500) && tp.lvl[21] === 0, tp.dur[20] + ' ' + tp.lvl[20]);
+  ok('tape: one block listed, a stop, a text note', tp.blocks.length === 2 && /turbo block, 1 bytes/.test(tp.blocks[0].desc) && tp.stops.has(22) && tp.notes.includes('test'), tp.blocks.map(b => b.desc).join('; '));
+  const m = new CPCMachine(); m.gaMode = 0x0C; m.insertTape(tzx);
+  const inB = () => m.input(0xF500) >> 7 & 1;
+  ok('tape: port B bit 7 reads the tape (high for the first pulse)', inB() === 1);
+  m.tapePlay = true; m.run(40000); ok('tape: no motor, no movement', m.tapeIdx === 0 && m.tapePos === 0);
+  m.output(0xF700, 0x82); m.output(0xF600, 0x10); ok('tape: motor on through port C bit 4', m.motorOn());
+  const seen = []; for (let i = 0; i < 20000 && m.tapeIdx < 20; i++) { m.step(); if (seen[seen.length - 1] !== inB()) seen.push(inB()); }
+  ok('tape: the level follows the pulses as it plays', seen.length >= 20, seen.length);
+  m.run(400000); ok('tape: the stop block releases PLAY', !m.tapePlay && m.tapeIdx === 22, m.tapeIdx);
+  m.tapePlay = true; m.run(40000); ok('tape: played to the end', !m.tapePlay && m.tapeIdx >= tp.n);
+  m.tapeSeek(0); ok('tape: rewind', m.tapeIdx === 0 && m.tapePos === 0 && inB() === 1);
+  let bad = false; try { new CPCTape(new Uint8Array(20)); } catch (e) { bad = /ZXTape/.test(e.message); } ok('tape: a file that is not a tape is refused', bad);
 }
 { // RAM chips: data bit and address pin faults follow the selectors' wiring
   const m = new CPCMachine(); m.gaMode = 0x0C;
@@ -143,6 +166,15 @@ if (dir) {
   const type = s => { for (const ch of s) { const k = ch === '\n' ? 'Return' : ch === ' ' ? 'Space' : ch === '"' ? '2' : ch === '?' ? '/' : ch === '*' ? ':' : ch.toUpperCase(); const sh = '"?*'.includes(ch); if (sh) m.key('Shift', true); m.run(80000); m.key(k, true); m.run(240000); m.key(k, false); if (sh) m.key('Shift', false); m.run(160000); } };
   type('?3*4\n'); m.run(2000000); const s2 = m.screenText(); console.log(s2.slice(4, 10).map(l => '  |' + l).join('\n'));
   ok('BASIC computes 3*4', s2.some(l => l.trim() === '12'));
+  if (process.env.CPC_TAPE) {   // load a real tape: CPC_TAPE=/path/to/file.cdt
+    const x = new CPCMachine(); x.rom.set(m.rom); x.hasLo = x.hasHi = true; x.run(4000000 * 3);
+    const tp = x.insertTape(new Uint8Array(fs.readFileSync(process.env.CPC_TAPE))), tk = (k, sh) => { if (sh) x.key('Shift', true); x.run(80000); x.key(k, true); x.run(240000); x.key(k, false); if (sh) x.key('Shift', false); x.run(80000); };
+    for (const [k, sh] of [['R'], ['U'], ['N'], ['2', 1], ['2', 1], ['Return']]) tk(k, sh); x.run(4000000); x.tapePlay = true; tk('Space');
+    for (let i = 0; i < 1200 && !(x.tapeIdx >= tp.n || (!x.tapePlay && i > 5)); i++) x.run(4000000);
+    x.run(4000000 * 10); const scr = x.screenText();
+    console.log('  tape ' + path.basename(process.env.CPC_TAPE) + ': ' + scr.filter(l => l.trim()).slice(0, 4).join(' | '));
+    ok('tape loads into its last block without falling back to BASIC', x.tapeIdx >= tp.blocks[tp.blocks.length - 1].seg && !scr.includes('Ready'), x.tapeIdx + ' of ' + tp.n);
+  }
   { m.audioRate = 48000; type('SOUND 1,142,200,15\n'); let hit = false; for (let i = 0; i < 40 && !hit; i++) { m.run(100000); hit = m.psg[0] === 142 && (m.psg[8] & 15) > 0 && !(m.psg[7] & 1); }
     ok('BASIC SOUND 1,142 plays tone A at 440 Hz', hit, [...m.psg].join(',')); m.audioRate = 0; }
   // a RAM fault stops it

@@ -1,5 +1,5 @@
 // Amstrad CPC 464 machine model for Z80 Bench: the processor, the memory, the 6845 and the gate array's video,
-// with the 8255, the sound chip and the keyboard matrix. No cassette yet.
+// with the 8255, the sound chip, the keyboard matrix and the cassette.
 // From the CPC 464 circuit diagram:
 //   IC111  Z80A, 4 MHz clock from the gate array.
 //   IC116  gate array (40007, 40008 or 40010; 16 MHz crystal). It makes the CPU clock, the RAM's RAS, CAS and MWE,
@@ -151,6 +151,80 @@ function cpcCrc32(b) { let c = ~0; for (let i = 0; i < b.length; i++) { c ^= b[i
 // stereo socket's left (A, with half of B) and right (C, with half of B); the built-in speaker gets all three.
 // Without CCLK (no 16 MHz, or a fault on the CCLK line or the gate array's CCLK pin) the sound chip stands still.
 const CPC_PSG_VOL = [0, 0.0078, 0.011, 0.0156, 0.0221, 0.0313, 0.0442, 0.0625, 0.0884, 0.125, 0.1768, 0.25, 0.3536, 0.5, 0.7071, 1];
+// Cassette: a CDT file (the TZX format) is turned into the signal it describes, a list of stretches of tape at one
+// level with their lengths in CPC clocks (TZX times are 3.5 MHz T-states; the CPC runs at 4 MHz). While Play is
+// pressed and the 8255 has the motor on (port C bit 4), the tape moves with emulated time, and its level is what
+// port B bit 7 reads. So the firmware's own loader, and the custom loaders of games, read it bit by bit as they
+// would from a real cassette. A "stop the tape" block (a pause of 0) releases Play.
+class CPCTape {
+  constructor(bytes) {
+    const b = bytes, sig = 'ZXTape!';
+    for (let i = 0; i < 7; i++) if (b[i] !== sig.charCodeAt(i)) throw new Error('Not a CDT or TZX tape file (no ZXTape! signature)');
+    let cap = 1 << 16, n = 0, dur = new Uint32Array(cap), lvl = new Uint8Array(cap), level = 0, frac = 0;
+    const blocks = [], stops = new Set(), notes = [];
+    const push = (t35, l) => {      // a stretch of t35 T-states (3.5 MHz) at level l
+      frac += t35 * 8 / 7; const c = Math.floor(frac); frac -= c; if (!c) return;
+      if (n && lvl[n - 1] === l && dur[n - 1] + c < 0xFFFFFFFF) { dur[n - 1] += c; return; }
+      if (n === cap) { cap *= 2; const d2 = new Uint32Array(cap), l2 = new Uint8Array(cap); d2.set(dur); l2.set(lvl); dur = d2; lvl = l2; }
+      dur[n] = c; lvl[n] = l; n++;
+    };
+    const pulse = t => { level ^= 1; push(t, level); };
+    // a pause: 1 ms at the opposite level first, to finish the last pulse, then low (as the TZX format says)
+    const pause = ms => { if (ms > 0) { level ^= 1; push(3500, level); if (ms > 1) { level = 0; push((ms - 1) * 3500, 0); } } };
+    const data = (off, len, zero, one, last) => {
+      for (let i = 0; i < len; i++) { const v = b[off + i], bits = i === len - 1 ? last || 8 : 8; for (let k = 0; k < bits; k++) { const t = v & (0x80 >> k) ? one : zero; pulse(t); pulse(t); } }
+    };
+    const w = i => b[i] | b[i + 1] << 8, w3 = i => b[i] | b[i + 1] << 8 | b[i + 2] << 16, dw = i => (b[i] | b[i + 1] << 8 | b[i + 2] << 16 | b[i + 3] << 24) >>> 0;
+    const text = (i, len) => String.fromCharCode(...b.subarray(i, i + len)).replace(/[^\x20-\x7E]/g, ' ').trim();
+    // what a data block holds: a CPC header record (sync byte 2Ch) names the file
+    const what = (off, len) => {
+      if (b[off] === 0x2C && len > 20) { const name = text(off + 1, 16); return `header "${name || '(no name)'}" block ${b[off + 17]}`; }
+      return (b[off] === 0x16 ? 'data' : 'block') + `, ${len} bytes`;
+    };
+    // first pass: where each block starts
+    const offs = []; let i = 10;
+    const size = (t, i) => {
+      switch (t) {
+        case 0x10: return 4 + w(i + 2); case 0x11: return 18 + w3(i + 15); case 0x12: return 4; case 0x13: return 1 + 2 * b[i];
+        case 0x14: return 10 + w3(i + 7); case 0x15: return 8 + w3(i + 5); case 0x18: case 0x19: return 4 + dw(i);
+        case 0x20: case 0x23: case 0x24: return 2; case 0x21: return 1 + b[i]; case 0x22: case 0x25: case 0x27: return 0;
+        case 0x26: return 2 + 2 * w(i); case 0x28: return 2 + w(i); case 0x2A: return 4; case 0x2B: return 5;
+        case 0x30: return 1 + b[i]; case 0x31: return 2 + b[i + 1]; case 0x32: return 2 + w(i); case 0x33: return 1 + 3 * b[i];
+        case 0x35: return 20 + dw(i + 16); case 0x5A: return 9; default: return 4 + dw(i);     // later blocks start with their length
+      }
+    };
+    while (i < b.length) { const t = b[i]; offs.push(i); i += 1 + size(t, i + 1); }
+    if (i > b.length + 0) notes.push('the last block is cut short');
+    // second pass: the signal
+    let group = '', loopAt = -1, loopN = 0;
+    for (let k = 0; k < offs.length; k++) {
+      const o = offs[k], t = b[o], j = o + 1; if (j >= b.length) break;
+      const start = n, mark = d => blocks.push({ seg: start, block: k, desc: (group ? group + ': ' : '') + d });
+      switch (t) {
+        case 0x10: { const len = w(j + 2), off = j + 4; mark('standard ' + what(off, len)); for (let p = b[off] < 128 ? 8063 : 3223; p > 0; p--) pulse(2168); pulse(667); pulse(735); data(off, len, 855, 1710, 8); pause(w(j)); break; }
+        case 0x11: { const len = w3(j + 15), off = j + 18; mark('turbo ' + what(off, len)); for (let p = w(j + 10); p > 0; p--) pulse(w(j)); pulse(w(j + 2)); pulse(w(j + 4)); data(off, len, w(j + 6), w(j + 8), b[j + 12]); pause(w(j + 13)); break; }
+        case 0x12: { for (let p = w(j + 2); p > 0; p--) pulse(w(j)); break; }
+        case 0x13: { for (let p = 0; p < b[j]; p++) pulse(w(j + 1 + 2 * p)); break; }
+        case 0x14: { const len = w3(j + 7), off = j + 10; mark('pure ' + what(off, len)); data(off, len, w(j), w(j + 2), b[j + 4]); pause(w(j + 5)); break; }
+        case 0x15: { const tps = w(j), len = w3(j + 5), off = j + 8, last = b[j + 4] || 8; mark(`direct recording, ${len} bytes`);
+          for (let q = 0; q < len; q++) for (let r = 0; r < (q === len - 1 ? last : 8); r++) { level = b[off + q] & (0x80 >> r) ? 1 : 0; push(tps, level); }
+          pause(w(j + 2)); break; }
+        case 0x20: { const ms = w(j); if (ms) pause(ms); else { stops.add(n); mark('stop the tape'); } break; }
+        case 0x21: group = text(j + 1, b[j]); break;
+        case 0x22: group = ''; break;
+        case 0x23: { const rel = (w(j) << 16) >> 16; if (rel) k += rel - 1; break; }
+        case 0x24: loopAt = k; loopN = w(j); break;
+        case 0x25: if (loopAt >= 0 && --loopN > 0) k = loopAt; else loopAt = -1; break;
+        case 0x2B: level = b[j + 4] ? 1 : 0; break;
+        case 0x30: notes.push(text(j + 1, b[j])); break;
+        case 0x18: case 0x19: notes.push(`block type ${t.toString(16).toUpperCase()}h is not supported and was skipped`); break;
+        default: break;      // information only, or not needed for a CPC
+      }
+    }
+    this.dur = dur.subarray(0, n); this.lvl = lvl.subarray(0, n); this.n = n; this.blocks = blocks; this.stops = stops; this.notes = notes;
+    this.total = 0; for (let q = 0; q < n; q++) this.total += this.dur[q];
+  }
+}
 class CPCMachine {
   constructor() {
     this.rom = new Uint8Array(0x8000).fill(0xFF); this.hasLo = false; this.hasHi = false;
@@ -170,6 +244,7 @@ class CPCMachine {
     this.acc = new Uint32Array(3);                    // accesses: 0 ROM, 1 RAM, 2 writes to the gate array
     this.crtc = new Uint8Array(18); this.crtcSel = 0;
     this.psg = new Uint8Array(16); this.keys = new Uint8Array(10);      // keys: bit set = key down
+    this.tape = null; this.tapePlay = false; this.tapeIdx = 0; this.tapeRem = 0; this.tapeLevel = 0; this.tapePos = 0;
     this.audioRate = 0; this.abufL = new Float32Array(32768); this.abufR = new Float32Array(32768); this.aw = 0; this.audioT = 0;
     this.pens = new Uint8Array(17);                   // gate array colours for pens 0-15 and the border
     this.fb = new Uint8Array(CPC.FW * CPC.FH).fill(20);   // the picture, as gate array colour numbers
@@ -356,7 +431,7 @@ class CPCMachine {
         case 0: v &= this.ppiCtl & 0x10 ? ((this.ppiC >> 6) === 1 ? (this.psgSel === 14 ? this.keyRow() : this.psg[this.psgSel]) : 0xFF) : this.ppiA; break;
         // port B: bit 0 VSYNC, bits 3-1 maker links (111 Amstrad), bit 4 50 Hz link, bit 5 expansion (high: none),
         // bit 6 printer busy (high: no printer), bit 7 cassette data in
-        case 1: v &= 0xFE | (this.vsOut() ? 1 : 0); break;
+        case 1: v &= 0x7E | (this.vsOut() ? 1 : 0) | (this.tapeIn() ? 0x80 : 0); break;
         case 2: v &= this.ppiC; break;
       }
     }
@@ -488,6 +563,7 @@ class CPCMachine {
       c.w = w; c.t0 = this.t + t; this.waits += w; t += len + w;
     }
     this.t += t;
+    if (this.tapePlay) this.tapeMove(t);
     if (this.audioRate) { this.audioT += t * this.audioRate; while (this.audioT >= CPC.CPU_HZ) { this.audioT -= CPC.CPU_HZ; this.audioSample(); } }
     // the gate array recognises the acknowledge by IORQ and M1 both low
     if (this.cpu.lastEvent === 'INT') { this.ints++; if (!(this.gf && (this.gv.IORQ === 1 || this.gv.M1 === 1))) { this.intCnt &= 31; this.intReq = false; } }
@@ -498,6 +574,23 @@ class CPCMachine {
     return t;
   }
   preStep() {}
+  // ---- cassette ----
+  insertTape(bytes) { this.tape = new CPCTape(bytes); this.tapePlay = false; this.tapeSeek(0); return this.tape; }
+  ejectTape() { this.tape = null; this.tapePlay = false; this.tapeLevel = 0; }
+  tapeSeek(seg) { const tp = this.tape; if (!tp) return; this.tapeIdx = Math.min(seg, tp.n); this.tapeRem = tp.dur[this.tapeIdx] || 0; this.tapeLevel = tp.lvl[this.tapeIdx] || 0; this.tapePos = 0; for (let q = 0; q < this.tapeIdx; q++) this.tapePos += tp.dur[q]; }
+  motorOn() { return !!(this.ppiC & 0x10); }
+  tapeIn() { return this.tape && this.tapeIdx < this.tape.n ? this.tapeLevel : 0; }     // port B bit 7
+  tapeMove(t) {
+    const tp = this.tape; if (!tp || !this.motorOn()) return;
+    while (t > 0) {
+      if (this.tapeIdx >= tp.n) { this.tapePlay = false; this.tapeLevel = 0; return; }        // the end of the tape
+      if (this.tapeRem > t) { this.tapeRem -= t; this.tapePos += t; return; }
+      t -= this.tapeRem; this.tapePos += this.tapeRem; this.tapeIdx++;
+      if (this.tapeIdx < tp.n) { this.tapeRem = tp.dur[this.tapeIdx]; this.tapeLevel = tp.lvl[this.tapeIdx]; }
+      if (tp.stops.has(this.tapeIdx)) { this.tapePlay = false; return; }                    // a "stop the tape" block
+    }
+  }
+  tapeBlock() { const tp = this.tape; if (!tp) return -1; let k = -1; for (let q = 0; q < tp.blocks.length && tp.blocks[q].seg <= this.tapeIdx; q++) k = q; return k; }
   // ---- sound ----
   soundClock() { return !(this.gaDead() || (this.gf && 'CCLK' in this.gv)); }     // does CCLK reach the sound chip?
   envLevel() {      // 0-15 from the envelope shape (register 13: continue, attack, alternate, hold) and position
