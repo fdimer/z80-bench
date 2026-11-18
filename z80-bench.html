@@ -336,7 +336,7 @@ table.mem td.b.mw { box-shadow: inset 0 0 0 1.5px var(--warn); }
           <dt>Data bus</dt><dd id="brData">–</dd>
         </dl>
         <p class="hint">Clicking CLK pulses one clock. /INT is level-sensitive, /NMI triggers on a falling edge. Holding /WAIT low inserts wait states; /BUSREQ low floats the buses at the end of the current machine cycle; /RESET low holds the CPU in reset.</p>
-        <p class="hint">Click an address, data or control pin (MREQ, IORQ, RD, WR) to give it a fault: disconnected (it floats high, so the memory and ports see a 1), or held high or low. With no other chips on this bench, each pin is a line of its own; an address pin fault makes every access go to the wrong place, a data pin fault changes that bit of every byte read or written. Faults are listed under the chip and in the Debug pane, and removed there.</p>
+        <p class="hint">Click an address, data or control pin (MREQ, IORQ, RD, WR, M1, HALT) to give it a fault, or right-click an input or CLK: disconnected (it floats high, so the memory and ports see a 1), or held high or low. With no other chips on this bench, each pin is a line of its own; an address pin fault makes every access go to the wrong place, a data pin fault changes that bit of every byte read or written; a fault on an input overrides the level you set, and one on CLK stops the clock. Faults are listed under the chip and in the Debug pane, and removed there.</p>
       </section>
 
       <section class="panel">
