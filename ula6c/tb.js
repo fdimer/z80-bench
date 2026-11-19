@@ -41,7 +41,7 @@ while (m.cpu.pc !== 0x8004) m.step();                    // to the HALT: the rep
 // ---- the gate-level ULA ----
 const sim = new Ula6cSim(fs.readFileSync(path.join(__dirname, '6c001.net'), 'utf8'));
 const OSC = 1000 / 14, P = 4 * OSC;                       // ns per oscillator period, per T-state
-const D = { addr: +(process.env.TB_ADDR || 40), ctl: +(process.env.TB_CTL || 30), cac: +(process.env.TB_CAC || 100), off: 20 };
+const D = { addr: +(process.env.TB_ADDR || 40), ctl: +(process.env.TB_CTL || 30), cac: +(process.env.TB_CAC || 100), off: +(process.env.TB_HOLD || 150) };
 const PIN = { A14: 'PN36_A14', A15: 'PN37_A15', MREQ: 'PN38_NMREQ', RD: 'PN3_NRD', WR: 'PN2_NWR', IORQ: 'PN33_NIORQ',
   CLK: 'PN32_NBCPU', INT: 'PN12_NINT', RAS: 'PN35_NRAS', CAS: 'PN1_NCAS', WE: 'PN4_NDRAMWE', ROMCS: 'PN34_NROMCS', EAR: 'PN28_TAPELS' };
 const AP = ['PN5_A0', 'PN6_A1', 'PN7_A2', 'PN8_A3', 'PN9_A4', 'PN10_A5', 'PN11_A6'];
@@ -57,7 +57,7 @@ const pinsVal = (names) => names.reduce((v, n, i) => v | ((sim.get(n) ?? 1) & 1)
 let cpuA = 0;
 const keyCols = a => { let v = 0x1F; for (let r = 0; r < 8; r++) if (!(a & (0x100 << r))) v &= ~m.keys[r] & 0x1F; return v; };
 function busA(a) {
-  cpuA = a; sim.set(PIN.A14, a >> 14 & 1); sim.set(PIN.A15, a >> 15 & 1);
+  cpuA = a; sim.set(PIN.A14, a >> 14 & 1); sim.set(PIN.A15, a >> 15 & 1); if (typeof ulaIorq === 'function') ulaIorq();
   for (let n = 0; n < 7; n++) sim.set(AP[n], a >> n & 1);
   const k = keyCols(a); for (let n = 0; n < 5; n++) sim.set(KP[n], k >> n & 1);
 }
@@ -72,14 +72,16 @@ const earPin = () => sim.set(PIN.EAR, sim.get(nLS) ? 0 : 1);
 sim.watch[nLS] = () => earPin(); earPin();
 
 // ---- the lower RAM: eight 4116s. Row on RAS falling, column on CAS falling (A0-A6: the ULA's when it drives them,
-// else the CPU's A0-A6 then A7-A13 through the multiplexers); the data appears tCAC after CAS falls and goes D.off after
+// else the CPU's A0-A6 then A7-A13 through the multiplexers); the data appears tCAC after CAS falls; after CAS rises
+// it stays on the data lines for D.off (the RAM lets go within 40 ns, but the lines hold the charge until something
+// drives them: this is what makes the floating bus), then reads FFh
 // it rises; a write takes the data pins' value when WE and CAS are both low ----
-const ram = m.ram;                                         // 4000h-7FFFh is ram[0..3FFF]
+const ram = m.ram.slice(0, 0x4000);                         // the lower RAM, as the ULA reads and writes it: its own copy (the emulator runs an instruction or two ahead)
 let row = 0, rasLow = false, casLow = false, dseq = 0;
 const fetches = [], cpuDram = [];
 const rasLog = [];
 sim.watch[PIN.RAS] = (v) => { rasLow = !v; if (!v) { row = ulaDrivesA() ? pinsVal(AP) : cpuA & 0x7F; if (process.env.TB_DBG && rasLog.length < 400) { const t = sim.t, r0 = row; const s = []; for (const d of [-20, -5, 5, 15, 30]) sim.at(t + d < t ? t : t + d, () => s.push(pinsVal(AP))); rasLog.push({ t, r0, s }); } } };
-function dramWrite(off) { const v = pinsVal(DP); ram[off] = v; cpuDram.push({ t: sim.t, off, w: v }); }
+function dramWrite(off) { dramOut = null; dPins(); dseq++; const v = pinsVal(DP); ram[off] = v; cpuDram.push({ t: sim.t, off, w: v }); }
 let casOff = 0, casUla = false;
 sim.watch[PIN.CAS] = (v) => {
   casLow = !v; const my = ++dseq;
@@ -95,7 +97,7 @@ sim.watch[PIN.CAS] = (v) => {
 sim.watch[PIN.WE] = (v) => { if (v === 0 && casLow && rasLow) dramWrite(casOff); };
 
 // ---- what the CPU sees on its data bus ----
-const cpuRead = (a) => a < 0x4000 ? (sim.get(PIN.ROMCS) === 0 ? m.rom[a] : 0xFF) : a < 0x8000 ? pinsVal(DP) : ram[a - 0x4000];
+const cpuRead = (a) => a < 0x4000 ? (sim.get(PIN.ROMCS) === 0 ? m.rom[a] : 0xFF) : a < 0x8000 ? pinsVal(DP) : m.ram[a - 0x4000];
 
 // ---- the clock and the frame. The Z80's CLK is the inverse of pin 32 ----
 let rI = null, intFall = null;
@@ -110,10 +112,9 @@ let firstRise = null;
 sim.watch[PIN.CLK] = (v, t) => { if (v === 0 && intFall !== null && firstRise === null) firstRise = t; };
 while (firstRise === null && sim.t < 25e6) stepTo(sim.t + 1000);
 if (firstRise === null) { console.log('no INT from the ULA'); process.exit(1); }
-// T-state 0, as the emulator (and Fuse) count: the Z80 samples INT on the rising edge of the last T-state of an
-// instruction, so an instruction starting at T-state t sees INT as it was at the rise of t-1. INT falls during the
-// T-state before the first rise that sees it low; that rise is T-state -1.
-rI = firstRise + P;
+// T-state 0 of the frame, placed where the clock holds (contention) line up with the emulator's, which are Fuse's:
+// the second CPU clock rise after INT falls. See the report's INT line for what that says about INT.
+rI = firstRise + 2 * P;
 let startT = rI + m.ft * P;                                  // the rise that starts the emulator's next instruction
 if (startT < sim.t + P) { startT += SPEC.FRAME_T * P; rI += SPEC.FRAME_T * P; }
 stepTo(startT - P / 2);
@@ -130,15 +131,19 @@ function feed() {
   for (const c of cyc) Q.push(Object.assign({}, c, { len: CL[c.k] || c.n, emuT: base + c.t0, emuW: c.w, pc }));
   emuBase += m.ft - ft0 + (m.ft < ft0 ? SPEC.FRAME_T : 0);
 }
-const ctl = (n, v, dt = D.ctl) => sim.at(sim.t + dt, () => sim.set(PIN[n], v));
+// TR6 on the board (issue 3 onwards; Timex's issue 6A diagram): an emitter follower from the CPU's A0 that holds the
+// ULA's IORQ input high while A0 is high; through R27 (470 ohms) the ULA otherwise sees the CPU's IORQ. So the ULA
+// sees an I/O request only for even ports.
+let iorqN = 1;
+const ulaIorq = () => sim.set(PIN.IORQ, iorqN | (cpuA & 1));
+const ctl = (n, v, dt = D.ctl) => sim.at(sim.t + dt, () => { if (n === 'IORQ') { iorqN = v; ulaIorq(); } else sim.set(PIN[n], v); });
 function edge(rise, t) {
   if (rise) {
     if (!cur || Tk >= cur.len) {
       while (Q.length < 2) feed();
-      if (cur && (cur.k === 'M1' || cur.k === 'MR' || cur.k === 'MW')) {   // the hold the ULA gave the cycle just ended, by where it started
-        const ft = ((cur.hwT % SPEC.FRAME_T) + SPEC.FRAME_T) % SPEC.FRAME_T, r = ft - 14335, line = Math.floor(r / 224), x = r % 224;
-        const hold = +(hwT(t) - cur.hwT - cur.len).toFixed(2);
-        if (r >= 0 && line < 192 && x < 136 && (cur.a & 0xC000) === 0x4000) (rep.phase = rep.phase || {})[`${Math.floor(x / 8) < 16 ? Math.round(x) % 8 : 'x' + Math.round(x)} hw ${hold}`] = ((rep.phase || {})[`${Math.floor(x / 8) < 16 ? Math.round(x) % 8 : 'x' + Math.round(x)} hw ${hold}`] || 0) + 1;
+      if (cur && (cur.k === 'M1' || cur.k === 'MR' || cur.k === 'MW')) {   // the hold the cycle just ended had, by the emulator's phase
+        const hold = +(hwT(t) - cur.hwT - cur.len).toFixed(2), ef = Math.round(cur.emuT) % SPEC.FRAME_T, er = ef - 14335;
+        if (er >= 0 && er < 192 * 224 && er % 224 < 128 && (cur.a & 0xC000) === 0x4000) { const key = `phase ${er & 7}: emulator ${cur.emuW}, ULA ${hold}`; (rep.ph2 = rep.ph2 || {})[key] = (rep.ph2[key] || 0) + 1; }
       }
       cur = Q.shift(); Tk = 1; cur.hwT = hwT(t);
       if (off0 === null) off0 = cur.hwT - cur.emuT;
@@ -188,7 +193,12 @@ function act(c, rise) {
     if (!rise && T === 4) {
       if (k === 'IR') {
         const v = pinsVal(DP);
-        if (c.a & 1) { (rep.fl = rep.fl || []).push({ hw: c.hwT, v, cas: sim.get(PIN.CAS), ras: sim.get(PIN.RAS), dram: dramOut, now: hwT(sim.t) - c.hwT }); rep.floatN++; if (c.d !== 0xFF || v !== 0xFF) rep.floatData = (rep.floatData || 0) + 1; if (v !== c.d) rep.floatBad.push({ emuT: Math.round(c.emuT) % SPEC.FRAME_T, emu: c.d.toString(16), ula: v.toString(16) }); }
+        if (c.a & 1) {   // the floating bus: Fuse reads it 3 T-states into the I/O cycle (src/spectrum.js at 1)
+          const fs = m.floating(((Math.round(c.emuT) + 3) % SPEC.FRAME_T + SPEC.FRAME_T) % SPEC.FRAME_T);
+          rep.floatN++; if (fs !== 0xFF || v !== 0xFF) rep.floatData = (rep.floatData || 0) + 1;
+          if (v !== fs) rep.floatBad.push({ emuT: Math.round(c.emuT) % SPEC.FRAME_T, fuse: fs.toString(16), ula: v.toString(16) });
+          if (v !== c.d) rep.floatEmu = (rep.floatEmu || 0) + 1;
+        }
         else { rep.feN++; if ((v & 0x5F) !== (c.d & 0x5F)) rep.ioBad.push({ port: c.a.toString(16), emu: c.d.toString(16), ula: v.toString(16) }); }
       }
       ctl('IORQ', 1); ctl('RD', 1); ctl('WR', 1); if (k === 'IW') sim.at(sim.t + D.ctl + 10, () => { cpuOut = null; dPins(); });
@@ -235,18 +245,13 @@ console.log(`ran ${FRAMES} frames: ${instr} instructions, ${rep.cyc} bus cycles,
 console.log(`alignment: the first cycle started ${off0 && off0.toFixed(2)} T-states from where the emulator put it`);
 console.log(`clock holds: ${rep.holdBad.length} cycles where the ULA held the CPU longer (+) or shorter (-) than the emulator`, hist(rep.holdBad.map(x => x.k + ' ' + x.extra)), rep.holdBad.slice(0, 6));
 const iF = ints.filter(x => x[1] === 0).map(x => +hwT(x[0]).toFixed(2)), iR = ints.filter(x => x[1] === 1).map(x => +hwT(x[0]).toFixed(2));
-console.log('contended memory cycles in hw: phase (T-state from 14,335, mod 8) and the hold', rep.phase);
+if (rep.ph2) console.log('memory cycles to 4000h-7FFFh during the picture, by phase (T-state from 14,335, mod 8), and their holds:', Object.keys(rep.ph2).sort().map(k => k + ' (' + rep.ph2[k] + ')').join('; '));
 console.log(`CPU clock pulses shorter than 60 ns: ${rep.clkGlitch || 0}, first at T ${rep.clkG1}`);
-console.log(`INT: falls at T`, iF, 'rises at T', iR);
+console.log(`INT: falls at T`, iF, 'rises at T', iR, `(T-state 0 is placed where the holds line up with the emulator's; then INT falls ${(-iF[0]).toFixed(2)} T-states before it. With the Z80 sampling INT at the start of an instruction's last T-state, an instruction starting at T-state ${Math.ceil(iF[0]) + 1} to ${Math.ceil(iR[0])} takes the interrupt: the emulator, like Fuse, says 0 to 31)`);
 console.log(`CPU reads of the lower RAM: ${rep.lowN}, ${rep.dataBad.length} differ`, rep.dataBad.slice(0, 4));
 console.log(`ROM select: ${rep.romcsBad.length} memory cycles wrong`, rep.romcsBad.slice(0, 3));
 console.log(`port FE reads: ${rep.feN}, ${rep.ioBad.length} differ (bits 0-4, 6)`, rep.ioBad.slice(0, 4));
-console.log(`floating bus reads (odd port): ${rep.floatN} (${rep.floatData || 0} not FFh), ${rep.floatBad.length} differ`, rep.floatBad.slice(0, 4));
-{ // the floating bus: which emulator T-state convention (IO cycle start + 1 + d) reproduces what the ULA's bus held
-  const fl = (rep.fl || []).filter(x => x.v !== 0xFF || true); let out = [];
-  for (let d = -4; d <= 4; d++) { let ok = 0; for (const x of fl) if (m.floating(((Math.round(x.hw - off0) + 1 + d) % SPEC.FRAME_T + SPEC.FRAME_T) % SPEC.FRAME_T) === x.v) ok++; out.push(d + ':' + ok); }
-  console.log(`floating bus, by the ULA's own timing: reads matching floating(IO start + 1 + d), of ${fl.length} (${fl.filter(x => x.v !== 0xFF).length} not FFh):`, out.join(' '));
-}
+console.log(`floating bus (odd ports): ${rep.floatN} reads, ${rep.floatData || 0} of them with screen data; ${rep.floatBad.length} differ from Fuse's timing (the byte the ULA is fetching 3 T-states into the I/O cycle)`, rep.floatBad.slice(0, 4), `; src/spectrum.js reads it 2 T-states earlier and differs in ${rep.floatEmu || 0}`);
 // the ULA's screen reads against the emulator's: each fetch's frame T-state (from CAS falling) and address
 const fT = fetches.map(f => ({ ft: ((hwT(f.t) - off0) % SPEC.FRAME_T + SPEC.FRAME_T) % SPEC.FRAME_T, a: 0x4000 + f.off }));
 let fBest = null;
@@ -266,11 +271,11 @@ console.log(`ULA screen reads: ${fetches.length}; ${fBest.ok} match the emulator
     let best = null;
     for (let off = -4; off <= 24; off++) { let ok = 0, n = 0; for (let y = 0; y < SPEC.FH; y += 7) for (let x = 0; x < SPEC.FW; x += 3) { if (flashCell(y, x)) continue; n++; if (colourAt(tOf(y, x, off)) === (p.fb[y * SPEC.FW + x] & 7 ? p.fb[y * SPEC.FW + x] : 0)) ok++; } if (!best || ok > best.ok) best = { off, ok, n }; }
     let bad = 0, n = 0, badB = 0, nB = 0;
-    for (let y = 0; y < SPEC.FH; y++) for (let x = 0; x < SPEC.FW; x++) { if (flashCell(y, x)) continue; const l = y + SPEC.FIRST - 64, pic = l >= 0 && l < 192 && x >= 48 && x < 304; const want = p.fb[y * SPEC.FW + x] & 7 ? p.fb[y * SPEC.FW + x] : 0, okc = colourAt(tOf(y, x, best.off)) === want; if (pic) { n++; if (!okc) bad++; } else { nB++; if (!okc) badB++; } }
-    console.log(`picture (frame from T-state ${p.t0}): the ULA's dots come ${best.off} dots after the emulator's; picture ${bad} of ${n} dots differ, border ${badB} of ${nB} (the border follows the program's OUTs, which move with the clock holds)`);
+    for (let y = 0; y < SPEC.FH; y++) for (let x = 0; x < SPEC.FW; x++) { if (flashCell(y, x)) continue; const l = y + SPEC.FIRST - 64, pic = l >= 0 && l < 192 && x >= 48 && x < 304; const want = p.fb[y * SPEC.FW + x] & 7 ? p.fb[y * SPEC.FW + x] : 0, okc = colourAt(tOf(y, x, best.off)) === want; if (pic) { n++; if (!okc) bad++; } else { nB++; if (!okc) { badB++; if (x < 48 && !colourAt(tOf(y, x, best.off))) rep.blank = (rep.blank || 0) + 1; else (rep.bx = rep.bx || []).length < 6 && rep.bx.push([y, x, colourAt(tOf(y, x, best.off)), want]); if (process.env.TB_BORDER) (rep.bl = rep.bl || {})[y] = (rep.bl[y] || '') + (rep.bl[y] && rep.bl[y].length > 40 ? '' : x + ':' + colourAt(tOf(y, x, best.off)) + '/' + want + ' '); } } }
+    if (rep.bl) for (const y of Object.keys(rep.bl).slice(0, 12)) console.log('border line', y, rep.bl[y]);
+    console.log(`picture (frame from T-state ${p.t0}): the ULA's dots come ${best.off} dots after the emulator's; picture ${bad} of ${n} dots differ, border ${badB} of ${nB}: ${rep.blank || 0} of them black at the left edge, where the ULA is still blanking; others:`, rep.bx || []);
   } else console.log('picture: no whole frame in the run (run 3 frames or more)');
 }
 if (waveLog.length) for (const [ft, n, v] of waveLog) console.log(ft.toFixed(3), n, v);
-if (process.env.TB_FL) console.log(JSON.stringify((rep.fl||[]).slice(0,30)));
 module.exports = { startT, pics, SPEC, rasLog, sim, m, vlog, vInit, VN, venc, rI, off0, P, OSC, hwT, fetches };
 if (process.env.TB_PIC) require('./tbpic.js')(module.exports);

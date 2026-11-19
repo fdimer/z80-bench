@@ -73,26 +73,32 @@ A real gate that slow to switch would not pass it.
 ## What the testbench checks, and where it stands
 
 The emulator boots the ROM and runs a short test program; its bus cycles are replayed on the gate-level ULA, with the
-Z80 side clocked by the ULA's own CPU clock and the lower RAM (4116s), keyboard and EAR pin modelled.
+Z80 side clocked by the ULA's own CPU clock. The board around the ULA is modelled from Timex's issue 6A diagram: the
+lower RAM (4116s), the keyboard matrix, the EAR pin, the 470 ohm resistors on the data lines, TR3 (the Z80's clock is
+pin 32 inverted) and TR6, an emitter follower from the CPU's A0 that holds the ULA's IORQ input high for odd ports, so
+the ULA sees an I/O request only for even ones. The lower RAM keeps the last byte on the data lines for a while after
+CAS rises (the lines hold their charge until something drives them), which is what the floating bus is.
 
-Agrees with the emulator:
+T-state 0 of the frame is placed where the clock holds line up with the emulator's (the second CPU clock rise after
+INT falls). With that (`SPEC_ROM=... node ula6c/tb.js 4`):
 
-- 448 dots a line, 312 lines a frame (19.968 ms); INT 32 T-states once a frame;
-- 3.5 MHz CPU clock when nothing is contended;
+- clock holds (contention): all 73,605 bus cycles agree with the emulator, which agrees with Fuse's tests: memory
+  cycles to 4000h-7FFFh held 6, 5, 4, 3, 2, 1, 0, 0 from T-state 14,335, and I/O cycles as Fuse has them (even ports
+  N:1 C:3, odd ports N:4, contended high byte C:1 C:3 or C:1 C:1 C:1 C:1);
+- the floating bus: every read of an odd port returns what Fuse returns (the byte the ULA is fetching 3 T-states into
+  the I/O cycle). The emulator in `src/spectrum.js` looks 2 T-states earlier than Fuse, so it differs;
+- 448 dots a line, 312 lines a frame (19.968 ms); INT 32 T-states once a frame; 3.5 MHz CPU clock when uncontended;
 - two RAS cycles of two CAS each per fetch, as on Ferranti's timing sheet; every one of the ULA's screen reads goes to
   the address the emulator expects;
-- ROM select; port FE (keyboard, EAR); all but a few CPU reads of the lower RAM through the ULA's RAS/CAS;
+- ROM select; port FE (keyboard, EAR); every CPU read of the lower RAM through the ULA's RAS, CAS and DRAMWE;
 - the picture: the colour lines into the encoder (GREEN', RED', BLUE', N.HL), dot by dot, match the emulator's picture
   in every dot of the 256 x 192 area (cells with the flash bit left out: the ULA's flash counter starts where it
-  starts), 10 dots later than the emulator's timing.
+  starts), 8 dots later than the emulator's. The ULA is still blanking for the first 23 dots of the emulator's 48-dot
+  left border; the rest of the border agrees but for a cell around each OUT (the emulator changes it a cell at a time).
 
-Open:
-
-1. contended memory cycles: the ULA holds a cycle that starts at T-state 14,336 + n (n = 0-7 in each 8) for 6, 5, 4, 3,
-   2, 1, 0, 0, counting T-state 0 as the CPU clock rise after the first one that sees INT low (an instruction
-   starting there is the first to take the interrupt); the emulator, like Fuse, starts the pattern
-   at 14,335. It is one T-state either in the ULA or in how the Z80's INT sampling is counted;
-2. during the picture, I/O to odd ports is held as if it were the ULA's port (the drawing's clock-stop logic has no
-   A0 input), where a real 48K is known to leave them alone;
-3. so reads of an odd port never land on the ULA's screen reads, and the floating bus is never seen;
-4. the border can differ around the program's OUTs, which happen at other times when the holds differ.
+What stays open is where INT falls. Placed as above, INT falls 2.44 T-states before T-state 0. If the Z80 samples INT
+at the start of an instruction's last T-state (the data sheet's rising edge), an instruction starting at T-state -1
+to 30 takes the interrupt, one T-state earlier than Fuse's 0 to 31. Put the other way, relative to the interrupt this
+ULA holds the CPU one T-state later than Fuse: what Spectrum timing tests call a "late timing" machine, which some real
+48Ks are. It could also be the nominal delays, or the exact clock edge the Z80 samples INT on; a measurement on a real
+6C001E-7 would settle it.
