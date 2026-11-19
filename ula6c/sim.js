@@ -17,7 +17,7 @@
 // pull-down wins over everything; a driving chip cell wins over the outside (the board's resistors); otherwise the pin
 // takes what the outside set, or high (pulled up) if nothing was set.
 
-const ULA6C_DELAY = { buf_ef: 4, inv: 1.5, nor: 1.5, or: 1.5, ff: 5, pin: 3, xtal: 1 };
+const ULA6C_DELAY = { buf_ef: 4, inv: 1.7, nor: 1.4, or: 1.4, ff: 5, pin: 3, xtal: 1 };
 
 class Ula6cSim {
   constructor(text, opts = {}) {

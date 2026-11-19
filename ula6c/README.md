@@ -36,7 +36,7 @@ If you appreciate the archive, its compiler asks that you consider supporting th
 
 ## Files
 
-- `6c001.net`: the netlist, 384 elements (gates, flip-flops, counters, latches, pin cells, and the oscillator, tape and
+- `6c001.net`: the netlist, 385 elements (gates, flip-flops, counters, latches, pin cells, and the oscillator, tape and
   colour-encoder cells), one per line: `id type outputs inputs @grid`. Grid references are the drawing's (column
   letters, row numbers). Nets carry the drawing's pin names (`PN35_NRAS` and so on) where they reach a pin.
 - `sim.js`: the event-driven simulation (`Ula6cSim`). Cell behaviours are in its header.
@@ -54,6 +54,9 @@ simulation disagreed. Corrections made by hand include:
 - N.ADEN, the address pins' enable, comes from the RTL2 inverter; RAS comes from the NOR beside RASEXT (they meet at
   the ⊗ above the RAS pin only on paper);
 - the data pins D0-D4, D6 and KB0 are open-collector (R38, OC1);
+- the VIDEN' latch (column W, row 10) was missed as a box, so its outline had been read as wires joining its inputs and
+  outputs together; without it the picture went on into the border;
+- the shift register's clock had been joined to the D2 input of its second stage across a fold in the paper;
 - **one departure from the drawing:** the drawing feeds the A2 row address from the N.F line (F inverted), which
   would put half of the screen reads at the wrong address. It is taken from G, the next counter stage, which is what
   the screen layout needs. This looks like a drafting slip, but it is a guess.
@@ -61,7 +64,11 @@ simulation disagreed. Corrections made by hand include:
 ## Delays
 
 The archive has no gate delays for the 6C000 series (Table 2.1 covers the 2C000 and 5C000). Nominal values are used:
-1.5 ns a gate, 5 ns a flip-flop, 4 ns an input or output buffer. With these the RAS/CAS lines have no glitches.
+1.4 ns a NOR, 1.7 ns an inverter, 5 ns a flip-flop, 4 ns an input or output buffer. With these the RAS/CAS lines have
+no glitches. The inverter is taken a little slower than the NOR for one reason: when the inhibit window ends on the
+same oscillator edge that would start the CPU clock's next half, the clock gate (column AN, row 15) sees a pulse one
+gate wide; with the NOR at least as fast as that pulse it passes, and then runs round the clock-stop latch for ever.
+A real gate that slow to switch would not pass it.
 
 ## What the testbench checks, and where it stands
 
@@ -74,13 +81,18 @@ Agrees with the emulator:
 - 3.5 MHz CPU clock when nothing is contended;
 - two RAS cycles of two CAS each per fetch, as on Ferranti's timing sheet; every one of the ULA's screen reads goes to
   the address the emulator expects;
-- ROM select; port FE (keyboard, EAR); most CPU reads of the lower RAM through the ULA's RAS/CAS.
+- ROM select; port FE (keyboard, EAR); all but a few CPU reads of the lower RAM through the ULA's RAS/CAS;
+- the picture: the colour lines into the encoder (GREEN', RED', BLUE', N.HL), dot by dot, match the emulator's picture
+  in every dot of the 256 x 192 area (cells with the flash bit left out: the ULA's flash counter starts where it
+  starts), 10 dots later than the emulator's timing.
 
 Open:
 
-1. contended memory cycles are held one T-state longer than the 6, 5, 4, 3, 2, 1, 0, 0 the emulator uses, measured
-   from INT. Taking pin 32 as the Z80's clock without the board's inversion gives the emulator's figures exactly, but
-   then the hold comes after MREQ falls, so that is not taken as the answer;
-2. during the picture, I/O to odd ports is held too (the drawing's clock-stop logic has no A0 input);
-3. reads of an odd port never see the screen data (the floating bus), tied up with 2;
-4. the picture itself: the colour lines into the encoder cell are not decoded yet.
+1. contended memory cycles: the ULA holds a cycle that starts at T-state 14,336 + n (n = 0-7 in each 8) for 6, 5, 4, 3,
+   2, 1, 0, 0, counting T-state 0 as the CPU clock rise after the first one that sees INT low (an instruction
+   starting there is the first to take the interrupt); the emulator, like Fuse, starts the pattern
+   at 14,335. It is one T-state either in the ULA or in how the Z80's INT sampling is counted;
+2. during the picture, I/O to odd ports is held as if it were the ULA's port (the drawing's clock-stop logic has no
+   A0 input), where a real 48K is known to leave them alone;
+3. so reads of an odd port never land on the ULA's screen reads, and the floating bus is never seen;
+4. the border can differ around the program's OUTs, which happen at other times when the holds differ.

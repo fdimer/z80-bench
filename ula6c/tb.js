@@ -14,7 +14,7 @@
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const { Ula6cSim } = require('./sim.js');
 const romPath = process.env.SPEC_ROM; if (!romPath) { console.log('set SPEC_ROM to a Spectrum 48K ROM image'); process.exit(1); }
-const FRAMES = +(process.argv[2] || 2);
+const FRAMES = +(process.env.TB_FRAMES || (require.main === module && process.argv[2]) || 2);
 const ctx = { console }; vm.createContext(ctx);
 for (const f of ['z80core.js', 'memchips.js', 'spectrum.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
 vm.runInContext('this.SpecMachine = SpecMachine; this.SPEC = SPEC;', ctx);
@@ -150,10 +150,11 @@ function edge(rise, t) {
       rep.cyc++;
       start(cur);
     } else { Tk++; act(cur, true); }
-  } else act(cur, false);
+  } else if (cur) act(cur, false);
 }
 let prevK = '', prevPc = 0, prevA = 0;
-sim.watch[PIN.CLK] = (v, t) => edge(v === 0, t);             // CLK = NOT pin 32
+let lastClkT = 0;
+sim.watch[PIN.CLK] = (v, t) => { if (t - lastClkT < 60) { rep.clkGlitch = (rep.clkGlitch || 0) + 1; if (!rep.clkG1) rep.clkG1 = hwT(t); } lastClkT = t; edge(v === 0, t); };             // CLK = NOT pin 32
 function start(c) {
   const k = c.k;
   if (k === 'ID') { sim.at(sim.t + D.addr, () => busA(lastA)); return; }
@@ -215,6 +216,9 @@ if (process.env.TB_WAVE) {
     sim.watch[n] = (v, t) => { if (waveOn) waveLog.push([hwT(t) - off0 - waveDrift, n, v]); if (prev) prev(v, t); };
   }
 }
+// the emulator's finished pictures, each with the absolute T-state its frame started at
+const pics = [];
+{ const ef = m.endFrame.bind(m); m.endFrame = function () { this.drawTo(SPEC.FRAME_T); pics.push({ t0: Math.floor(emuBase / SPEC.FRAME_T) * SPEC.FRAME_T, fb: this.fb.slice(), flash: this.flash }); ef(); }; }
 // ---- run ----
 const endT = startT + FRAMES * SPEC.FRAME_T * P;
 const keyDown = startT + 0.5 * SPEC.FRAME_T * P;
@@ -232,6 +236,7 @@ console.log(`alignment: the first cycle started ${off0 && off0.toFixed(2)} T-sta
 console.log(`clock holds: ${rep.holdBad.length} cycles where the ULA held the CPU longer (+) or shorter (-) than the emulator`, hist(rep.holdBad.map(x => x.k + ' ' + x.extra)), rep.holdBad.slice(0, 6));
 const iF = ints.filter(x => x[1] === 0).map(x => +hwT(x[0]).toFixed(2)), iR = ints.filter(x => x[1] === 1).map(x => +hwT(x[0]).toFixed(2));
 console.log('contended memory cycles in hw: phase (T-state from 14,335, mod 8) and the hold', rep.phase);
+console.log(`CPU clock pulses shorter than 60 ns: ${rep.clkGlitch || 0}, first at T ${rep.clkG1}`);
 console.log(`INT: falls at T`, iF, 'rises at T', iR);
 console.log(`CPU reads of the lower RAM: ${rep.lowN}, ${rep.dataBad.length} differ`, rep.dataBad.slice(0, 4));
 console.log(`ROM select: ${rep.romcsBad.length} memory cycles wrong`, rep.romcsBad.slice(0, 3));
@@ -247,7 +252,25 @@ const fT = fetches.map(f => ({ ft: ((hwT(f.t) - off0) % SPEC.FRAME_T + SPEC.FRAM
 let fBest = null;
 for (let d = -3; d <= 3; d++) { let ok = 0; for (const f of fT) { const e = m.ulaFetch(Math.floor(f.ft) + d); if (e && e.addr === f.a) ok++; } if (!fBest || ok > fBest.ok) fBest = { d, ok }; }
 console.log(`ULA screen reads: ${fetches.length}; ${fBest.ok} match the emulator's addresses taking the emulator's T-state as the CAS fall's ${fBest.d >= 0 ? '+' : ''}${fBest.d}`);
+// ---- the picture: the colour lines into the encoder (GREEN', RED', BLUE', and N.HL for bright), dot by dot, against
+// the emulator's picture of a frame the replay covered whole. The ULA's own delay is found as the best offset. Cells
+// with the flash bit are left out (the ULA's flash counter starts wherever it starts) ----
+{
+  const VI = n => VN.indexOf(n), lv = (i, t) => { const e = vlog[i]; let lo = 0, hi = e.length - 1, v = vInit[i]; while (lo <= hi) { const mid = (lo + hi) >> 1; if (e[mid][0] <= t) { v = e[mid][1]; lo = mid + 1; } else hi = mid - 1; } return v; };
+  const ix = ["GREEN'", "RED'", "BLUE'", 'N.HL'].map(VI);
+  const p = pics.filter(q => rI + (q.t0 + off0) * P > startT && rI + (q.t0 + off0 + SPEC.FRAME_T) * P < sim.t).pop();
+  if (p) {
+    const colourAt = t => { let c = lv(ix[0], t) * 4 + lv(ix[1], t) * 2 + lv(ix[2], t); if (c && !lv(ix[3], t)) c += 8; return c; };
+    const tOf = (y, x, off) => { const line = y + SPEC.FIRST, ft = SPEC.DISP_T + (line - 64) * SPEC.LINE_T + ((x >> 3) - 6) * 4 + (x & 7) / 2; return rI + (p.t0 + ft + off0) * P + (off + 0.5) * P / 2; };
+    const flashCell = (y, x) => { const l = y + SPEC.FIRST - 64; if (l < 0 || l >= 192 || x < 48 || x >= 304) return false; return (m.ram[0x1800 + (l >> 3) * 32 + ((x - 48) >> 3)] & 0x80) !== 0; };
+    let best = null;
+    for (let off = -4; off <= 24; off++) { let ok = 0, n = 0; for (let y = 0; y < SPEC.FH; y += 7) for (let x = 0; x < SPEC.FW; x += 3) { if (flashCell(y, x)) continue; n++; if (colourAt(tOf(y, x, off)) === (p.fb[y * SPEC.FW + x] & 7 ? p.fb[y * SPEC.FW + x] : 0)) ok++; } if (!best || ok > best.ok) best = { off, ok, n }; }
+    let bad = 0, n = 0, badB = 0, nB = 0;
+    for (let y = 0; y < SPEC.FH; y++) for (let x = 0; x < SPEC.FW; x++) { if (flashCell(y, x)) continue; const l = y + SPEC.FIRST - 64, pic = l >= 0 && l < 192 && x >= 48 && x < 304; const want = p.fb[y * SPEC.FW + x] & 7 ? p.fb[y * SPEC.FW + x] : 0, okc = colourAt(tOf(y, x, best.off)) === want; if (pic) { n++; if (!okc) bad++; } else { nB++; if (!okc) badB++; } }
+    console.log(`picture (frame from T-state ${p.t0}): the ULA's dots come ${best.off} dots after the emulator's; picture ${bad} of ${n} dots differ, border ${badB} of ${nB} (the border follows the program's OUTs, which move with the clock holds)`);
+  } else console.log('picture: no whole frame in the run (run 3 frames or more)');
+}
 if (waveLog.length) for (const [ft, n, v] of waveLog) console.log(ft.toFixed(3), n, v);
 if (process.env.TB_FL) console.log(JSON.stringify((rep.fl||[]).slice(0,30)));
-module.exports = { rasLog, sim, m, vlog, vInit, VN, venc, rI, off0, P, OSC, hwT, fetches };
+module.exports = { startT, pics, SPEC, rasLog, sim, m, vlog, vInit, VN, venc, rI, off0, P, OSC, hwT, fetches };
 if (process.env.TB_PIC) require('./tbpic.js')(module.exports);
