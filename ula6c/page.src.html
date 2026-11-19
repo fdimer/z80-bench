@@ -1,0 +1,223 @@
+<title>Spectrum ULA Test Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* a bench: left, the TV and what you do to the machine; right, the instruments */
+:root {
+  --bg: #f4f3f1; --panel: #ffffff; --ink: #1d1f24; --muted: #5f6470; --line: #d6d6db;
+  --accent: #b3261e; --accent-ink: #ffffff; --ok: #1d7a46; --warn: #a65f00; --bad: #b3261e; --tv: #2a2c31;
+  --f-head: "Space Grotesk", "Segoe UI", system-ui, sans-serif; --f-body: Inter, "Segoe UI", system-ui, sans-serif; --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141519; --panel: #1d1f25; --ink: #e8e9ec; --muted: #9da2ad; --line: #33363e;
+  --accent: #f08a80; --accent-ink: #2a0a07; --ok: #6ad18f; --warn: #e3a54a; --bad: #f08a80; --tv: #0c0d10; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141519; --panel: #1d1f25; --ink: #e8e9ec; --muted: #9da2ad; --line: #33363e;
+  --accent: #f08a80; --accent-ink: #2a0a07; --ok: #6ad18f; --warn: #e3a54a; --bad: #f08a80; --tv: #0c0d10; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 20px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 18px; }
+h1 { font: 600 26px/1.15 var(--f-head); margin: 0; text-wrap: balance; }
+h2 { font: 600 13px/1.2 var(--f-head); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+p { margin: 0; } .lede { color: var(--muted); max-width: 70ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, select, .filebtn { font: 500 14px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 6px 11px; cursor: pointer; }
+button:hover, .filebtn:hover, select:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible, .filebtn:focus-within, canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+select { max-width: 100%; min-width: 0; flex: 1 1 14em; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+.filebtn { position: relative; } .filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.tvbox { background: var(--tv); border-radius: 4px; padding: 10px; }
+#tv { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #000; aspect-ratio: 352 / 288; max-width: 100%; }
+.msg { font-size: 14px; color: var(--muted); min-height: 3em; } .msg.err { color: var(--bad); } .msg.ok { color: var(--ok); }
+dl.meters { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-variant-numeric: tabular-nums; }
+dl.meters dt { color: var(--muted); } dl.meters dd { margin: 0; min-height: 1.5em; font-family: var(--f-mono); font-size: 13.5px; text-align: right; overflow-wrap: anywhere; }
+.pill { display: inline-block; font: 600 12px var(--f-mono); padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); } .pill.idle { color: var(--muted); }
+.kbd { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.kbd button { padding: 5px 1px; min-width: 0; overflow: hidden; font: 600 clamp(9px, 1.6vw, 13px) var(--f-mono); white-space: nowrap; }
+.kbd button.down { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.small { font-size: 13px; color: var(--muted); max-width: 80ch; }
+textarea { width: 100%; box-sizing: border-box; font: 12.5px/1.45 var(--f-mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; min-height: 150px; }
+a { color: var(--accent); }
+footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Spectrum ULA Test Bench</h1>
+    <p class="lede">A ZX Spectrum 48K whose ULA is the real logic, not a model of its behaviour: the Ferranti 6C001E-7 transcribed gate for gate from its logic diagram and simulated gate by gate, each with its delay. The Z80 runs on the ULA's own clock, so contention is whatever the gates do, and the picture comes from the ULA's colour lines. It is slow, a few per cent of a real Spectrum; it is for checking the ULA, not for playing.</p>
+  </header>
+
+  <div class="bench">
+    <section class="panel" aria-label="The machine">
+      <div class="row">
+        <label class="filebtn" for="romFile">Load ROM…<input type="file" id="romFile"></label>
+        <label class="filebtn" for="snaFile">Load snapshot (.sna, .z80)…<input type="file" id="snaFile" accept=".sna,.z80"></label>
+        <button id="btnRun" class="primary" type="button" disabled>Run</button>
+        <button id="btnReset" type="button" disabled>Reset</button>
+      </div>
+      <div class="row">
+        <label for="start">Start</label>
+        <select id="start">
+          <option value="boot">From a started machine (the ROM's start-up run by the emulator)</option>
+          <option value="cold">From power-on (the ROM's memory test takes a while)</option>
+        </select>
+      </div>
+      <p class="msg" id="msg">Choose a Spectrum 48K ROM image (16K, 16,384 bytes). The ROM is not part of this page; it stays in your browser.</p>
+      <div class="tvbox"><canvas id="tv" width="352" height="288" tabindex="0" aria-label="Spectrum picture. Click here and type."></canvas></div>
+      <p class="small">The black stripes at the left edge are on the ULA's colour lines at the start of each line in this simulation, where the emulator shows border. That difference is still being looked into (the README in the repository has where it stands).</p>
+      <div class="kbd" id="kbd" aria-label="Spectrum keyboard"></div>
+      <p class="small">Click the picture and type: Shift is CAPS SHIFT, Ctrl or Alt is SYMBOL SHIFT, Backspace is DELETE (CAPS SHIFT + 0) and the arrow keys are CAPS SHIFT + 5 to 8. The keys below are the Spectrum's rows; CAPS and SYMBOL latch for one key. At a few per cent of full speed, hold a key until the screen answers.</p>
+    </section>
+
+    <section class="panel" aria-label="Instruments">
+      <h2>Machine</h2>
+      <dl class="meters">
+        <dt>Speed</dt><dd id="mSpeed">–</dd>
+        <dt>Spectrum time run</dt><dd id="mTime">–</dd>
+        <dt>Frames (vertical syncs)</dt><dd id="mFrames">–</dd>
+        <dt>Lines between vertical syncs</dt><dd id="mLines">–</dd>
+        <dt>Interrupts taken</dt><dd id="mInt">–</dd>
+        <dt>T-states held (contention)</dt><dd id="mHold">–</dd>
+        <dt>Gate events</dt><dd id="mEv">–</dd>
+        <dt>Program counter</dt><dd id="mPc">–</dd>
+      </dl>
+      <h2>Picture check</h2>
+      <p><span class="pill idle" id="pcPill">waiting</span> <span id="pcText" class="small"></span></p>
+      <p class="small">Each frame from the ULA's colour lines is compared, dot by dot, with what the bitmap and attributes in its lower RAM say the 256 × 192 picture should be. Flashing cells are left out (the ULA's flash counter starts where it starts), and a screen being drawn can differ for a frame.</p>
+      <h2>Report</h2>
+      <div class="row"><button id="btnReport" type="button">Write report</button><button id="btnCopy" type="button">Copy</button></div>
+      <textarea id="report" readonly aria-label="Test report" placeholder="A summary of this run, to paste into an issue or an email."></textarea>
+    </section>
+  </div>
+
+  <footer>
+    <p class="small"><b>What is checked elsewhere.</b> The testbench in the repository runs the emulator's Z80 against this ULA and compares cycle by cycle: contention (every hold agrees with Fuse's figures), the floating bus, port FE, ROM select, the CPU's reads of the lower RAM, the ULA's screen reads and the picture. Its README says where it stands.</p>
+    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6790/ULA6C001/1 revision 3 (10 October 1983, the copy marked in red for mark 7) and the cell circuits 6C001/2, /3 and /4, from the Ferranti archive catalogued in 2026 by Happy Little Diodes (<a href="https://youtu.be/jiW3P1rJRMc">watch the video about the archive</a>); the board from Timex's issue 6A circuit diagram. The netlist, the simulation and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/spectrum-ULA/ula6c">spectrum-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">__VERSION__</span>.</p>
+    <p class="small"><b>Terms of use.</b> The archive's documents are for preserving material of historical interest and for non-commercial, educational and archival research only; commercial use of them or their contents, including in connection with the manufacture, marketing or sale of goods, is prohibited by Sky UK Limited. This page and the netlist are made from those contents and carry the same terms: strictly not for commercial use of any kind. The code is under the PolyForm Noncommercial License 1.0.0. The Spectrum ROM is not part of this project.</p>
+    <p class="small"><b>Not modelled.</b> The tape, the speaker's sound, the colour encoder's analogue side (the picture is the colour lines into it), and the upper RAM's own chips. The gate delays are nominal (the archive has none for the 6C000 series), and the Z80's timing follows the data sheet's shape with fixed delays.</p>
+  </footer>
+</div>
+
+<script>/*INCLUDE:../src/z80core.js*/</script>
+<script>/*INCLUDE:../src/memchips.js*/</script>
+<script>/*INCLUDE:../src/spectrum.js*/</script>
+<script>/*INCLUDE:fastsim.js*/</script>
+<script>/*INCLUDE:specula.js*/</script>
+<script>/*INCLUDE:piccheck.js*/</script>
+<script>const ULA_NET = /*NET*/;</script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id), T_HZ = 3.5e6, FRAME_T = 69888;
+  const RGB = SPEC.RGB, PLACE = { x0: 85, y0: 60 };   // where the 256 x 192 picture sits in SpecUla's frame (found by ula6c/runspec.js)
+  let rom = null, m = null, running = false, ranT = 0, speed = 0, snap = null, snapName = '';
+  const pc = { checks: 0, bad: 0, last: null };
+  const say = (t, cls) => { $('msg').textContent = t; $('msg').className = 'msg' + (cls ? ' ' + cls : ''); };
+
+  function build() {
+    m = new SpecUla(Z80, new Ula6cFast(ULA_NET), rom);
+    const mode = $('start').value;
+    if (snap || mode === 'boot') {
+      const e = new SpecMachine(); e.loadRom(rom); e.reset();
+      if (snap) e.loadSnapshot(snap, snapName); else e.run(3.5e6 * 2.5);
+      m.adopt(e);
+    }
+    let first = true; m.onFrame = () => { if (first) first = false; else pc.fresh = true; };   // the first frame is only part of one
+    m.T0 = m.T; ranT = 0; drawn = -1; pictureCheck(null, 0, 0, null, true, PLACE); Object.assign(pc, { checks: 0, bad: 0, last: null });
+    for (const b of ['btnRun', 'btnReset']) $(b).disabled = false;
+  }
+  function setRunning(on) { running = on; $('btnRun').textContent = on ? 'Pause' : 'Run'; if (on) { last = performance.now(); requestAnimationFrame(loop); } else { draw(); meters(); } }
+
+  // ---- keys ----
+  const press = (name, down) => { if (m) m.key(name, down); const b = document.querySelector(`#kbd button[data-k="${name}"]`); if (b) b.classList.toggle('down', down); };
+  const keyNames = e => {
+    if (e.key === 'Enter') return ['ENTER']; if (e.key === ' ') return ['SPACE']; if (e.key === 'Shift') return ['CAPS SHIFT'];
+    if (e.key === 'Control' || e.key === 'Alt') return ['SYMBOL SHIFT']; if (e.key === 'Backspace') return ['CAPS SHIFT', '0'];
+    const arr = { ArrowLeft: '5', ArrowDown: '6', ArrowUp: '7', ArrowRight: '8' }[e.key]; if (arr) return ['CAPS SHIFT', arr];
+    if (/^[a-z0-9]$/i.test(e.key)) return [e.key.toUpperCase()]; return null;
+  };
+  $('tv').addEventListener('keydown', e => { const k = keyNames(e); if (!k) return; e.preventDefault(); for (const n of k) press(n, true); });
+  $('tv').addEventListener('keyup', e => { const k = keyNames(e); if (!k) return; e.preventDefault(); for (const n of k) press(n, false); });
+  $('tv').addEventListener('blur', () => { for (const r of SPECULA_KEYS) for (const k of r) press(k, false); });
+  let latch = null; const held = new Set();
+  { const rows = [[3, 4], [2, 5], [1, 6], [0, 7]], kb = $('kbd');          // 1-5 6-0, Q-T Y-P, A-G H-ENTER, CAPS-V B-SPACE
+    for (const [l, r] of rows) for (const k of [...SPECULA_KEYS[l], ...SPECULA_KEYS[r].slice().reverse()]) {
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.k = k;
+      b.textContent = k === 'CAPS SHIFT' ? 'CAPS' : k === 'SYMBOL SHIFT' ? 'SYMB' : k; b.title = k;
+      b.addEventListener('pointerdown', e => { e.preventDefault(); if (k.endsWith('SHIFT')) { if (latch === k) { latch = null; press(k, false); } else { if (latch) press(latch, false); latch = k; press(k, true); } return; } press(k, true); held.add(k); });
+      const up = () => { if (!held.has(k)) return; held.delete(k); setTimeout(() => { press(k, false); if (latch) { press(latch, false); latch = null; } }, 400); };
+      b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); kb.appendChild(b);
+    } }
+
+  // ---- the run loop: as fast as it goes, 14 ms of work per screen refresh ----
+  let last = 0;
+  function loop(now) {
+    if (!running) return;
+    const dt = Math.max(1, now - last); last = now;
+    const t0 = performance.now(), T0 = m.T;
+    try { while (performance.now() - t0 < 14) m.run(20000); }
+    catch (e) { say('The machine stopped: ' + e.message, 'err'); setRunning(false); return; }
+    ranT += m.T - T0; speed = speed * 0.8 + 0.2 * ((m.T - T0) / T_HZ) / (dt / 1000);
+    if (pc.fresh) { pc.fresh = false; check(); }
+    draw(); meters();
+    requestAnimationFrame(loop);
+  }
+
+  // ---- the picture: the last whole frame, with the frame in progress laid over it (it is slow to finish one) ----
+  const tv = $('tv').getContext('2d'), img = tv.createImageData(352, 288); let drawn = -1;
+  function draw() {
+    if (!m) return;
+    const d = img.data, W = m.W, place = PLACE, X0 = Math.max(0, place.x0 - 48), Y0 = Math.max(0, place.y0 - 48);
+    for (let y = 0, i = 0; y < 288; y++) { const fy = Y0 + y, src = fy < m.y ? m.fb : m.frame;
+      for (let x = 0; x < 352; x++, i += 4) { const c = fy < m.H ? src[fy * W + X0 + x] : 0, rgb = RGB[c] ?? 0; d[i] = rgb >> 16; d[i + 1] = rgb >> 8 & 255; d[i + 2] = rgb & 255; d[i + 3] = 255; } }
+    tv.putImageData(img, 0, 0);
+  }
+  function check() {
+    const r = pictureCheck(m.frame, m.W, m.H, m.ram); pc.checks++; pc.last = r;
+    const pill = $('pcPill');
+    if (!r.found) { pill.className = 'pill warn'; pill.textContent = 'no picture'; $('pcText').textContent = 'The 256 × 192 picture was not found in the last frame (a blank or changing screen).'; return; }
+    if (r.bad) pc.bad++;
+    pill.className = 'pill ' + (r.bad ? 'bad' : 'ok'); pill.textContent = r.bad ? r.bad + ' dots differ' : 'matches';
+    $('pcText').textContent = `${r.n} dots compared (frame ${m.frames}); ${pc.bad} of ${pc.checks} frames checked had differences.`;
+  }
+  function meters() {
+    if (!m) return;
+    $('mSpeed').textContent = running ? (speed * 100).toFixed(1) + '% of a Spectrum' : 'paused';
+    $('mTime').textContent = (ranT / T_HZ).toFixed(2) + ' s'; $('mFrames').textContent = m.frames; $('mLines').textContent = m.lastLines || '–';
+    $('mInt').textContent = m.ints; $('mHold').textContent = m.holds.toLocaleString(); $('mEv').textContent = m.u.events.toLocaleString();
+    $('mPc').textContent = m.cpu.pc.toString(16).toUpperCase().padStart(4, '0') + 'h';
+  }
+
+  // ---- files ----
+  function crc32(b) { let c = ~0; for (let i = 0; i < b.length; i++) { c ^= b[i]; for (let k = 0; k < 8; k++) c = c >>> 1 ^ (c & 1 ? 0xEDB88320 : 0); } return (~c >>> 0).toString(16).toUpperCase().padStart(8, '0'); }
+  function useRom(u) {
+    if (u.length !== 16384) { say('That is not a 48K ROM image: it should be 16,384 bytes.', 'err'); return; }
+    rom = u; try { localStorage.setItem('specula-rom', btoa(String.fromCharCode(...u))); } catch (e) {}
+    build(); say(`ROM loaded (CRC32 ${crc32(u)}).` + ($('start').value === 'boot' && !snap ? ' The emulator ran the start-up; the gate-level machine has taken over at the copyright message.' : ' Starting from power-on: the memory test takes a few seconds of Spectrum time, which here is minutes.'), 'ok');
+    setRunning(true);
+  }
+  $('romFile').onchange = async e => { const f = e.target.files[0]; if (f) useRom(new Uint8Array(await f.arrayBuffer())); };
+  $('snaFile').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return; snap = new Uint8Array(await f.arrayBuffer()); snapName = f.name;
+    if (!rom) { say('Load the ROM first; the snapshot will start then.'); return; }
+    try { build(); say(`Snapshot ${f.name} loaded into the gate-level machine.`, 'ok'); setRunning(true); } catch (err) { snap = null; say('That snapshot could not be read: ' + err.message, 'err'); }
+  };
+  $('btnRun').onclick = () => setRunning(!running);
+  $('btnReset').onclick = () => { snap = null; build(); say('Started again.'); if (!running) setRunning(true); };
+  $('start').onchange = () => { if (rom) { snap = null; build(); say('Started again.'); if (!running) setRunning(true); } };
+  $('btnReport').onclick = () => {
+    if (!m) return;
+    $('report').value = ['Spectrum ULA Test Bench report', 'Design version: ' + $('ver').textContent, 'Logic: gate-level netlist (6c001.net), fast engine',
+      'ROM: CRC32 ' + (rom ? crc32(rom) : 'none'), 'Start: ' + (snap ? 'snapshot ' + snapName : $('start').value), 'Spectrum time run: ' + (ranT / T_HZ).toFixed(2) + ' s',
+      'Frames: ' + m.frames + ', lines between vertical syncs: ' + m.lastLines, 'Interrupts: ' + m.ints + ', T-states held: ' + m.holds, 'PC: ' + m.cpu.pc.toString(16).toUpperCase() + 'h',
+      'Picture check: ' + pc.checks + ' frames checked, ' + pc.bad + ' with differences' + (pc.last && pc.last.found ? `; the last: ${pc.last.bad} of ${pc.last.n} dots differ` : ''),
+      'Browser: ' + navigator.userAgent].join('\n');
+  };
+  $('btnCopy').onclick = () => { const t = $('report').value; if (!t) return; navigator.clipboard.writeText(t).then(() => say('Report copied.', 'ok'), () => { $('report').select(); say('Select-all done: press Ctrl+C to copy.'); }); };
+  try { const s = localStorage.getItem('specula-rom'); if (s) { const u = Uint8Array.from(atob(s), c => c.charCodeAt(0)); if (u.length === 16384) { rom = u; build(); say(`ROM remembered from last time (CRC32 ${crc32(u)}). Press Run.`); draw(); } } } catch (e) {}
+})();
+</script>

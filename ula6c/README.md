@@ -102,3 +102,19 @@ to 30 takes the interrupt, one T-state earlier than Fuse's 0 to 31. Put the othe
 ULA holds the CPU one T-state later than Fuse: what Spectrum timing tests call a "late timing" machine, which some real
 48Ks are. It could also be the nominal delays, or the exact clock edge the Z80 samples INT on; a measurement on a real
 6C001E-7 would settle it.
+
+## The whole machine and the page
+
+`specula.js` is a Spectrum 48K run from this ULA, closed loop: the emulator's Z80 core makes its bus cycles on the
+ULA's own clock edges, so contention, the screen fetches, INT, the keyboard and the picture all come from the gates.
+`piccheck.js` compares each frame from the colour lines with what the bitmap and attributes in the lower RAM say.
+`SPEC_ROM=... node ula6c/runspec.js [frames] [boot|cold]` runs it; with the ROM's start-up run by the emulator and
+handed over, every dot of the 256 x 192 area matches, and it runs at about 3% of a real Spectrum.
+
+`page.src.html` is the browser test bench; `node ula6c/build_page.js` puts the scripts and the netlist into it and
+writes `spectrum-ula.html`, one self-contained file. The ROM is not in it: the page asks for one.
+
+In the frame `specula.js` collects (dots counted from the end of each line sync), the picture starts at dot 85 and
+line 60. At the start of each line the colour lines carry 8 dots of black, then the border colour and black in turn
+for 16 dots each (twice), then the border from dot 72: the black stretches are the left-edge difference the testbench
+reports. Whether the real chip does the same is open.

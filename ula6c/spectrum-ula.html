@@ -1,0 +1,1980 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A ZX Spectrum 48K run from the gate-level logic of its Ferranti ULA (6C001E-7), for testing the ULA against real programs. Non-commercial use only.">
+<title>Spectrum ULA Test Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* a bench: left, the TV and what you do to the machine; right, the instruments */
+:root {
+  --bg: #f4f3f1; --panel: #ffffff; --ink: #1d1f24; --muted: #5f6470; --line: #d6d6db;
+  --accent: #b3261e; --accent-ink: #ffffff; --ok: #1d7a46; --warn: #a65f00; --bad: #b3261e; --tv: #2a2c31;
+  --f-head: "Space Grotesk", "Segoe UI", system-ui, sans-serif; --f-body: Inter, "Segoe UI", system-ui, sans-serif; --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141519; --panel: #1d1f25; --ink: #e8e9ec; --muted: #9da2ad; --line: #33363e;
+  --accent: #f08a80; --accent-ink: #2a0a07; --ok: #6ad18f; --warn: #e3a54a; --bad: #f08a80; --tv: #0c0d10; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141519; --panel: #1d1f25; --ink: #e8e9ec; --muted: #9da2ad; --line: #33363e;
+  --accent: #f08a80; --accent-ink: #2a0a07; --ok: #6ad18f; --warn: #e3a54a; --bad: #f08a80; --tv: #0c0d10; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 20px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 18px; }
+h1 { font: 600 26px/1.15 var(--f-head); margin: 0; text-wrap: balance; }
+h2 { font: 600 13px/1.2 var(--f-head); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+p { margin: 0; } .lede { color: var(--muted); max-width: 70ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, select, .filebtn { font: 500 14px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 6px 11px; cursor: pointer; }
+button:hover, .filebtn:hover, select:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible, .filebtn:focus-within, canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+select { max-width: 100%; min-width: 0; flex: 1 1 14em; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+.filebtn { position: relative; } .filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.tvbox { background: var(--tv); border-radius: 4px; padding: 10px; }
+#tv { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #000; aspect-ratio: 352 / 288; max-width: 100%; }
+.msg { font-size: 14px; color: var(--muted); min-height: 3em; } .msg.err { color: var(--bad); } .msg.ok { color: var(--ok); }
+dl.meters { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-variant-numeric: tabular-nums; }
+dl.meters dt { color: var(--muted); } dl.meters dd { margin: 0; min-height: 1.5em; font-family: var(--f-mono); font-size: 13.5px; text-align: right; overflow-wrap: anywhere; }
+.pill { display: inline-block; font: 600 12px var(--f-mono); padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); } .pill.idle { color: var(--muted); }
+.kbd { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.kbd button { padding: 5px 1px; min-width: 0; overflow: hidden; font: 600 clamp(9px, 1.6vw, 13px) var(--f-mono); white-space: nowrap; }
+.kbd button.down { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.small { font-size: 13px; color: var(--muted); max-width: 80ch; }
+textarea { width: 100%; box-sizing: border-box; font: 12.5px/1.45 var(--f-mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; min-height: 150px; }
+a { color: var(--accent); }
+footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+</style>
+</head>
+<body style="margin:0">
+
+
+<div class="wrap">
+  <header>
+    <h1>Spectrum ULA Test Bench</h1>
+    <p class="lede">A ZX Spectrum 48K whose ULA is the real logic, not a model of its behaviour: the Ferranti 6C001E-7 transcribed gate for gate from its logic diagram and simulated gate by gate, each with its delay. The Z80 runs on the ULA's own clock, so contention is whatever the gates do, and the picture comes from the ULA's colour lines. It is slow, a few per cent of a real Spectrum; it is for checking the ULA, not for playing.</p>
+  </header>
+
+  <div class="bench">
+    <section class="panel" aria-label="The machine">
+      <div class="row">
+        <label class="filebtn" for="romFile">Load ROM…<input type="file" id="romFile"></label>
+        <label class="filebtn" for="snaFile">Load snapshot (.sna, .z80)…<input type="file" id="snaFile" accept=".sna,.z80"></label>
+        <button id="btnRun" class="primary" type="button" disabled>Run</button>
+        <button id="btnReset" type="button" disabled>Reset</button>
+      </div>
+      <div class="row">
+        <label for="start">Start</label>
+        <select id="start">
+          <option value="boot">From a started machine (the ROM's start-up run by the emulator)</option>
+          <option value="cold">From power-on (the ROM's memory test takes a while)</option>
+        </select>
+      </div>
+      <p class="msg" id="msg">Choose a Spectrum 48K ROM image (16K, 16,384 bytes). The ROM is not part of this page; it stays in your browser.</p>
+      <div class="tvbox"><canvas id="tv" width="352" height="288" tabindex="0" aria-label="Spectrum picture. Click here and type."></canvas></div>
+      <p class="small">The black stripes at the left edge are on the ULA's colour lines at the start of each line in this simulation, where the emulator shows border. That difference is still being looked into (the README in the repository has where it stands).</p>
+      <div class="kbd" id="kbd" aria-label="Spectrum keyboard"></div>
+      <p class="small">Click the picture and type: Shift is CAPS SHIFT, Ctrl or Alt is SYMBOL SHIFT, Backspace is DELETE (CAPS SHIFT + 0) and the arrow keys are CAPS SHIFT + 5 to 8. The keys below are the Spectrum's rows; CAPS and SYMBOL latch for one key. At a few per cent of full speed, hold a key until the screen answers.</p>
+    </section>
+
+    <section class="panel" aria-label="Instruments">
+      <h2>Machine</h2>
+      <dl class="meters">
+        <dt>Speed</dt><dd id="mSpeed">–</dd>
+        <dt>Spectrum time run</dt><dd id="mTime">–</dd>
+        <dt>Frames (vertical syncs)</dt><dd id="mFrames">–</dd>
+        <dt>Lines between vertical syncs</dt><dd id="mLines">–</dd>
+        <dt>Interrupts taken</dt><dd id="mInt">–</dd>
+        <dt>T-states held (contention)</dt><dd id="mHold">–</dd>
+        <dt>Gate events</dt><dd id="mEv">–</dd>
+        <dt>Program counter</dt><dd id="mPc">–</dd>
+      </dl>
+      <h2>Picture check</h2>
+      <p><span class="pill idle" id="pcPill">waiting</span> <span id="pcText" class="small"></span></p>
+      <p class="small">Each frame from the ULA's colour lines is compared, dot by dot, with what the bitmap and attributes in its lower RAM say the 256 × 192 picture should be. Flashing cells are left out (the ULA's flash counter starts where it starts), and a screen being drawn can differ for a frame.</p>
+      <h2>Report</h2>
+      <div class="row"><button id="btnReport" type="button">Write report</button><button id="btnCopy" type="button">Copy</button></div>
+      <textarea id="report" readonly aria-label="Test report" placeholder="A summary of this run, to paste into an issue or an email."></textarea>
+    </section>
+  </div>
+
+  <footer>
+    <p class="small"><b>What is checked elsewhere.</b> The testbench in the repository runs the emulator's Z80 against this ULA and compares cycle by cycle: contention (every hold agrees with Fuse's figures), the floating bus, port FE, ROM select, the CPU's reads of the lower RAM, the ULA's screen reads and the picture. Its README says where it stands.</p>
+    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6790/ULA6C001/1 revision 3 (10 October 1983, the copy marked in red for mark 7) and the cell circuits 6C001/2, /3 and /4, from the Ferranti archive catalogued in 2026 by Happy Little Diodes (<a href="https://youtu.be/jiW3P1rJRMc">watch the video about the archive</a>); the board from Timex's issue 6A circuit diagram. The netlist, the simulation and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/spectrum-ULA/ula6c">spectrum-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">322d850 2026-11-19</span>.</p>
+    <p class="small"><b>Terms of use.</b> The archive's documents are for preserving material of historical interest and for non-commercial, educational and archival research only; commercial use of them or their contents, including in connection with the manufacture, marketing or sale of goods, is prohibited by Sky UK Limited. This page and the netlist are made from those contents and carry the same terms: strictly not for commercial use of any kind. The code is under the PolyForm Noncommercial License 1.0.0. The Spectrum ROM is not part of this project.</p>
+    <p class="small"><b>Not modelled.</b> The tape, the speaker's sound, the colour encoder's analogue side (the picture is the colour lines into it), and the upper RAM's own chips. The gate delays are nominal (the archive has none for the 6C000 series), and the Z80's timing follows the data sheet's shape with fixed delays.</p>
+  </footer>
+</div>
+
+<script>
+// ---- Z80 CPU core with machine-cycle bus logging ----
+const FS = 0x80, FZ = 0x40, F5 = 0x20, FH = 0x10, F3 = 0x08, FPV = 0x04, FN = 0x02, FC = 0x01;
+const SZ53 = new Uint8Array(256), SZ53P = new Uint8Array(256);
+for (let i = 0; i < 256; i++) {
+  SZ53[i] = (i & 0xA8) | (i ? 0 : FZ);
+  let p = i; p ^= p >> 4; p ^= p >> 2; p ^= p >> 1;
+  SZ53P[i] = SZ53[i] | ((p & 1) ? 0 : FPV);
+}
+const sgn = v => (v & 0x80) ? v - 256 : v;
+
+class Z80 {
+  constructor(bus) {
+    this.bus = bus;
+    this.log = true;
+    this.cyc = [];
+    this.nmiPending = false;
+    this.intLine = false;
+    this.intVector = 0xFF;
+    this.reset();
+  }
+  reset() {
+    this.a = 0xFF; this.f = 0xFF; this.b = this.c = this.d = this.e = this.h = this.l = 0;
+    this.a_ = this.f_ = this.b_ = this.c_ = this.d_ = this.e_ = this.h_ = this.l_ = 0;
+    this.ix = this.iy = 0xFFFF; this.sp = 0xFFFF; this.pc = 0; this.i = 0; this.r = 0;
+    this.iff1 = this.iff2 = 0; this.im = 0; this.halted = false; this.eiDelay = false;
+    this.nmiPending = false;
+  }
+  snapshot() {
+    const s = {};
+    for (const k of ['a','f','b','c','d','e','h','l','a_','f_','b_','c_','d_','e_','h_','l_','ix','iy','sp','pc','i','r','iff1','iff2','im','halted']) s[k] = this[k];
+    return s;
+  }
+  // pairs
+  get bc() { return (this.b << 8) | this.c; } set bc(v) { this.b = (v >> 8) & 0xFF; this.c = v & 0xFF; }
+  get de() { return (this.d << 8) | this.e; } set de(v) { this.d = (v >> 8) & 0xFF; this.e = v & 0xFF; }
+  get hl() { return (this.h << 8) | this.l; } set hl(v) { this.h = (v >> 8) & 0xFF; this.l = v & 0xFF; }
+  get af() { return (this.a << 8) | this.f; } set af(v) { this.a = (v >> 8) & 0xFF; this.f = v & 0xFF; }
+
+  // ---- bus cycles ----
+  fetch() {
+    const a = this.pc, v = this.bus.read(a);
+    if (this.log) this.cyc.push({ k: 'M1', a, d: v, rf: (this.i << 8) | this.r });
+    this.pc = (a + 1) & 0xFFFF;
+    this.r = (this.r & 0x80) | ((this.r + 1) & 0x7F);
+    return v;
+  }
+  mr(a) { a &= 0xFFFF; const v = this.bus.read(a); if (this.log) this.cyc.push({ k: 'MR', a, d: v }); return v; }
+  mw(a, v) { a &= 0xFFFF; v &= 0xFF; this.bus.write(a, v); if (this.log) this.cyc.push({ k: 'MW', a, d: v }); }
+  imm() { const v = this.mr(this.pc); this.pc = (this.pc + 1) & 0xFFFF; return v; }
+  imm16() { const lo = this.imm(); return (this.imm() << 8) | lo; }
+  idle(n) { if (this.log) this.cyc.push({ k: 'ID', n }); }
+  ioIn(p) { p &= 0xFFFF; const v = this.bus.input(p) & 0xFF; if (this.log) this.cyc.push({ k: 'IR', a: p, d: v }); return v; }
+  ioOut(p, v) { p &= 0xFFFF; v &= 0xFF; this.bus.output(p, v); if (this.log) this.cyc.push({ k: 'IW', a: p, d: v }); }
+  push(v) { this.sp = (this.sp - 1) & 0xFFFF; this.mw(this.sp, v >> 8); this.sp = (this.sp - 1) & 0xFFFF; this.mw(this.sp, v); }
+  pop() { const lo = this.mr(this.sp); this.sp = (this.sp + 1) & 0xFFFF; const hi = this.mr(this.sp); this.sp = (this.sp + 1) & 0xFFFF; return (hi << 8) | lo; }
+
+  // ---- register access with IX/IY substitution ----
+  getR(i, xy) {
+    switch (i) {
+      case 0: return this.b; case 1: return this.c; case 2: return this.d; case 3: return this.e;
+      case 4: return xy === 1 ? this.ix >> 8 : xy === 2 ? this.iy >> 8 : this.h;
+      case 5: return xy === 1 ? this.ix & 0xFF : xy === 2 ? this.iy & 0xFF : this.l;
+      case 7: return this.a;
+    }
+  }
+  setR(i, v, xy) {
+    v &= 0xFF;
+    switch (i) {
+      case 0: this.b = v; break; case 1: this.c = v; break; case 2: this.d = v; break; case 3: this.e = v; break;
+      case 4: if (xy === 1) this.ix = (this.ix & 0xFF) | (v << 8); else if (xy === 2) this.iy = (this.iy & 0xFF) | (v << 8); else this.h = v; break;
+      case 5: if (xy === 1) this.ix = (this.ix & 0xFF00) | v; else if (xy === 2) this.iy = (this.iy & 0xFF00) | v; else this.l = v; break;
+      case 7: this.a = v; break;
+    }
+  }
+  getHL(xy) { return xy === 1 ? this.ix : xy === 2 ? this.iy : this.hl; }
+  setHL(v, xy) { v &= 0xFFFF; if (xy === 1) this.ix = v; else if (xy === 2) this.iy = v; else this.hl = v; }
+  getRP(p, xy) { return p === 0 ? this.bc : p === 1 ? this.de : p === 2 ? this.getHL(xy) : this.sp; }
+  setRP(p, v, xy) { v &= 0xFFFF; if (p === 0) this.bc = v; else if (p === 1) this.de = v; else if (p === 2) this.setHL(v, xy); else this.sp = v; }
+  getRP2(p, xy) { return p === 3 ? this.af : this.getRP(p, xy); }
+  setRP2(p, v, xy) { if (p === 3) this.af = v & 0xFFFF; else this.setRP(p, v, xy); }
+  idxAddr(xy) {
+    if (!xy) return this.hl;
+    const d = sgn(this.imm()); this.idle(5);
+    return ((xy === 1 ? this.ix : this.iy) + d) & 0xFFFF;
+  }
+  cond(y) {
+    const f = this.f;
+    switch (y) {
+      case 0: return !(f & FZ); case 1: return !!(f & FZ); case 2: return !(f & FC); case 3: return !!(f & FC);
+      case 4: return !(f & FPV); case 5: return !!(f & FPV); case 6: return !(f & FS); case 7: return !!(f & FS);
+    }
+  }
+
+  // ---- ALU ----
+  add8(v, cy) {
+    const a = this.a, r = a + v + cy, r8 = r & 0xFF;
+    this.f = SZ53[r8] | ((a ^ v ^ r) & FH) | ((~(a ^ v) & (a ^ r) & 0x80) ? FPV : 0) | ((r >> 8) & FC);
+    this.a = r8;
+  }
+  sub8(v, cy, store) {
+    const a = this.a, r = a - v - cy, r8 = r & 0xFF;
+    const f = (r8 & 0x80) | (r8 ? 0 : FZ) | FN | ((a ^ v ^ r) & FH) | (((a ^ v) & (a ^ r) & 0x80) ? FPV : 0) | ((r & 0x100) ? FC : 0);
+    if (store) { this.f = f | (r8 & 0x28); this.a = r8; } else this.f = f | (v & 0x28);
+  }
+  alu(op, v) {
+    switch (op) {
+      case 0: this.add8(v, 0); break;
+      case 1: this.add8(v, this.f & FC); break;
+      case 2: this.sub8(v, 0, true); break;
+      case 3: this.sub8(v, this.f & FC, true); break;
+      case 4: this.a &= v; this.f = SZ53P[this.a] | FH; break;
+      case 5: this.a ^= v; this.f = SZ53P[this.a]; break;
+      case 6: this.a |= v; this.f = SZ53P[this.a]; break;
+      case 7: this.sub8(v, 0, false); break;
+    }
+  }
+  inc8(v) { const r = (v + 1) & 0xFF; this.f = (this.f & FC) | SZ53[r] | ((r & 0x0F) ? 0 : FH) | (r === 0x80 ? FPV : 0); return r; }
+  dec8(v) { const r = (v - 1) & 0xFF; this.f = (this.f & FC) | FN | SZ53[r] | ((v & 0x0F) ? 0 : FH) | (v === 0x80 ? FPV : 0); return r; }
+  rot(op, v) {
+    let r, c;
+    switch (op) {
+      case 0: c = v >> 7; r = ((v << 1) | c) & 0xFF; break;
+      case 1: c = v & 1; r = (v >> 1) | (c << 7); break;
+      case 2: c = v >> 7; r = ((v << 1) | (this.f & FC)) & 0xFF; break;
+      case 3: c = v & 1; r = (v >> 1) | ((this.f & FC) << 7); break;
+      case 4: c = v >> 7; r = (v << 1) & 0xFF; break;
+      case 5: c = v & 1; r = (v >> 1) | (v & 0x80); break;
+      case 6: c = v >> 7; r = ((v << 1) | 1) & 0xFF; break;
+      case 7: c = v & 1; r = v >> 1; break;
+    }
+    this.f = SZ53P[r] | c;
+    return r;
+  }
+  bit(y, v, src35) {
+    const t = v & (1 << y);
+    this.f = (this.f & FC) | FH | (t ? 0 : (FZ | FPV)) | (t & 0x80) | (src35 & 0x28);
+  }
+  add16(a, v) {
+    const r = a + v;
+    this.f = (this.f & (FS | FZ | FPV)) | (((a ^ v ^ r) >> 8) & FH) | ((r >> 8) & 0x28) | ((r >> 16) & FC);
+    return r & 0xFFFF;
+  }
+  adc16(v) {
+    const a = this.hl, r = a + v + (this.f & FC), r16 = r & 0xFFFF;
+    this.f = ((r16 >> 8) & 0xA8) | (r16 ? 0 : FZ) | (((a ^ v ^ r) >> 8) & FH) | ((~(a ^ v) & (a ^ r) & 0x8000) ? FPV : 0) | ((r >> 16) & FC);
+    this.hl = r16;
+  }
+  sbc16(v) {
+    const a = this.hl, r = a - v - (this.f & FC), r16 = r & 0xFFFF;
+    this.f = ((r16 >> 8) & 0xA8) | (r16 ? 0 : FZ) | (((a ^ v ^ r) >> 8) & FH) | (((a ^ v) & (a ^ r) & 0x8000) ? FPV : 0) | FN | ((r & 0x10000) ? FC : 0);
+    this.hl = r16;
+  }
+  daa() {
+    const a = this.a, f = this.f;
+    let corr = 0, c = f & FC;
+    if ((f & FH) || (a & 0x0F) > 9) corr |= 0x06;
+    if (c || a > 0x99) { corr |= 0x60; c = FC; }
+    let r, h;
+    if (f & FN) { h = ((f & FH) && (a & 0x0F) < 6) ? FH : 0; r = (a - corr) & 0xFF; }
+    else { h = ((a & 0x0F) > 9) ? FH : 0; r = (a + corr) & 0xFF; }
+    this.a = r; this.f = SZ53P[r] | h | (f & FN) | c;
+  }
+
+  // ---- one instruction (or interrupt response); returns machine-cycle log ----
+  step() {
+    this.cyc = [];
+    const blockInt = this.eiDelay; this.eiDelay = false;
+    if (this.nmiPending) {
+      this.nmiPending = false; this.halted = false;
+      this.iff1 = 0;
+      const a = this.pc, v = this.bus.read(a);
+      if (this.log) this.cyc.push({ k: 'M1', a, d: v, rf: (this.i << 8) | this.r });
+      this.r = (this.r & 0x80) | ((this.r + 1) & 0x7F);
+      this.idle(1); this.push(this.pc); this.pc = 0x0066;
+      this.lastEvent = 'NMI';
+      return this.cyc;
+    }
+    if (this.intLine && this.iff1 && !blockInt) {
+      this.halted = false; this.iff1 = this.iff2 = 0;
+      const vec = this.intVector & 0xFF;
+      if (this.log) this.cyc.push({ k: 'IA', a: this.pc, d: vec, rf: (this.i << 8) | this.r });
+      this.r = (this.r & 0x80) | ((this.r + 1) & 0x7F);
+      this.idle(1);
+      if (this.im === 2) {
+        this.push(this.pc);
+        const t = (this.i << 8) | vec;
+        const lo = this.mr(t), hi = this.mr(t + 1);
+        this.pc = (hi << 8) | lo;
+      } else if (this.im === 1) {
+        this.push(this.pc); this.pc = 0x0038;
+      } else {
+        // IM 0: supports an RST opcode placed on the data bus
+        this.push(this.pc); this.pc = ((vec & 0xC7) === 0xC7) ? (vec & 0x38) : 0x0038;
+      }
+      this.lastEvent = 'INT';
+      return this.cyc;
+    }
+    this.lastEvent = null;
+    if (this.halted) {
+      const a = this.pc, v = this.bus.read(a);
+      if (this.log) this.cyc.push({ k: 'M1', a, d: v, rf: (this.i << 8) | this.r, halt: true });
+      this.r = (this.r & 0x80) | ((this.r + 1) & 0x7F);
+      return this.cyc;
+    }
+    let op = this.fetch(), xy = 0;
+    while (op === 0xDD || op === 0xFD) { xy = op === 0xDD ? 1 : 2; op = this.fetch(); }
+    if (op === 0xCB) {
+      if (xy) {
+        const base = xy === 1 ? this.ix : this.iy;
+        const addr = (base + sgn(this.imm())) & 0xFFFF;
+        const o = this.mr(this.pc); this.pc = (this.pc + 1) & 0xFFFF; this.idle(2);
+        this.execCBIdx(o, addr);
+      } else this.execCB(this.fetch());
+    } else if (op === 0xED) this.execED(this.fetch());
+    else this.execMain(op, xy);
+    return this.cyc;
+  }
+
+  execMain(op, xy) {
+    const x = op >> 6, y = (op >> 3) & 7, z = op & 7, p = y >> 1, q = y & 1;
+    if (x === 0) {
+      switch (z) {
+        case 0:
+          if (y === 0) {}
+          else if (y === 1) { let t = this.a; this.a = this.a_; this.a_ = t; t = this.f; this.f = this.f_; this.f_ = t; }
+          else if (y === 2) { this.idle(1); const d = sgn(this.imm()); this.b = (this.b - 1) & 0xFF; if (this.b) { this.idle(5); this.pc = (this.pc + d) & 0xFFFF; } }
+          else if (y === 3) { const d = sgn(this.imm()); this.idle(5); this.pc = (this.pc + d) & 0xFFFF; }
+          else { const d = sgn(this.imm()); if (this.cond(y - 4)) { this.idle(5); this.pc = (this.pc + d) & 0xFFFF; } }
+          break;
+        case 1:
+          if (!q) this.setRP(p, this.imm16(), xy);
+          else { this.idle(7); this.setHL(this.add16(this.getHL(xy), this.getRP(p, xy)), xy); }
+          break;
+        case 2: {
+          if (!q) {
+            if (p === 0) this.mw(this.bc, this.a);
+            else if (p === 1) this.mw(this.de, this.a);
+            else if (p === 2) { const n = this.imm16(), v = this.getHL(xy); this.mw(n, v & 0xFF); this.mw(n + 1, v >> 8); }
+            else this.mw(this.imm16(), this.a);
+          } else {
+            if (p === 0) this.a = this.mr(this.bc);
+            else if (p === 1) this.a = this.mr(this.de);
+            else if (p === 2) { const n = this.imm16(); const lo = this.mr(n), hi = this.mr(n + 1); this.setHL((hi << 8) | lo, xy); }
+            else this.a = this.mr(this.imm16());
+          }
+          break;
+        }
+        case 3: this.idle(2); this.setRP(p, this.getRP(p, xy) + (q ? -1 : 1), xy); break;
+        case 4: case 5: {
+          if (y === 6) { const ad = this.idxAddr(xy); const v = this.mr(ad); this.idle(1); this.mw(ad, z === 4 ? this.inc8(v) : this.dec8(v)); }
+          else { const v = this.getR(y, xy); this.setR(y, z === 4 ? this.inc8(v) : this.dec8(v), xy); }
+          break;
+        }
+        case 6:
+          if (y === 6) {
+            if (xy) { const d = sgn(this.imm()); const n = this.imm(); this.idle(2); this.mw(((xy === 1 ? this.ix : this.iy) + d) & 0xFFFF, n); }
+            else this.mw(this.hl, this.imm());
+          } else this.setR(y, this.imm(), xy);
+          break;
+        case 7: {
+          const a = this.a, f = this.f;
+          switch (y) {
+            case 0: this.a = ((a << 1) | (a >> 7)) & 0xFF; this.f = (f & (FS | FZ | FPV)) | (this.a & 0x28) | (a >> 7); break;
+            case 1: this.a = ((a >> 1) | (a << 7)) & 0xFF; this.f = (f & (FS | FZ | FPV)) | (this.a & 0x28) | (a & 1); break;
+            case 2: this.a = ((a << 1) | (f & FC)) & 0xFF; this.f = (f & (FS | FZ | FPV)) | (this.a & 0x28) | (a >> 7); break;
+            case 3: this.a = ((a >> 1) | ((f & FC) << 7)) & 0xFF; this.f = (f & (FS | FZ | FPV)) | (this.a & 0x28) | (a & 1); break;
+            case 4: this.daa(); break;
+            case 5: this.a = a ^ 0xFF; this.f = (f & (FS | FZ | FPV | FC)) | FH | FN | (this.a & 0x28); break;
+            case 6: this.f = (f & (FS | FZ | FPV)) | FC | (a & 0x28); break;
+            case 7: this.f = (f & (FS | FZ | FPV)) | ((f & FC) ? FH : FC) | (a & 0x28); break;
+          }
+          break;
+        }
+      }
+    } else if (x === 1) {
+      if (y === 6 && z === 6) { this.halted = true; }
+      else if (y === 6) { const ad = this.idxAddr(xy); this.mw(ad, this.getR(z, 0)); }
+      else if (z === 6) { const ad = this.idxAddr(xy); this.setR(y, this.mr(ad), 0); }
+      else this.setR(y, this.getR(z, xy), xy);
+    } else if (x === 2) {
+      this.alu(y, z === 6 ? this.mr(this.idxAddr(xy)) : this.getR(z, xy));
+    } else {
+      switch (z) {
+        case 0: this.idle(1); if (this.cond(y)) this.pc = this.pop(); break;
+        case 1:
+          if (!q) this.setRP2(p, this.pop(), xy);
+          else if (p === 0) this.pc = this.pop();
+          else if (p === 1) {
+            let t;
+            t = this.b; this.b = this.b_; this.b_ = t; t = this.c; this.c = this.c_; this.c_ = t;
+            t = this.d; this.d = this.d_; this.d_ = t; t = this.e; this.e = this.e_; this.e_ = t;
+            t = this.h; this.h = this.h_; this.h_ = t; t = this.l; this.l = this.l_; this.l_ = t;
+          }
+          else if (p === 2) this.pc = this.getHL(xy);
+          else { this.idle(2); this.sp = this.getHL(xy); }
+          break;
+        case 2: { const n = this.imm16(); if (this.cond(y)) this.pc = n; break; }
+        case 3:
+          switch (y) {
+            case 0: this.pc = this.imm16(); break;
+            case 2: { const n = this.imm(); this.ioOut((this.a << 8) | n, this.a); break; }
+            case 3: { const n = this.imm(); this.a = this.ioIn((this.a << 8) | n); break; }
+            case 4: {
+              const lo = this.mr(this.sp), hi = this.mr(this.sp + 1); this.idle(1);
+              const v = this.getHL(xy); this.mw(this.sp + 1, v >> 8); this.mw(this.sp, v & 0xFF); this.idle(2);
+              this.setHL((hi << 8) | lo, xy); break;
+            }
+            case 5: { const t = this.de; this.de = this.hl; this.hl = t; break; }
+            case 6: this.iff1 = this.iff2 = 0; break;
+            case 7: this.iff1 = this.iff2 = 1; this.eiDelay = true; break;
+          }
+          break;
+        case 4: { const n = this.imm16(); if (this.cond(y)) { this.idle(1); this.push(this.pc); this.pc = n; } break; }
+        case 5:
+          if (!q) { this.idle(1); this.push(this.getRP2(p, xy)); }
+          else if (p === 0) { const n = this.imm16(); this.idle(1); this.push(this.pc); this.pc = n; }
+          break;
+        case 6: this.alu(y, this.imm()); break;
+        case 7: this.idle(1); this.push(this.pc); this.pc = y << 3; break;
+      }
+    }
+  }
+
+  execCB(op) {
+    const x = op >> 6, y = (op >> 3) & 7, z = op & 7;
+    if (z === 6) {
+      const ad = this.hl, v = this.mr(ad); this.idle(1);
+      if (x === 1) { this.bit(y, v, v); return; }
+      this.mw(ad, x === 0 ? this.rot(y, v) : x === 2 ? v & ~(1 << y) : v | (1 << y));
+      return;
+    }
+    const v = this.getR(z, 0);
+    if (x === 0) this.setR(z, this.rot(y, v), 0);
+    else if (x === 1) this.bit(y, v, v);
+    else if (x === 2) this.setR(z, v & ~(1 << y), 0);
+    else this.setR(z, v | (1 << y), 0);
+  }
+  execCBIdx(op, ad) {
+    const x = op >> 6, y = (op >> 3) & 7, z = op & 7;
+    const v = this.mr(ad); this.idle(1);
+    if (x === 1) { this.bit(y, v, ad >> 8); return; }
+    const r = x === 0 ? this.rot(y, v) : x === 2 ? v & ~(1 << y) : v | (1 << y);
+    this.mw(ad, r);
+    if (z !== 6) this.setR(z, r, 0);
+  }
+
+  execED(op) {
+    const x = op >> 6, y = (op >> 3) & 7, z = op & 7, p = y >> 1, q = y & 1;
+    if (x === 1) {
+      switch (z) {
+        case 0: { const v = this.ioIn(this.bc); this.f = (this.f & FC) | SZ53P[v]; if (y !== 6) this.setR(y, v, 0); break; }
+        case 1: this.ioOut(this.bc, y === 6 ? 0 : this.getR(y, 0)); break;
+        case 2: this.idle(7); if (!q) this.sbc16(this.getRP(p, 0)); else this.adc16(this.getRP(p, 0)); break;
+        case 3: {
+          const n = this.imm16();
+          if (!q) { const v = this.getRP(p, 0); this.mw(n, v & 0xFF); this.mw(n + 1, v >> 8); }
+          else { const lo = this.mr(n), hi = this.mr(n + 1); this.setRP(p, (hi << 8) | lo, 0); }
+          break;
+        }
+        case 4: { const v = this.a; this.a = 0; this.sub8(v, 0, true); break; }
+        case 5: this.pc = this.pop(); this.iff1 = this.iff2; break;
+        case 6: this.im = [0, 0, 1, 2, 0, 0, 1, 2][y]; break;
+        case 7:
+          switch (y) {
+            case 0: this.idle(1); this.i = this.a; break;
+            case 1: this.idle(1); this.r = this.a; break;
+            case 2: this.idle(1); this.a = this.i; this.f = (this.f & FC) | SZ53[this.a] | (this.iff2 ? FPV : 0); break;
+            case 3: this.idle(1); this.a = this.r; this.f = (this.f & FC) | SZ53[this.a] | (this.iff2 ? FPV : 0); break;
+            case 4: { const v = this.mr(this.hl); this.idle(4); this.mw(this.hl, ((this.a << 4) | (v >> 4)) & 0xFF); this.a = (this.a & 0xF0) | (v & 0x0F); this.f = (this.f & FC) | SZ53P[this.a]; break; }
+            case 5: { const v = this.mr(this.hl); this.idle(4); this.mw(this.hl, ((v << 4) | (this.a & 0x0F)) & 0xFF); this.a = (this.a & 0xF0) | (v >> 4); this.f = (this.f & FC) | SZ53P[this.a]; break; }
+          }
+          break;
+      }
+    } else if (x === 2 && z <= 3 && y >= 4) {
+      const inc = (y & 1) ? -1 : 1, rep = y >= 6;
+      if (z === 0) { // LDI/LDD/LDIR/LDDR
+        const v = this.mr(this.hl); this.mw(this.de, v); this.idle(2);
+        this.hl = this.hl + inc; this.de = this.de + inc; this.bc = this.bc - 1;
+        const n = (v + this.a) & 0xFF;
+        this.f = (this.f & (FS | FZ | FC)) | (this.bc ? FPV : 0) | (n & F3) | ((n & 0x02) ? F5 : 0);
+        if (rep && this.bc) { this.idle(5); this.pc = (this.pc - 2) & 0xFFFF; }
+      } else if (z === 1) { // CPI/CPD/CPIR/CPDR
+        const v = this.mr(this.hl); this.idle(5);
+        const r = (this.a - v) & 0xFF, h = (this.a ^ v ^ r) & FH;
+        this.hl = this.hl + inc; this.bc = this.bc - 1;
+        const n = (r - (h ? 1 : 0)) & 0xFF;
+        this.f = (this.f & FC) | FN | (r & 0x80) | (r ? 0 : FZ) | h | (this.bc ? FPV : 0) | (n & F3) | ((n & 0x02) ? F5 : 0);
+        if (rep && this.bc && r) { this.idle(5); this.pc = (this.pc - 2) & 0xFFFF; }
+      } else if (z === 2) { // INI/IND/INIR/INDR
+        this.idle(1); const v = this.ioIn(this.bc); this.mw(this.hl, v);
+        this.b = (this.b - 1) & 0xFF; this.hl = this.hl + inc;
+        this.f = (SZ53[this.b] & ~FPV) | FN | (this.f & FC);
+        if (rep && this.b) { this.idle(5); this.pc = (this.pc - 2) & 0xFFFF; }
+      } else { // OUTI/OUTD/OTIR/OTDR
+        this.idle(1); const v = this.mr(this.hl); this.b = (this.b - 1) & 0xFF;
+        this.ioOut(this.bc, v); this.hl = this.hl + inc;
+        this.f = (SZ53[this.b] & ~FPV) | FN | (this.f & FC);
+        if (rep && this.b) { this.idle(5); this.pc = (this.pc - 2) & 0xFFFF; }
+      }
+    }
+    // all other ED opcodes behave as an 8-T NOP
+  }
+}
+
+// ---- Disassembler ----
+const DR = ['B', 'C', 'D', 'E', 'H', 'L', '(HL)', 'A'];
+const DRP = ['BC', 'DE', 'HL', 'SP'], DRP2 = ['BC', 'DE', 'HL', 'AF'];
+const DCC = ['NZ', 'Z', 'NC', 'C', 'PO', 'PE', 'P', 'M'];
+const DALU = ['ADD A,', 'ADC A,', 'SUB ', 'SBC A,', 'AND ', 'XOR ', 'OR ', 'CP '];
+const DROT = ['RLC', 'RRC', 'RL', 'RR', 'SLA', 'SRA', 'SLL', 'SRL'];
+const DBLK = [['LDI', 'CPI', 'INI', 'OUTI'], ['LDD', 'CPD', 'IND', 'OUTD'], ['LDIR', 'CPIR', 'INIR', 'OTIR'], ['LDDR', 'CPDR', 'INDR', 'OTDR']];
+const h2 = v => v.toString(16).toUpperCase().padStart(2, '0');
+const h4 = v => v.toString(16).toUpperCase().padStart(4, '0');
+
+// rec: optional array; when given, operands become placeholders ({n} {nn} {d} {e})
+// and every byte read is recorded with its role (used to build the assembler's table).
+function disasm(read, addr, rec) {
+  let pc = addr, kind = 'fix';
+  const rd = () => { const v = read(pc & 0xFFFF); if (rec) rec.push(kind === 'fix' ? v : kind); pc++; return v; };
+  const as = (k, f) => { kind = k; const v = f(); kind = 'fix'; return v; };
+  const n8 = () => rec ? (as('n', rd), '{n}') : h2(rd()) + 'h';
+  const n16 = () => { if (rec) { as('nl', rd); as('nh', rd); return '{nn}'; } const lo = rd(); return h4((rd() << 8) | lo) + 'h'; };
+  let op = rd(), xy = 0, text;
+  while ((op === 0xDD || op === 0xFD) && pc - addr < 4) { xy = op === 0xDD ? 1 : 2; op = rd(); }
+  const IX = ['HL', 'IX', 'IY'][xy];
+  const disp = () => { if (rec) { as('d', rd); return '(' + IX + '+{d})'; } const d = sgn(rd()); return '(' + IX + (d < 0 ? '-' : '+') + h2(Math.abs(d)) + 'h)'; };
+  const reg = (i, allowIdx) => {
+    if (i === 6) return xy ? disp() : '(HL)';
+    if (allowIdx && xy && i === 4) return IX + 'H';
+    if (allowIdx && xy && i === 5) return IX + 'L';
+    return DR[i];
+  };
+  const rp = p => p === 2 ? IX : DRP[p];
+  const x = op >> 6, y = (op >> 3) & 7, z = op & 7, p = y >> 1, q = y & 1;
+  if (op === 0xCB) {
+    let dstr = '', o;
+    if (xy) { dstr = disp(); o = rd(); } else o = rd();
+    const cx = o >> 6, cy = (o >> 3) & 7, cz = o & 7;
+    const target = xy ? dstr : DR[cz];
+    const tail = (xy && cz !== 6 && cx !== 1) ? ',' + DR[cz] : '';
+    if (cx === 0) text = DROT[cy] + ' ' + target + tail;
+    else text = ['', 'BIT', 'RES', 'SET'][cx] + ' ' + cy + ',' + target + tail;
+  } else if (op === 0xED) {
+    const o = rd(), ex = o >> 6, ey = (o >> 3) & 7, ez = o & 7, ep = ey >> 1, eq = ey & 1;
+    if (ex === 1) {
+      switch (ez) {
+        case 0: text = ey === 6 ? 'IN (C)' : 'IN ' + DR[ey] + ',(C)'; break;
+        case 1: text = ey === 6 ? 'OUT (C),0' : 'OUT (C),' + DR[ey]; break;
+        case 2: text = (eq ? 'ADC' : 'SBC') + ' HL,' + DRP[ep]; break;
+        case 3: text = eq ? 'LD ' + DRP[ep] + ',(' + n16() + ')' : 'LD (' + n16() + '),' + DRP[ep]; break;
+        case 4: text = 'NEG'; break;
+        case 5: text = ey === 1 ? 'RETI' : 'RETN'; break;
+        case 6: text = 'IM ' + [0, 0, 1, 2, 0, 0, 1, 2][ey]; break;
+        case 7: text = ['LD I,A', 'LD R,A', 'LD A,I', 'LD A,R', 'RRD', 'RLD', 'NOP', 'NOP'][ey]; break;
+      }
+    } else if (ex === 2 && ez <= 3 && ey >= 4) text = DBLK[ey - 4][ez];
+    else text = 'NOP*';
+  } else if (x === 0) {
+    switch (z) {
+      case 0: {
+        if (y === 0) text = 'NOP';
+        else if (y === 1) text = "EX AF,AF'";
+        else { const d = sgn(rec ? as('e', rd) : rd()); const t = rec ? '{e}' : h4((pc + d) & 0xFFFF) + 'h';
+          text = y === 2 ? 'DJNZ ' + t : y === 3 ? 'JR ' + t : 'JR ' + DCC[y - 4] + ',' + t; }
+        break;
+      }
+      case 1: text = q ? 'ADD ' + IX + ',' + rp(p) : 'LD ' + rp(p) + ',' + n16(); break;
+      case 2: text = [['LD (BC),A', 'LD (DE),A', null, null], ['LD A,(BC)', 'LD A,(DE)', null, null]][q][p];
+        if (!text) text = p === 2 ? (q ? 'LD ' + IX + ',(' + n16() + ')' : 'LD (' + n16() + '),' + IX) : (q ? 'LD A,(' + n16() + ')' : 'LD (' + n16() + '),A');
+        break;
+      case 3: text = (q ? 'DEC ' : 'INC ') + rp(p); break;
+      case 4: text = 'INC ' + reg(y, true); break;
+      case 5: text = 'DEC ' + reg(y, true); break;
+      case 6: { const t = reg(y, true); text = 'LD ' + t + ',' + n8(); break; }
+      case 7: text = ['RLCA', 'RRCA', 'RLA', 'RRA', 'DAA', 'CPL', 'SCF', 'CCF'][y]; break;
+    }
+  } else if (x === 1) {
+    if (y === 6 && z === 6) text = 'HALT';
+    else { const mem = y === 6 || z === 6; text = 'LD ' + reg(y, !mem) + ',' + reg(z, !mem); }
+  } else if (x === 2) text = DALU[y] + reg(z, true);
+  else {
+    switch (z) {
+      case 0: text = 'RET ' + DCC[y]; break;
+      case 1: text = !q ? 'POP ' + (p === 2 ? IX : DRP2[p]) : ['RET', 'EXX', 'JP (' + IX + ')', 'LD SP,' + IX][p]; break;
+      case 2: text = 'JP ' + DCC[y] + ',' + n16(); break;
+      case 3: text = [() => 'JP ' + n16(), null, () => 'OUT (' + n8() + '),A', () => 'IN A,(' + n8() + ')', () => 'EX (SP),' + IX, () => 'EX DE,HL', () => 'DI', () => 'EI'][y](); break;
+      case 4: text = 'CALL ' + DCC[y] + ',' + n16(); break;
+      case 5: text = !q ? 'PUSH ' + (p === 2 ? IX : DRP2[p]) : 'CALL ' + n16(); break;
+      case 6: text = DALU[y] + n8(); break;
+      case 7: text = 'RST ' + h2(y << 3) + 'h'; break;
+    }
+  }
+  return { len: pc - addr, text };
+}
+
+if (typeof module !== 'undefined') module.exports = { Z80, disasm, h2, h4 };
+</script>
+<script>
+// Memory chips as objects with pins, for the live pin display and for fault simulation.
+// A MemChip stores some of the bits (dmask) of every byte in part of a machine's memory array: all eight for a
+// byte-wide ROM or RAM, four for a 2114, one for a 4116 or 4164 dynamic RAM. The chips that together make up the
+// bytes of one area form a bank (an array of MemChips); memBankRead and memBankWrite go through the bank.
+// Each pin can be given a fault: 'z' (disconnected), 0 (stuck low) or 1 (stuck high).
+//   address pin: that address bit is forced (a disconnected input floats high); on a multiplexed dynamic RAM the
+//     pin carries a row bit and a column bit, so two CPU address lines are affected
+//   data pin: the bit reads as the forced level and is stored as the forced level (disconnected: reads and stores 1)
+//   chip select stuck high or disconnected (or a fault on RAS or CAS): the chip is out of circuit; its bits read 1
+//     and writes to it are lost
+//   chip select stuck low: the chip is selected all the time (chip.always; the machine decides what that does)
+//   output enable stuck high or disconnected: the chip never drives the bus
+//   write enable stuck high or disconnected: writes are lost; stuck low: every access is a write, so the cell is
+//     overwritten with 1s and reads float to 1s
+const MEM_PINOUTS = {
+  '2764': [[1, 'VPP', 'p'], [2, 'A12', 'i'], [3, 'A7', 'i'], [4, 'A6', 'i'], [5, 'A5', 'i'], [6, 'A4', 'i'], [7, 'A3', 'i'], [8, 'A2', 'i'], [9, 'A1', 'i'], [10, 'A0', 'i'], [11, 'O0', 'i'], [12, 'O1', 'i'], [13, 'O2', 'i'], [14, 'GND', 'g'],
+    [15, 'O3', 'i'], [16, 'O4', 'i'], [17, 'O5', 'i'], [18, 'O6', 'i'], [19, 'O7', 'i'], [20, 'CE', 'i'], [21, 'A10', 'i'], [22, 'OE', 'i'], [23, 'A11', 'i'], [24, 'A9', 'i'], [25, 'A8', 'i'], [26, 'NC', 'c'], [27, 'PGM', 'p'], [28, 'VCC', 'p']],
+  '27128': [[1, 'VPP', 'p'], [2, 'A12', 'i'], [3, 'A7', 'i'], [4, 'A6', 'i'], [5, 'A5', 'i'], [6, 'A4', 'i'], [7, 'A3', 'i'], [8, 'A2', 'i'], [9, 'A1', 'i'], [10, 'A0', 'i'], [11, 'O0', 'i'], [12, 'O1', 'i'], [13, 'O2', 'i'], [14, 'GND', 'g'],
+    [15, 'O3', 'i'], [16, 'O4', 'i'], [17, 'O5', 'i'], [18, 'O6', 'i'], [19, 'O7', 'i'], [20, 'CE', 'i'], [21, 'A10', 'i'], [22, 'OE', 'i'], [23, 'A11', 'i'], [24, 'A9', 'i'], [25, 'A8', 'i'], [26, 'A13', 'i'], [27, 'PGM', 'p'], [28, 'VCC', 'p']],
+  '27256': [[1, 'VPP', 'p'], [2, 'A12', 'i'], [3, 'A7', 'i'], [4, 'A6', 'i'], [5, 'A5', 'i'], [6, 'A4', 'i'], [7, 'A3', 'i'], [8, 'A2', 'i'], [9, 'A1', 'i'], [10, 'A0', 'i'], [11, 'O0', 'i'], [12, 'O1', 'i'], [13, 'O2', 'i'], [14, 'GND', 'g'],
+    [15, 'O3', 'i'], [16, 'O4', 'i'], [17, 'O5', 'i'], [18, 'O6', 'i'], [19, 'O7', 'i'], [20, 'CE', 'i'], [21, 'A10', 'i'], [22, 'OE', 'i'], [23, 'A11', 'i'], [24, 'A9', 'i'], [25, 'A8', 'i'], [26, 'A13', 'i'], [27, 'A14', 'i'], [28, 'VCC', 'p']],
+  // 24-pin mask ROMs: 2316 (2K), 2332 (4K) and 2364 (8K) share one layout; the upper address pins differ
+  '2316': [[1, 'A7', 'i'], [2, 'A6', 'i'], [3, 'A5', 'i'], [4, 'A4', 'i'], [5, 'A3', 'i'], [6, 'A2', 'i'], [7, 'A1', 'i'], [8, 'A0', 'i'], [9, 'D0', 'i'], [10, 'D1', 'i'], [11, 'D2', 'i'], [12, 'GND', 'g'],
+    [13, 'D3', 'i'], [14, 'D4', 'i'], [15, 'D5', 'i'], [16, 'D6', 'i'], [17, 'D7', 'i'], [18, 'CS3', 'c'], [19, 'A10', 'i'], [20, 'CS', 'i'], [21, 'CS2', 'c'], [22, 'A9', 'i'], [23, 'A8', 'i'], [24, 'VCC', 'p']],
+  '2332': [[1, 'A7', 'i'], [2, 'A6', 'i'], [3, 'A5', 'i'], [4, 'A4', 'i'], [5, 'A3', 'i'], [6, 'A2', 'i'], [7, 'A1', 'i'], [8, 'A0', 'i'], [9, 'D0', 'i'], [10, 'D1', 'i'], [11, 'D2', 'i'], [12, 'GND', 'g'],
+    [13, 'D3', 'i'], [14, 'D4', 'i'], [15, 'D5', 'i'], [16, 'D6', 'i'], [17, 'D7', 'i'], [18, 'A11', 'i'], [19, 'A10', 'i'], [20, 'CS', 'i'], [21, 'CS2', 'c'], [22, 'A9', 'i'], [23, 'A8', 'i'], [24, 'VCC', 'p']],
+  '2364': [[1, 'A7', 'i'], [2, 'A6', 'i'], [3, 'A5', 'i'], [4, 'A4', 'i'], [5, 'A3', 'i'], [6, 'A2', 'i'], [7, 'A1', 'i'], [8, 'A0', 'i'], [9, 'D0', 'i'], [10, 'D1', 'i'], [11, 'D2', 'i'], [12, 'GND', 'g'],
+    [13, 'D3', 'i'], [14, 'D4', 'i'], [15, 'D5', 'i'], [16, 'D6', 'i'], [17, 'D7', 'i'], [18, 'A11', 'i'], [19, 'A10', 'i'], [20, 'CS', 'i'], [21, 'A12', 'i'], [22, 'A9', 'i'], [23, 'A8', 'i'], [24, 'VCC', 'p']],
+  // 2732 4K EPROM: pin 20 is the output enable (and VPP when programming), pin 18 the chip enable
+  '2732': [[1, 'A7', 'i'], [2, 'A6', 'i'], [3, 'A5', 'i'], [4, 'A4', 'i'], [5, 'A3', 'i'], [6, 'A2', 'i'], [7, 'A1', 'i'], [8, 'A0', 'i'], [9, 'D0', 'i'], [10, 'D1', 'i'], [11, 'D2', 'i'], [12, 'GND', 'g'],
+    [13, 'D3', 'i'], [14, 'D4', 'i'], [15, 'D5', 'i'], [16, 'D6', 'i'], [17, 'D7', 'i'], [18, 'CE', 'i'], [19, 'A10', 'i'], [20, 'OE', 'i'], [21, 'A11', 'i'], [22, 'A9', 'i'], [23, 'A8', 'i'], [24, 'VCC', 'p']],
+  '6116': [[1, 'A7', 'i'], [2, 'A6', 'i'], [3, 'A5', 'i'], [4, 'A4', 'i'], [5, 'A3', 'i'], [6, 'A2', 'i'], [7, 'A1', 'i'], [8, 'A0', 'i'], [9, 'D0', 'i'], [10, 'D1', 'i'], [11, 'D2', 'i'], [12, 'GND', 'g'],
+    [13, 'D3', 'i'], [14, 'D4', 'i'], [15, 'D5', 'i'], [16, 'D6', 'i'], [17, 'D7', 'i'], [18, 'CE', 'i'], [19, 'A10', 'i'], [20, 'OE', 'i'], [21, 'WE', 'i'], [22, 'A9', 'i'], [23, 'A8', 'i'], [24, 'VCC', 'p']],
+  '2114': [[1, 'A6', 'i'], [2, 'A5', 'i'], [3, 'A4', 'i'], [4, 'A3', 'i'], [5, 'A0', 'i'], [6, 'A1', 'i'], [7, 'A2', 'i'], [8, 'CS', 'i'], [9, 'GND', 'g'],
+    [10, 'WE', 'i'], [11, 'I/O4', 'i'], [12, 'I/O3', 'i'], [13, 'I/O2', 'i'], [14, 'I/O1', 'i'], [15, 'A9', 'i'], [16, 'A8', 'i'], [17, 'A7', 'i'], [18, 'VCC', 'p']],
+  '4116': [[1, 'VBB', 'p'], [2, 'DIN', 'i'], [3, 'WE', 'i'], [4, 'RAS', 'i'], [5, 'A0', 'i'], [6, 'A2', 'i'], [7, 'A1', 'i'], [8, 'VDD', 'p'],
+    [9, 'VCC', 'p'], [10, 'A5', 'i'], [11, 'A4', 'i'], [12, 'A3', 'i'], [13, 'A6', 'i'], [14, 'DOUT', 'i'], [15, 'CAS', 'i'], [16, 'GND', 'g']],
+  '4164': [[1, 'NC', 'c'], [2, 'DIN', 'i'], [3, 'WE', 'i'], [4, 'RAS', 'i'], [5, 'A0', 'i'], [6, 'A2', 'i'], [7, 'A1', 'i'], [8, 'VCC', 'p'],
+    [9, 'A7', 'i'], [10, 'A5', 'i'], [11, 'A4', 'i'], [12, 'A3', 'i'], [13, 'A6', 'i'], [14, 'DOUT', 'i'], [15, 'CAS', 'i'], [16, 'GND', 'g']],
+  // 16K x 4 dynamic RAM (TMS4416 and equivalents): 8 row and 6 column address bits on A0-A7
+  '4416': [[1, 'OE', 'i'], [2, 'DQ1', 'i'], [3, 'DQ2', 'i'], [4, 'WE', 'i'], [5, 'RAS', 'i'], [6, 'A6', 'i'], [7, 'A5', 'i'], [8, 'A4', 'i'], [9, 'VCC', 'p'],
+    [10, 'A7', 'i'], [11, 'A3', 'i'], [12, 'A2', 'i'], [13, 'A1', 'i'], [14, 'A0', 'i'], [15, 'DQ3', 'i'], [16, 'CAS', 'i'], [17, 'DQ4', 'i'], [18, 'GND', 'g']]
+};
+// the NEC uPD4016 is a 2K static RAM with the 6116's pinout
+MEM_PINOUTS['4016'] = MEM_PINOUTS['6116'];
+const MEM_ACTIVE_LOW = new Set(['CE', 'CS', 'OE', 'WE', 'RAS', 'CAS', 'PGM']);
+class MemChip {
+  // arr/base/abits: where the chip's cells are (arr[base + address], address 0 .. 2^abits - 1)
+  // extra: rom, dram (1-bit dynamic RAM: bit, mux = address pins), nib (2114 or 4416: 0 = low nibble, 4 = high),
+  //        dbits (instead of nib: the data bit on each of I/O1-I/O4, when the board does not wire them in order),
+  //        mux (multiplexed address pins: pin n carries bits n and n + mux), amap (instead: the address bits each pin carries, as a mask per pin),
+  //        en (name of the chip-select pin), plus anything the machine wants
+  constructor(id, part, what, range, arr, base, abits, extra) {
+    Object.assign(this, { id, part, what, range, arr, base, abits, mask: (1 << abits) - 1, f: {}, en: 'CE', mux: 0, nib: -1 }, extra || {});
+    this.setDbits(this.dbits);
+  }
+  setDbits(dbits) {
+    this.dbits = dbits || null;
+    this.dmask = this.dram ? 1 << this.bit : this.dbits ? this.dbits.reduce((s, b) => s | 1 << b, 0) : this.nib >= 0 ? 0x0F << this.nib : 0xFF;
+    this.recalc();
+  }
+  ioBit(n) { return this.dbits ? this.dbits[n - 1] : n - 1 + this.nib; }      // the data bit on pin I/On (or DQn)
+  setFault(pin, v) { if (v === null || v === undefined) delete this.f[pin]; else this.f[pin] = v; this.recalc(); }
+  recalc() {
+    const f = this.f, lvl = k => f[k] === 'z' ? 1 : f[k], high = k => k in f && lvl(k) === 1;
+    let aAnd = 0xFFFF, aOr = 0, dAnd = 0xFF, dOr = 0, n = 0;
+    for (const k in f) {
+      n++; let m;
+      if ((m = /^A(\d+)$/.exec(k))) { const b = +m[1], bits = this.amap ? this.amap[b] : this.mux ? (1 << b) | (1 << (b + this.mux)) : 1 << b; if (lvl(k)) aOr |= bits; else aAnd &= ~bits; }
+      else if ((m = /^[DO](\d)$/.exec(k)) || (m = /^(?:I\/O|DQ)(\d)$/.exec(k))) { const b = /^[DO]\d$/.test(k) ? +m[1] : this.ioBit(+m[1]); if (lvl(k)) dOr |= 1 << b; else dAnd &= ~(1 << b); }
+    }
+    Object.assign(this, { aAnd, aOr, dAnd, dOr, faulty: n > 0 });
+    const strobed = this.mux > 0, off = strobed ? 'RAS' in f || 'CAS' in f : high(this.en);
+    this.weLow = !off && f.WE === 0;
+    this.noRead = off || high('OE') || this.weLow; this.noWrite = off || high('WE') || !!this.rom;
+    this.always = !strobed && f[this.en] === 0;
+    this.dout = 'DOUT' in f ? lvl('DOUT') : -1; this.din = 'DIN' in f ? lvl('DIN') : -1;
+  }
+  cell(off) { return this.base + ((off & this.aAnd | this.aOr) & this.mask); }
+}
+// a bank's faulty flag, to be refreshed whenever a fault changes
+function memBankFlag(bank) { bank.faulty = bank.some(c => c.faulty); return bank.faulty; }
+function memBankRead(bank, off, quiet) {
+  const c0 = bank[0]; let v = c0.arr[c0.base + (off & c0.mask)];
+  for (const c of bank) {
+    if (!c.faulty) continue;
+    const o = c.cell(off); let bits;
+    if (c.noRead) { bits = c.dmask; if (c.weLow && !quiet) c.arr[o] |= c.dmask; }
+    else bits = c.dout >= 0 ? (c.dout ? c.dmask : 0) : c.arr[o] & c.dAnd | c.dOr;
+    v = v & ~c.dmask | bits & c.dmask;
+  }
+  return v;
+}
+function memBankWrite(bank, off, v) {
+  const c0 = bank[0]; let keep = 0;
+  for (const c of bank) {
+    if (!c.faulty) continue;
+    keep |= c.dmask; if (c.noWrite) continue;
+    const o = c.cell(off), bits = c.din >= 0 ? (c.din ? c.dmask : 0) : v & c.dAnd | c.dOr;
+    c.arr[o] = c.arr[o] & ~c.dmask | bits & c.dmask;
+  }
+  if (!c0.rom) { const o0 = c0.base + (off & c0.mask); c0.arr[o0] = c0.arr[o0] & keep | v & ~keep; }
+}
+// fault bookkeeping shared by the machines: chips is the machine's full list, banks every bank to re-flag
+function memSetFault(m, id, pin, v) { m.chipById[id].setFault(pin, v); for (const b of m.banks) memBankFlag(b); m.faulty = m.chips.some(c => c.faulty); }
+function memClearFaults(m) { for (const c of m.chips) { c.f = {}; c.recalc(); } for (const b of m.banks) memBankFlag(b); m.faulty = false; }
+function memFaultList(m) { const out = []; for (const c of m.chips) for (const k in c.f) out.push([c.id, k, c.f[k]]); return out; }
+// ---- lines and the two kinds of fault, shared by the machines ----
+// A machine that uses these keeps its faults as lines held at a level (netF: line -> 0 or 1) and pins disconnected
+// from their line (pinF: 'chip.pin' -> 'z' floating, or 0 or 1). It supplies nets(): { line: { label, d, pins: [[chip id, pin], ...] } },
+// where d is the index of the pin that drives the line, or -1 when the driver is not drawn as a chip or several pins
+// drive it in turn. A pin on no line counts as a line of its own. applyFaults() turns the two tables into each chip's
+// own fault table (chip.f), then calls the machine's refault(), if it has one, to work out what the faults do.
+// A chip that is not memory (a processor), with pin faults in the same shape as a MemChip.
+// lv[pin] is the level a faulty pin sits at (a disconnected pin floats high); undefined = no fault.
+class BoardChip {
+  constructor(id, part, what, range, extra) { Object.assign(this, { id, part, what, range, f: {} }, extra || {}); this.recalc(); }
+  setFault(pin, v) { if (v === null || v === undefined) delete this.f[pin]; else this.f[pin] = v; this.recalc(); }
+  recalc() {
+    this.lv = {}; let n = 0, aAnd = 0xFFFF, aOr = 0, dAnd = 0xFF, dOr = 0, m;
+    for (const k in this.f) {
+      n++; const v = this.lv[k] = this.f[k] === 'z' ? 1 : this.f[k];
+      if ((m = /^A(\d+)$/.exec(k))) { if (v) aOr |= 1 << +m[1]; else aAnd &= ~(1 << +m[1]); }
+      else if ((m = /^D(\d)$/.exec(k))) { if (v) dOr |= 1 << +m[1]; else dAnd &= ~(1 << +m[1]); }
+    }
+    Object.assign(this, { aAnd, aOr, dAnd, dOr, faulty: n > 0 });
+  }
+  busA(a) { return a & this.aAnd | this.aOr; }
+  busD(v) { return v & this.dAnd | this.dOr; }
+}
+const BOARD_FAULTS = {
+  lines() { const N = this.nets(); if (this.netCache !== N) { const O = {}; for (const k in N) for (const [id, pin] of N[k].pins) O[id + '.' + pin] = k; this.netCache = N; this.NET_OF = O; } return N; },
+  netOf(id, pin) { this.lines(); return this.NET_OF[id + '.' + pin] || null; },
+  isDriver(id, pin) { const n = this.lines()[this.netOf(id, pin)]; return !!n && n.d >= 0 && n.pins[n.d][0] === id && n.pins[n.d][1] === pin; },
+  chipName(id) { const c = this.chipById[id]; return c && c.label || id; },
+  // v: 'z' disconnected from its line (floating), 0 or 1 disconnected and at that level, null to reconnect. id 'net' sets a line.
+  setPinFault(id, pin, v) { if (id === 'net') return this.setNetFault(pin, v); const F = this.pinF || (this.pinF = {}), k = id + '.' + pin; if (v === null || v === undefined) delete F[k]; else F[k] = v; this.applyFaults(); },
+  // a whole line held at 0 or 1 (null to release it)
+  setNetFault(net, v) { const F = this.netF || (this.netF = {}); if (v === null || v === undefined) delete F[net]; else F[net] = v; this.applyFaults(); },
+  clearFaults() { this.pinF = {}; this.netF = {}; this.applyFaults(); },
+  // one chip back to normal: its disconnected pins, and (unless pinsOnly) the held lines its pins are on
+  clearChip(id, pinsOnly) {
+    const N = this.lines();
+    for (const k of Object.keys(this.pinF || {})) if (k.startsWith(id + '.')) delete this.pinF[k];
+    if (!pinsOnly) for (const net of Object.keys(this.netF || {})) if (!N[net] || N[net].pins.some(p => p[0] === id)) delete this.netF[net];
+    this.applyFaults();
+  },
+  applyFaults() {
+    const N = this.lines(), O = this.NET_OF, P = this.pinF || (this.pinF = {}), L = this.netF || (this.netF = {}), f = {};
+    for (const c of this.chips) f[c.id] = {};
+    for (const net in L) if (N[net]) for (const [id, pin] of N[net].pins) if (f[id]) f[id][pin] = L[net];
+    for (const k in P) {                                                         // an output cut off from its line: the pins that listen see the line float, or the level
+      const i = k.indexOf('.'), id = k.slice(0, i), pin = k.slice(i + 1), net = O[k], X = net && N[net];
+      if (X && !(net in L) && X.d >= 0 && X.pins[X.d][0] === id && X.pins[X.d][1] === pin) for (const [i2, p2] of X.pins) if ((i2 !== id || p2 !== pin) && f[i2]) f[i2][p2] = P[k];
+    }
+    for (const k in P) { const i = k.indexOf('.'), id = k.slice(0, i); if (f[id]) f[id][k.slice(i + 1)] = P[k]; }
+    for (const c of this.chips) { c.f = f[c.id]; c.recalc(); }
+    for (const b of this.banks || []) memBankFlag(b);
+    this.faulty = this.chips.some(c => c.faulty);
+    if (this.refault) this.refault();
+  },
+  // the faults as set, for lists: [id, pin, text]; a line has id 'net'
+  faultList() {
+    const N = this.lines(), out = [];
+    for (const net in this.netF || {}) if (N[net]) out.push(['net', net, `${N[net].label} held ${this.netF[net] ? 'high' : 'low'} (${N[net].pins.length} pin${N[net].pins.length === 1 ? '' : 's'})`]);
+    for (const k in this.pinF || {}) {
+      const i = k.indexOf('.'), id = k.slice(0, i), pin = k.slice(i + 1), v = this.pinF[k], shared = this.NET_OF[k] && N[this.NET_OF[k]].pins.length > 1;
+      if (!this.chipById[id]) continue;
+      out.push([id, pin, `${this.chipName(id)} pin ${pin} ${shared ? 'disconnected from its line' + (v === 'z' ? '' : v ? ', at high' : ', at low') : v === 'z' ? 'disconnected' : v ? 'stuck high' : 'stuck low'}`]);
+    }
+    return out;
+  },
+  // the same for one chip's caption
+  chipFaults(id) {
+    const N = this.lines(), out = [];
+    for (const k in this.pinF || {}) if (k.startsWith(id + '.')) { const v = this.pinF[k], shared = this.NET_OF[k] && N[this.NET_OF[k]].pins.length > 1; out.push(k.slice(id.length + 1) + (shared ? (v === 'z' ? ' disconnected' : v ? ' disconnected, high' : ' disconnected, low') : v === 'z' ? ' disconnected' : v ? ' stuck high' : ' stuck low')); }
+    for (const net in this.netF || {}) if (N[net]) for (const [i2, pin] of N[net].pins) if (i2 === id && !((id + '.' + pin) in (this.pinF || {}))) out.push(`${pin}: line held ${this.netF[net] ? 'high' : 'low'}`);
+    return out;
+  }
+};
+// processor pinouts, for the processor drawn as a chip with faults
+MEM_PINOUTS.Z80 = [[1, 'A11'], [2, 'A12'], [3, 'A13'], [4, 'A14'], [5, 'A15'], [6, 'CLK'], [7, 'D4'], [8, 'D3'], [9, 'D5'], [10, 'D6'], [11, '+5V', 'p'], [12, 'D2'], [13, 'D7'], [14, 'D0'], [15, 'D1'],
+  [16, 'INT'], [17, 'NMI'], [18, 'HALT'], [19, 'MREQ'], [20, 'IORQ'], [21, 'RD'], [22, 'WR'], [23, 'BUSACK', 'o'], [24, 'WAIT'], [25, 'BUSREQ'], [26, 'RESET'], [27, 'M1'], [28, 'RFSH', 'o'], [29, 'GND', 'g'],
+  ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => [30 + n, 'A' + n])].map(([n, name, k]) => [n, name, k || 'i']);
+if (typeof module !== 'undefined') module.exports = { MemChip, BoardChip, BOARD_FAULTS, MEM_PINOUTS, MEM_ACTIVE_LOW, memBankFlag, memBankRead, memBankWrite, memSetFault, memClearFaults, memFaultList };
+</script>
+<script>
+// Sinclair ZX Spectrum 48K machine model for Z80 Bench: the issue 4A/4B board.
+// From Sinclair's issue 4A/4B circuit diagram:
+//   IC1   ULA (Ferranti 6C001-7 or later). From a 14 MHz crystal it makes the 3.5 MHz CPU clock and the 7 MHz dot
+//         clock. It reads the screen from the lower 16K of RAM, which it owns: it drives that RAM's address pins
+//         (A0-A6, pins 5-11), RAS (35), CAS (1) and WE (DRAMWE, 4), and the RAM's data lines are its own data pins
+//         D0-D7 (18, 21, 22, 25, 27, 29, 30, 31). It decodes the ROM's select (ROMCS, 34) from A14, A15 (36, 37) and
+//         MREQ (38). Port FE (any even port: IORQ on 33 with A0 low) reads the keyboard (KB0-KB4, pins 19, 20, 23,
+//         24, 26) and the EAR input, and writes the border colour, MIC and EAR (pin 28, MIC/TAPE). It asks for an
+//         interrupt (INT, 12) once a frame and stops the CPU's clock (CPU CLK, 32) while it needs the lower RAM.
+//         Its picture leaves as Y, U and V (17, 15, 16) for the LM1889 colour encoder (IC14).
+//   IC2   Z80A CPU.
+//   IC3, IC4  74LS157: the CPU's address for the lower RAM, row (A0-A6) then column (A7-A13), through 330 ohm
+//         resistors, so the ULA's own address wins when it reads the screen.
+//   IC5   16K ROM (23128).
+//   IC6-IC13  4116 16K x 1 dynamic RAMs: 4000h-7FFFh, one per data bit. Their data lines are the ULA's data bus,
+//         joined to the CPU's through 470 ohm resistors (R1-R8), so the ULA can use them while the CPU uses the ROM
+//         or the upper RAM.
+//   IC15-IC22  4532 32K x 1 dynamic RAMs (half-good 4164s; link DK1 picks the half): 8000h-FFFFh, one per data bit.
+//   IC25, IC26  74LS157: the upper RAM's row and column address. IC23 (74LS32) and IC24 (74LS00): its RAS, CAS
+//         and WRITE from MREQ, A14, A15, RFSH, RD and WR.
+// Timing (the ULA, 48K): a line is 224 T-states (128 for the 256 dots of the picture, 24 right border, 48 blanking
+// and sync, 24 left border), a frame 312 lines, 69,888 T-states (about 50.08 a second). INT is low for the first 32
+// T-states of the frame. The first dot of the picture is shown 14,336 T-states after INT starts (line 64). While a
+// line of the picture is drawn, the ULA reads two bytes (bitmap, attribute) twice in every 8 T-states. A CPU access
+// to 4000h-7FFFh, or to an even port, in that time has its clock held until the ULA is done: from 14,335 on, for 128
+// T-states of each of the 192 lines, a cycle that starts at T-state 0-7 of an 8 T-state group is held 6, 5, 4, 3, 2,
+// 1, 0, 0 T-states. The ULA sees only the address: the processor's internal cycles that leave an address on the bus
+// in that range are held too.
+const SPEC = {
+  CPU_HZ: 3500000, LINE_T: 224, LINES: 312, FRAME_T: 69888, INT_T: 32, DISP_T: 14336, CONT_T: 14335,
+  FIRST: 16, FW: 352, FH: 296, BORDER: 48,           // the picture kept: lines 16-311, 48 dots of border each side
+  DELAY: [6, 5, 4, 3, 2, 1, 0, 0],
+  // colours 0-7, then bright 8-15 (the bright black is still black)
+  RGB: [0x000000, 0x0000D8, 0xD80000, 0xD800D8, 0x00D800, 0x00D8D8, 0xD8D800, 0xD8D8D8, 0x000000, 0x0000FF, 0xFF0000, 0xFF00FF, 0x00FF00, 0x00FFFF, 0xFFFF00, 0xFFFFFF],
+  // the keyboard: eight half-rows, each read with one of A8-A15 low, five keys on KB0-KB4 (bit 0 nearest the edge)
+  ROWS: [['CAPS SHIFT', 'Z', 'X', 'C', 'V'], ['A', 'S', 'D', 'F', 'G'], ['Q', 'W', 'E', 'R', 'T'], ['1', '2', '3', '4', '5'],
+         ['0', '9', '8', '7', '6'], ['P', 'O', 'I', 'U', 'Y'], ['ENTER', 'L', 'K', 'J', 'H'], ['SPACE', 'SYMBOL SHIFT', 'M', 'N', 'B']]
+};
+SPEC.KEYPOS = {}; SPEC.ROWS.forEach((r, row) => r.forEach((k, bit) => { SPEC.KEYPOS[k] = [row, bit]; }));
+function specCrc32(b) { let c = ~0; for (let i = 0; i < b.length; i++) { c ^= b[i]; for (let k = 0; k < 8; k++) c = c >>> 1 ^ (c & 1 ? 0xEDB88320 : 0); } return ~c >>> 0; }
+
+// ---- Cassette: a TZX or TAP file is turned into the signal it describes: stretches of tape at one level with their
+// lengths in T-states (TZX times are Spectrum T-states already). While Play is pressed the tape moves with emulated
+// time, and its level is what bit 6 of port FE reads, so the ROM's loader and the custom loaders of games read it bit
+// by bit as from a real cassette. A "stop the tape" block (a pause of 0) releases Play. A TAP file is a list of blocks
+// in the ROM's standard format; it is read as the TZX standard-speed blocks it stands for.
+class SpecTape {
+  constructor(bytes) {
+    const tzx = bytes.length > 10 && String.fromCharCode(...bytes.subarray(0, 7)) === 'ZXTape!';
+    const b = tzx ? bytes : SpecTape.tapToTzx(bytes);
+    let cap = 1 << 16, n = 0, dur = new Uint32Array(cap), lvl = new Uint8Array(cap), level = 0;
+    const blocks = [], stops = new Set(), notes = [];
+    const push = (t, l) => {
+      if (t <= 0) return; t = Math.round(t);
+      if (n && lvl[n - 1] === l && dur[n - 1] + t < 0xFFFFFFFF) { dur[n - 1] += t; return; }
+      if (n === cap) { cap *= 2; const d2 = new Uint32Array(cap), l2 = new Uint8Array(cap); d2.set(dur); l2.set(lvl); dur = d2; lvl = l2; }
+      dur[n] = t; lvl[n] = l; n++;
+    };
+    const pulse = t => { level ^= 1; push(t, level); };
+    // a pause: 1 ms at the opposite level first, to finish the last pulse, then low (as the TZX format says)
+    const pause = ms => { if (ms > 0) { level ^= 1; push(3500, level); if (ms > 1) { level = 0; push((ms - 1) * 3500, 0); } } };
+    const data = (off, len, zero, one, last) => {
+      for (let i = 0; i < len; i++) { const v = b[off + i], bits = i === len - 1 ? last || 8 : 8; for (let k = 0; k < bits; k++) { const t = v & (0x80 >> k) ? one : zero; pulse(t); pulse(t); } }
+    };
+    const w = i => b[i] | b[i + 1] << 8, w3 = i => b[i] | b[i + 1] << 8 | b[i + 2] << 16, dw = i => (b[i] | b[i + 1] << 8 | b[i + 2] << 16 | b[i + 3] << 24) >>> 0;
+    const text = (i, len) => String.fromCharCode(...b.subarray(i, i + len)).replace(/[^\x20-\x7E]/g, ' ').trim();
+    // a run of plain pulses (a recording, or a tape made from one) may hold blocks in the ROM's format: a leader of
+    // equal pulses, two short sync pulses, then bytes, each bit two equal pulses, a 1 twice as long as a 0. A block
+    // is kept only if its checksum (all its bytes XORed) is 0.
+    let run = null;
+    const endRun = () => {
+      const r = run; run = null; if (!r || r.p.length < 600) return;
+      const found = SpecTape.findBlocks(r.p);
+      const at = blocks.indexOf(r.blk), runEnd = r.blk.end;
+      found.forEach((f, q) => {
+        const bl = q ? { block: r.blk.block, seg: r.seg0 + f.i0 } : r.blk;
+        bl.data = f.data; bl.desc = (q ? '' : r.blk.desc.replace(/(tone and )?pulses$/, '')) + 'recorded ' + SpecTape.what(f.data); bl.end = q + 1 < found.length ? r.seg0 + found[q + 1].i0 : runEnd;
+        if (q) blocks.splice(at + q, 0, bl);
+      });
+    };
+    const offs = []; let i = 10;
+    const size = (t, i) => {
+      switch (t) {
+        case 0x10: return 4 + w(i + 2); case 0x11: return 18 + w3(i + 15); case 0x12: return 4; case 0x13: return 1 + 2 * b[i];
+        case 0x14: return 10 + w3(i + 7); case 0x15: return 8 + w3(i + 5); case 0x18: case 0x19: return 4 + dw(i);
+        case 0x20: case 0x23: case 0x24: return 2; case 0x21: return 1 + b[i]; case 0x22: case 0x25: case 0x27: return 0;
+        case 0x26: return 2 + 2 * w(i); case 0x28: return 2 + w(i); case 0x2A: return 4; case 0x2B: return 5;
+        case 0x30: return 1 + b[i]; case 0x31: return 2 + b[i + 1]; case 0x32: return 2 + w(i); case 0x33: return 1 + 3 * b[i];
+        case 0x35: return 20 + dw(i + 16); case 0x5A: return 9; default: return 4 + dw(i);
+      }
+    };
+    while (i < b.length) { const t = b[i]; offs.push(i); i += 1 + size(t, i + 1); }
+    if (i > b.length) notes.push('the last block is cut short');
+    let group = '', loopAt = -1, loopN = 0, fresh = true;
+    for (let k = 0; k < offs.length; k++) {
+      const o = offs[k], t = b[o], j = o + 1; if (j >= b.length) break;
+      const start = n, mark = (d, off, len) => blocks.push({ seg: start, block: k, desc: (group ? group + ': ' : '') + d, off, len });
+      const wasFresh = fresh; if (t === 0x12 || t === 0x13) fresh = false; else if ([0x10, 0x11, 0x14, 0x15, 0x20].includes(t)) { fresh = true; endRun(); }
+      switch (t) {
+        case 0x10: { const len = w(j + 2), off = j + 4; mark((tzx ? 'standard ' : '') + SpecTape.what(b.subarray(off, off + len)), off, len); for (let p = b[off] < 128 ? 8063 : 3223; p > 0; p--) pulse(2168); pulse(667); pulse(735); data(off, len, 855, 1710, 8); pause(w(j)); break; }
+        case 0x11: { const len = w3(j + 15), off = j + 18; mark('turbo ' + SpecTape.what(b.subarray(off, off + len)), off, len); for (let p = w(j + 10); p > 0; p--) pulse(w(j)); pulse(w(j + 2)); pulse(w(j + 4)); data(off, len, w(j + 6), w(j + 8), b[j + 12]); pause(w(j + 13)); break; }
+        case 0x12: { if (wasFresh) { mark('tone and pulses'); run = { p: [], blk: blocks[blocks.length - 1], seg0: n }; } for (let p = w(j + 2); p > 0; p--) { pulse(w(j)); if (run) run.p.push(w(j)); } break; }
+        case 0x13: { if (wasFresh) { mark('pulses'); run = { p: [], blk: blocks[blocks.length - 1], seg0: n }; } for (let p = 0; p < b[j]; p++) { pulse(w(j + 1 + 2 * p)); if (run) run.p.push(w(j + 1 + 2 * p)); } break; }
+        case 0x14: { const len = w3(j + 7), off = j + 10; mark('pure data, ' + len + ' bytes', off, len); data(off, len, w(j), w(j + 2), b[j + 4]); pause(w(j + 5)); break; }
+        case 0x15: { const tps = w(j), len = w3(j + 5), off = j + 8, last = b[j + 4] || 8; mark(`direct recording, ${len} bytes`);
+          for (let q = 0; q < len; q++) for (let r = 0; r < (q === len - 1 ? last : 8); r++) { level = b[off + q] & (0x80 >> r) ? 1 : 0; push(tps, level); }
+          pause(w(j + 2)); break; }
+        case 0x20: { const ms = w(j); if (ms) pause(ms); else { stops.add(n); mark('stop the tape'); } break; }
+        case 0x21: group = text(j + 1, b[j]); break;
+        case 0x22: group = ''; break;
+        case 0x23: { const rel = (w(j) << 16) >> 16; if (rel) k += rel - 1; break; }
+        case 0x24: loopAt = k; loopN = w(j); break;
+        case 0x25: if (loopAt >= 0 && --loopN > 0) k = loopAt; else loopAt = -1; break;
+        case 0x2A: stops.add(n); mark('stop the tape (48K)'); break;
+        case 0x2B: level = b[j + 4] ? 1 : 0; break;
+        case 0x30: notes.push(text(j + 1, b[j])); break;
+        case 0x18: case 0x19: notes.push(`block type ${t.toString(16).toUpperCase()}h is not supported and was skipped`); break;
+        default: break;
+      }
+      const lb = blocks[blocks.length - 1]; if (lb && lb.block === k) lb.end = n;
+      if (run && lb) lb.end = n;
+    }
+    endRun();
+    this.bytes = b; this.tzx = tzx; for (const bl of blocks) if (bl.off !== undefined) bl.data = b.subarray(bl.off, bl.off + bl.len);
+    for (let q = 0; q < blocks.length; q++) if (blocks[q].end === undefined || blocks[q].end < blocks[q].seg) blocks[q].end = q + 1 < blocks.length ? blocks[q + 1].seg : n;
+    this.dur = dur.subarray(0, n); this.lvl = lvl.subarray(0, n); this.n = n; this.blocks = blocks; this.stops = stops; this.notes = notes;
+    this.total = 0; for (let q = 0; q < n; q++) this.total += this.dur[q];
+  }
+  // what a block holds: a header (flag 00h, 19 bytes) names the file
+  static what(d) {
+    const len = d.length;
+    if (d[0] === 0 && len === 19) { const name = String.fromCharCode(...d.subarray(2, 12)).replace(/[^\x20-\x7E]/g, ' ').trim(); return `${['Program', 'Number array', 'Character array', 'Bytes'][d[1]] || 'Header'}: "${name}"`; }
+    return (d[0] === 0xFF ? 'data' : 'block') + `, ${Math.max(0, len - 2)} bytes`;
+  }
+  // a TAP file: each block is its length (2 bytes) then the block (flag, data, checksum). As TZX blocks 10h, 1 s apart.
+  static tapToTzx(b) {
+    const out = [...'ZXTape!'].map(c => c.charCodeAt(0)).concat([0x1A, 1, 20]);
+    for (let i = 0; i + 2 <= b.length;) {
+      const len = b[i] | b[i + 1] << 8; if (!len) { i += 2; continue; }
+      if (i + 2 + len > b.length) throw new Error('The TAP file is cut short in a block');
+      out.push(0x10, 1000 & 255, 1000 >> 8, len & 255, len >> 8); for (let k = 0; k < len; k++) out.push(b[i + 2 + k]); i += 2 + len;
+    }
+    if (out.length === 10) throw new Error('Not a TAP or TZX tape file');
+    return new Uint8Array(out);
+  }
+  // blocks in the ROM's format in a list of pulse lengths (T-states)
+  static findBlocks(p) {
+    const found = []; let i = 0;
+    while (i + 256 < p.length) {
+      let j = i + 1, sum = p[i];
+      while (j < p.length && Math.abs(p[j] - sum / (j - i)) < sum / (j - i) * 0.2) { sum += p[j]; j++; }
+      const lead = sum / (j - i);
+      if (j - i >= 256 && j + 1 < p.length && p[j] + p[j + 1] < lead * 1.2) {
+        const out = []; let k = j + 2, v = 0, nb = 0;
+        while (k + 1 < p.length && p[k] < lead * 1.2 && p[k + 1] < lead * 1.2 && Math.abs(p[k] - p[k + 1]) < lead * 0.35) { v = v << 1 | (p[k] + p[k + 1] > lead * 1.2 ? 1 : 0); k += 2; if (++nb === 8) { out.push(v); v = 0; nb = 0; } }
+        const d = new Uint8Array(out); let x = 0; for (const c of d) x ^= c;
+        if (d.length >= 2 && x === 0) found.push({ data: d, i0: i, i1: k });
+        i = Math.max(k, j + 1);
+      } else i = j;
+    }
+    return found;
+  }
+}
+// a recording as a TZX file: the pulses as pulse-sequence blocks; a gap longer than a pulse can be becomes a pause
+SpecTape.fromPulses = (pulses, note = 'Recorded on the Z80 Bench ZX Spectrum emulator') => {
+  const out = [...'ZXTape!'].map(c => c.charCodeAt(0)).concat([0x1A, 1, 20]);
+  const t = [...note].map(c => c.charCodeAt(0) & 0x7F).slice(0, 255); out.push(0x30, t.length, ...t);
+  let run = [], any = false;
+  const flush = () => { while (run.length) { const n = Math.min(255, run.length); out.push(0x13, n); for (const v of run.splice(0, n)) out.push(v & 255, v >> 8); } };
+  for (let i = 0; i < pulses.length; i++) {
+    const v = Math.round(pulses[i]);
+    if (i === 0 && v > 65535) continue;
+    if (v > 65535) { flush(); const ms = Math.min(65535, Math.max(1, Math.round(v / 3500))); out.push(0x20, ms & 255, ms >> 8); continue; }
+    if (v > 0) { run.push(v); any = true; }
+  }
+  flush();
+  return any ? new Uint8Array(out) : null;
+};
+// a recording as a TAP file, when every block in it is in the ROM's format; otherwise null
+SpecTape.tapFromPulses = pulses => {
+  const blocks = SpecTape.findBlocks(pulses); if (!blocks.length) return null;
+  const out = []; for (const f of blocks) { out.push(f.data.length & 255, f.data.length >> 8, ...f.data); }
+  return new Uint8Array(out);
+};
+
+// ---- WAV files: as on the CPC bench (DC removed over 3 ms, a threshold that follows the signal, a floor above the hiss,
+// edges at the zero crossings), in T-states at 3.5 MHz
+SpecTape.readWav = bytes => {
+  const b = bytes, dv = new DataView(b.buffer, b.byteOffset, b.byteLength), tag = i => String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]);
+  if (b.length < 12 || tag(0) !== 'RIFF' || tag(8) !== 'WAVE') throw new Error('Not a WAV file (no RIFF WAVE header)');
+  let fmt = null, data = null;
+  for (let i = 12; i + 8 <= b.length;) {
+    const id = tag(i), len = dv.getUint32(i + 4, true), body = i + 8;
+    if (id === 'fmt ') { let f = dv.getUint16(body, true); const bits = dv.getUint16(body + 14, true); if (f === 0xFFFE && len >= 26) f = dv.getUint16(body + 24, true); fmt = { f, ch: dv.getUint16(body + 2, true), rate: dv.getUint32(body + 4, true), align: dv.getUint16(body + 12, true), bits }; }
+    else if (id === 'data') data = [body, Math.min(len, b.length - body)];
+    i = body + len + (len & 1);
+  }
+  if (!fmt || !data) throw new Error('The WAV file has no ' + (fmt ? 'sound data' : 'format chunk'));
+  const { f, ch, rate, align, bits } = fmt, by = bits >> 3;
+  if (!(f === 1 && [8, 16, 24, 32].includes(bits) || f === 3 && (bits === 32 || bits === 64)) || !ch || !rate || align < ch * by) throw new Error(`WAV format not supported (format ${f}, ${bits} bits): use PCM or float`);
+  const n = Math.floor(data[1] / align), x = new Float32Array(n);
+  for (let k = 0; k < n; k++) {
+    let sum = 0;
+    for (let c = 0; c < ch; c++) {
+      const o = data[0] + k * align + c * by;
+      sum += f === 3 ? (bits === 32 ? dv.getFloat32(o, true) : dv.getFloat64(o, true)) : bits === 8 ? (b[o] - 128) / 128 : bits === 16 ? dv.getInt16(o, true) / 32768 : bits === 24 ? ((b[o] | b[o + 1] << 8 | b[o + 2] << 16) << 8 >> 8) / 8388608 : dv.getInt32(o, true) / 2147483648;
+    }
+    x[k] = sum / ch;
+  }
+  return { rate, x, bits, ch };
+};
+SpecTape.wavPulses = (x, rate) => {
+  const n = x.length, W = Math.max(3, Math.round(rate * 0.003)), y = new Float32Array(n);
+  let acc = 0; const half = W >> 1;
+  for (let k = 0; k < Math.min(n, half); k++) acc += x[k];
+  for (let k = 0; k < n; k++) {
+    const add = k + half, sub = k - half - 1; if (add < n) acc += x[add]; if (sub >= 0) acc -= x[sub];
+    const cnt = Math.min(n - 1, k + half) - Math.max(0, k - half) + 1; y[k] = x[k] - acc / cnt;
+  }
+  const Wn = Math.max(8, Math.round(rate * 0.005)), wp = [];
+  for (let k = 0; k < n; k += Wn) { let m = 0; for (let j = k; j < Math.min(n, k + Wn); j++) m = Math.max(m, Math.abs(y[j])); wp.push(m); }
+  wp.sort((p, q) => p - q);
+  const sig = wp[Math.floor(wp.length * 0.9)] || 0, hiss = wp[Math.floor(wp.length * 0.1)] || 0;
+  if (!sig) return [];
+  const floor = Math.min(sig * 0.4, Math.max(sig * 0.03, hiss * 2)), decay = Math.exp(-1 / (rate * 0.02)), pulses = [], clk = SPEC.CPU_HZ / rate;
+  let env = 0, state = 0, cross = 0, last = 0, first = true;
+  for (let k = 1; k < n; k++) {
+    const v = y[k], a = Math.abs(v); env = Math.max(a, env * decay);
+    if ((v >= 0) !== (y[k - 1] >= 0)) cross = k - 1 + y[k - 1] / (y[k - 1] - v);
+    const h = Math.max(floor, env * 0.25);
+    if (state <= 0 && v > h || state >= 0 && v < -h) {
+      const want = v > 0 ? 1 : -1;
+      if (state !== want) { if (state !== 0) { pulses.push(Math.max(1, Math.round((cross - last) * clk))); } else if (first) { pulses.push(Math.max(1, Math.round(cross * clk))); first = false; } last = cross; state = want; }
+    }
+  }
+  return pulses;
+};
+SpecTape.fromWav = (bytes, name) => {
+  const w = SpecTape.readWav(bytes), pulses = SpecTape.wavPulses(w.x, w.rate);
+  const t = SpecTape.fromPulses(pulses, `Converted from ${name || 'a WAV file'} (${w.rate} Hz, ${w.bits}-bit, ${w.ch === 1 ? 'mono' : w.ch + ' channels'}) by Z80 Bench`);
+  if (!t) throw new Error('No tape signal was found in the WAV file');
+  return t;
+};
+SpecTape.toWav = (tape, rate = 44100, opt = {}) => {
+  let total = 0; for (let i = 0; i < tape.n; i++) total += tape.dur[i];
+  const n = Math.ceil(total / SPEC.CPU_HZ * rate) + 1, bits = opt.bits || 8, by = bits >> 3, out = new Uint8Array(44 + n * by), dv = new DataView(out.buffer);
+  const put = (o, s) => { for (let i = 0; i < s.length; i++) out[o + i] = s.charCodeAt(i); };
+  put(0, 'RIFF'); dv.setUint32(4, 36 + n * by, true); put(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate * by, true); dv.setUint16(32, by, true); dv.setUint16(34, bits, true); put(36, 'data'); dv.setUint32(40, n * by, true);
+  const amp = opt.amp === undefined ? 0.8 : opt.amp;
+  let seg = 0, left = tape.n ? tape.dur[0] : Infinity, t = 0;
+  for (let k = 0; k < n; k++) {
+    const at = (k / rate) * SPEC.CPU_HZ; while (seg < tape.n && at - t >= left) { t += left; seg++; left = seg < tape.n ? tape.dur[seg] : Infinity; }
+    const s = seg < tape.n ? (tape.lvl[seg] ? amp : -amp) : 0;
+    if (bits === 8) out[44 + k] = Math.round(s * 127 + 128); else dv.setInt16(44 + k * 2, Math.round(s * 32767), true);
+  }
+  return out;
+};
+
+// ---- chips with pins, for the live pin display and faults (MemChip, BoardChip and BOARD_FAULTS from memchips.js) ----
+// The ROM (IC5) as the issue 4A/4B diagram numbers it. The diagram contradicts itself on pin 27: the row of pin numbers
+// over the chip gives pin 27 as A12, and the box inside it gives pins 20 and 27 as the two chip selects (CE and CS,
+// swapped between NEC and Hitachi parts). The pins are drawn from the row of numbers, with ROMCS on pin 20 (CE);
+// pins 1 and 2 are not on the diagram.
+const SPEC_PINOUTS = {
+  ROM: [[1, 'NC', 'c'], [2, 'NC', 'c'], [3, 'A7'], [4, 'A6'], [5, 'A5'], [6, 'A4'], [7, 'A3'], [8, 'A2'], [9, 'A1'], [10, 'A0'], [11, 'D0'], [12, 'D1'], [13, 'D2'], [14, 'GND', 'g'],
+    [15, 'D3'], [16, 'D4'], [17, 'D5'], [18, 'D6'], [19, 'D7'], [20, 'CE'], [21, 'A10'], [22, 'OE'], [23, 'A11'], [24, 'A9'], [25, 'A8'], [26, 'A13'], [27, 'A12'], [28, 'VCC', 'p']],
+  // the 4532 (a 4164 with one good half; link DK1 picks the half): pin 9 is the row-only address bit (AR on the diagram)
+  RAM32: [[1, 'NC', 'c'], [2, 'DIN'], [3, 'WE'], [4, 'RAS'], [5, 'A0'], [6, 'A2'], [7, 'A1'], [8, 'VCC', 'p'], [9, 'A7'], [10, 'A5'], [11, 'A4'], [12, 'A3'], [13, 'A6'], [14, 'DOUT'], [15, 'CAS'], [16, 'GND', 'g']],
+  ULA: [[1, 'CAS'], [2, 'WR'], [3, 'RD'], [4, 'WE'], [5, 'A0'], [6, 'A1'], [7, 'A2'], [8, 'A3'], [9, 'A4'], [10, 'A5'], [11, 'A6'], [12, 'INT'], [13, 'VCC2', 'p'], [14, 'VCC1', 'p'], [15, 'U'], [16, 'V'], [17, 'Y'], [18, 'D0'], [19, 'KB0'], [20, 'KB1'],
+    [21, 'D1'], [22, 'D2'], [23, 'KB2'], [24, 'KB3'], [25, 'D3'], [26, 'KB4'], [27, 'D4'], [28, 'MIC/EAR'], [29, 'D5'], [30, 'D6'], [31, 'D7'], [32, 'CPU CLK'], [33, 'IORQ'], [34, 'ROMCS'], [35, 'RAS'], [36, 'A14'], [37, 'A15'], [38, 'MREQ'], [39, 'OSC'], [40, 'GND', 'g']]
+};
+for (const k in SPEC_PINOUTS) SPEC_PINOUTS[k] = SPEC_PINOUTS[k].map(([n, name, kind]) => [n, name, kind || 'i']);
+if (typeof MEM_PINOUTS !== 'undefined') { MEM_PINOUTS['23128'] = SPEC_PINOUTS.ROM; MEM_PINOUTS['4532'] = SPEC_PINOUTS.RAM32; MEM_PINOUTS['6C001'] = SPEC_PINOUTS.ULA; }
+// ---- the machine ----
+class SpecMachine {
+  constructor() {
+    this.rom = new Uint8Array(0x4000).fill(0xFF); this.hasRom = false;
+    this.ram = new Uint8Array(0xC000);                 // 4000h-FFFFh
+    this.keys = new Uint8Array(8);                     // bit set = key down
+    this.fb = new Uint8Array(SPEC.FW * SPEC.FH);       // the picture, as colour numbers 0-15
+    this.bus = { read: a => this.read(a), write: (a, v) => this.write(a, v), input: p => this.input(p), output: (p, v) => this.output(p, v) };
+    this.cpu = new Z80(this.bus); this.cpu.log = true; this.cpu.intVector = 0xFF;
+    // each instruction starts its own clock count: the ULA's holds are worked out as its cycles happen
+    const run = this.cpu.step.bind(this.cpu);
+    this.cpu.step = () => {
+      this.ct = 0; this.done = 0; this.wq = []; this.wqi = 0; this.lastA = this.cpu.pc;
+      if (this.faulty && this.fx.clkDead) { this.cpu.lastEvent = null; return this.cpu.cyc = [{ k: 'ID', n: 4 }]; }   // no clock: the CPU stands still, the ULA carries on
+      return run();
+    };
+    this.tape = null; this.tapePlay = false; this.tapeIdx = 0; this.tapeRem = 0; this.tapeLevel = 0; this.tapePos = 0; this.rec = null; this.instant = true;
+    this.audioRate = 0; this.abuf = new Float32Array(32768); this.aw = 0; this.audioT = 0; this.lvlSum = 0; this.lvlN = 0;
+    this.contended = true;                             // the ULA holds the CPU (off: every access runs at full speed)
+    if (typeof BoardChip !== 'undefined') this.buildChips();
+    this.issue = 3;                                    // the EAR threshold of issue 3 and later boards (issue 4A/4B included)
+    this.reset();
+  }
+  loadRom(bytes) {
+    if (bytes.length !== 0x4000) throw new Error('A Spectrum 48K ROM image is 16,384 bytes');
+    this.rom.set(bytes); this.hasRom = true;
+  }
+  romCrc() { return specCrc32(this.rom); }
+  // power on: the RAM keeps whatever it held (filled here with a pattern), the ULA's counters start at the top of a frame
+  reset() {
+    this.cpu.reset(); this.t = 0; this.ft = 0; this.frames = 0; this.ints = 0; this.waits = 0;
+    this.feReads = 0; this.readingT = -1e12; this.instantT = -1;
+    this.border = 7; this.out = 0; this.flash = 0; this.vt = this.cellT(0); this.cell = 0;
+    this.ct = 0; this.done = 0; this.lastA = 0; this.wq = []; this.wqi = 0;
+    this.cpu.intLine = false; this.fb.fill(7);
+  }
+  // ---- the ULA's timing ----
+  delay(ft) {                                          // T-states of hold for a cycle starting at frame time ft
+    if (!this.contended || ft < SPEC.CONT_T || ft >= SPEC.CONT_T + 192 * SPEC.LINE_T) return 0;
+    const r = (ft - SPEC.CONT_T) % SPEC.LINE_T; return r < 128 ? SPEC.DELAY[r & 7] : 0;
+  }
+  static contendedAddr(a) { return (a & 0xC000) === 0x4000; }
+  // The time of each access within an instruction. The processor logs each cycle just after making it, so when an
+  // access starts, the cycles before it are accounted for first (catchUp): an opcode fetch takes 4 T-states, a read or
+  // a write 3, an interrupt acknowledge 6, an I/O cycle what ioCycle worked out. An internal cycle leaves the last
+  // address on the bus (after an opcode fetch, the refresh address: I and R), so it is held like an access to that
+  // address, one T-state at a time.
+  catchUp() {
+    const cyc = this.cpu.cyc;
+    for (; this.done < cyc.length; this.done++) {
+      const c = cyc[this.done];
+      if (c.k === 'ID') { c.t0 = this.ct; const h0 = this.waits; for (let k = 0; k < c.n; k++) { this.cont(this.lastA); this.ct++; } c.w = this.waits - h0; continue; }
+      const q = this.wq[this.wqi++] || [0, this.ct]; c.w = q[0]; c.t0 = q[1];
+      if (c.k === 'IR' || c.k === 'IW') { this.lastA = c.a; continue; }          // already timed by ioCycle
+      if (c.k === 'IA') c.t0 = this.ct;
+      this.ct += c.k === 'M1' ? 4 : c.k === 'IA' ? 6 : 3;
+      this.lastA = c.k === 'M1' || c.k === 'IA' ? (c.rf & 0xFF00) | (c.rf & 0x80) | ((c.rf + 1) & 0x7F) : c.a;
+    }
+  }
+  // the ULA holds the clock if the address is in 4000h-7FFFh and it is reading the screen
+  cont(a) {
+    if (this.log) this.log.push([this.ct, a]);
+    if (SpecMachine.contendedAddr(this.faulty ? this.ulaA(this.z80c.busA(a)) : a)) { const d = this.delay(this.ftAt(this.ct)); this.ct += d; this.waits += d; }
+  }
+  ftAt(ct) { return (this.ft + ct) % SPEC.FRAME_T; }
+  memCycle(a) { this.catchUp(); const t0 = this.ct, h0 = this.waits; this.cont(a); this.wq.push([this.waits - h0, t0]); return this.ct; }
+  // an I/O cycle (4 T-states). The ULA is selected by A0 low and holds the clock from the second T-state; an address
+  // in 4000h-7FFFh is held as for memory, at each T-state if the ULA is not selected
+  ioCycle(p) {
+    this.catchUp(); const hi = SpecMachine.contendedAddr(p), ula = !(p & 1), t0 = this.ct, h0 = this.waits;
+    const c1 = () => { if (this.log) this.log.push([this.ct, p, 'io']); const d = this.delay(this.ftAt(this.ct)); this.ct += d; this.waits += d; };
+    const free = () => { };
+    let at;
+    if (!hi && !ula) { free(); at = this.ct + 1; this.ct += 4; }
+    else if (!hi && ula) { free(); this.ct += 1; c1(); at = this.ct; this.ct += 3; }
+    else if (hi && ula) { c1(); this.ct += 1; c1(); at = this.ct; this.ct += 3; }
+    else { for (let k = 0; k < 4; k++) { c1(); if (k === 1) at = this.ct; this.ct += 1; } }
+    this.wq.push([this.waits - h0, t0]); return at;
+  }
+  // The chips: IC1 the ULA, IC2 the Z80, IC5 the ROM, IC6-IC13 the lower RAM (4116, D0-D7 in order, row A0-A6 and
+  // column A7-A13 on the same pins), IC15-IC22 the upper RAM (4532, D0-D7 in order). The diagram does not show which
+  // CPU address lines IC25 and IC26 give the upper RAM as row and as column: taken here as A0-A7 the row and A8-A14
+  // the column (pin A7 carries only a row bit; the column's eighth bit is the half picked by link DK1).
+  buildChips() {
+    this.ula = new BoardChip('IC1', '6C001', 'ULA: clocks, video, the lower RAM, keyboard and cassette', 'ports with A0 low; 4000h–7FFFh');
+    this.z80c = new BoardChip('IC2', 'Z80', 'Z80A processor', '3.5 MHz');
+    this.romc = new MemChip('IC5', '23128', 'ROM, 16K', '0000h–3FFFh, D0–D7', this.rom, 0, 14, { rom: true, en: 'CE' });
+    this.lowBank = []; this.upBank = [];
+    for (let k = 0; k < 8; k++) this.lowBank.push(new MemChip('IC' + (6 + k), '4116', 'lower RAM, data bit D' + k, '4000h–7FFFh, D' + k, this.ram, 0, 14, { dram: true, bit: k, mux: 7 }));
+    const amap = [0, 1, 2, 3, 4, 5, 6].map(i => (1 << i) | (1 << (i + 8))).concat([1 << 7]);
+    for (let k = 0; k < 8; k++) this.upBank.push(new MemChip('IC' + (15 + k), '4532', 'upper RAM, data bit D' + k, '8000h–FFFFh, D' + k, this.ram, 0x4000, 15, { dram: true, bit: k, mux: 8, amap }));
+    this.romBank = [this.romc]; this.banks = [this.romBank, this.lowBank, this.upBank];
+    this.chips = [this.ula, this.z80c, this.romc, ...this.lowBank, ...this.upBank];
+    this.chipById = {}; for (const c of this.chips) this.chipById[c.id] = c;
+    this.acc = new Uint32Array(5);                       // accesses, for the chip tiles: ROM, lower RAM, upper RAM, ULA port, CPU
+    this.applyFaults();
+  }
+  // the board's lines: [label, the pin that drives it (index) or -1, pins]
+  nets() {
+    if (this._nets) return this._nets;
+    const N = {}, add = (k, label, d, pins) => { N[k] = { label, d, pins }; };
+    const low = n => this.lowBank.map(c => [c.id, n]), up = n => this.upBank.map(c => [c.id, n]);
+    for (let k = 0; k < 16; k++) add('A' + k, 'Address line A' + k, 0, [['IC2', 'A' + k], ...(k < 14 ? [['IC5', 'A' + k]] : []), ...(k >= 14 ? [['IC1', 'A' + k]] : [])]);
+    for (let k = 0; k < 8; k++) add('D' + k, 'Data line D' + k + ' (CPU side)', -1, [['IC2', 'D' + k], ['IC5', 'D' + k], ['IC' + (15 + k), 'DIN'], ['IC' + (15 + k), 'DOUT']]);
+    for (let k = 0; k < 8; k++) add('UD' + k, 'Data line D' + k + ' of the ULA and the lower RAM (through R' + (k + 1) + ')', -1, [['IC1', 'D' + k], ['IC' + (6 + k), 'DIN'], ['IC' + (6 + k), 'DOUT']]);
+    for (let k = 0; k < 7; k++) add('RA' + k, 'Lower RAM address line A' + k, -1, [['IC1', 'A' + k], ...low('A' + k)]);
+    for (let k = 0; k < 8; k++) add('UA' + k, 'Upper RAM address line A' + k + ' (from IC25, IC26)', -1, up('A' + k));
+    for (const n of ['RAS', 'CAS', 'WE']) { add('L' + n, 'Lower RAM ' + n, 0, [['IC1', n], ...low(n)]); add('U' + n, 'Upper RAM ' + n + ' (from IC23, IC24)', -1, up(n)); }
+    for (const n of ['MREQ', 'IORQ', 'RD', 'WR']) add(n, n, 0, [['IC2', n], ['IC1', n]]);
+    add('INT', 'INT', 0, [['IC1', 'INT'], ['IC2', 'INT']]);
+    add('CLK', 'CPU clock (CPU CLK, through TR6)', 0, [['IC1', 'CPU CLK'], ['IC2', 'CLK']]);
+    add('ROMCS', 'ROMCS', 0, [['IC1', 'ROMCS'], ['IC5', 'CE']]);
+    return this._nets = N;
+  }
+  // what the faults do, worked out once each time they change
+  refault() {
+    const z = this.z80c, u = this.ula, L = (c, k) => c.lv[k];
+    const io = { MREQ: L(z, 'MREQ'), IORQ: L(z, 'IORQ'), RD: L(z, 'RD'), WR: L(z, 'WR') };
+    this.fx = {
+      any: this.faulty,
+      memOff: io.MREQ === 1, rdOff: io.RD === 1, wrOff: io.WR === 1, ioOff: io.IORQ === 1,
+      clkDead: L(z, 'CLK') !== undefined, int: L(z, 'INT'), ulaInt: L(u, 'INT'),
+      kbAnd: [0, 1, 2, 3, 4].reduce((m, k) => L(u, 'KB' + k) === 0 ? m & ~(1 << k) : m, 0x1F), kbOr: [0, 1, 2, 3, 4].reduce((m, k) => L(u, 'KB' + k) === 1 ? m | (1 << k) : m, 0),
+      ear: L(u, 'MIC/EAR'), udHeld: [0, 1, 2, 3, 4, 5, 6, 7].map(k => (this.netF || {})['UD' + k])
+    };
+  }
+  // the address as the ULA sees it (its A14 and A15 pins), for its decoding: contention, ROMCS, the lower RAM
+  ulaA(a) { return this.faulty ? (a & 0x3FFF) | (this.ula.busA(a) & 0xC000) : a; }
+  // the lower RAM through its chips (quiet: the ULA's reads, which leave no trace)
+  lowRead(off, quiet) { return this.faulty && this.lowBank.faulty ? memBankRead(this.lowBank, off, quiet) : this.ram[off]; }
+  // a CPU read of memory: what the chips selected put on the bus (the ROM by the ULA's ROMCS, the lower RAM by the
+  // ULA's decoding, the upper RAM by A15); none, and the 8K2 pull-ups R9-R16 give FFh; two at once, the lower bits win
+  memRead(a) {
+    if (!this.faulty) return a < 0x4000 ? this.rom[a] : this.ram[a - 0x4000];
+    const fx = this.fx; a = this.z80c.busA(a); if (fx.memOff || fx.rdOff) return this.z80c.busD(0xFF);
+    const ua = this.ulaA(a); let v = 0xFF;
+    if (!(ua & 0xC000)) v &= this.romBank.faulty ? memBankRead(this.romBank, a & 0x3FFF) : this.rom[a & 0x3FFF];
+    if ((ua & 0xC000) === 0x4000) { let x = this.lowRead(a & 0x3FFF); fx.udHeld.forEach((h, k) => { if (h !== undefined) x = x & ~(1 << k) | h << k; }); v &= x; }
+    if (a & 0x8000) v &= this.upBank.faulty ? memBankRead(this.upBank, a - 0x4000) : this.ram[a - 0x4000];
+    return this.z80c.busD(v);
+  }
+  memWrite(a, v) {
+    if (!this.faulty) { if (a >= 0x4000) this.ram[a - 0x4000] = v; return; }
+    const fx = this.fx; a = this.z80c.busA(a); v = this.z80c.busD(v); if (fx.memOff || fx.wrOff) return;
+    const ua = this.ulaA(a);
+    if ((ua & 0xC000) === 0x4000) { if (this.lowBank.faulty) memBankWrite(this.lowBank, a & 0x3FFF, v); else this.ram[a & 0x3FFF] = v; }
+    if (a & 0x8000) { if (this.upBank.faulty) memBankWrite(this.upBank, a - 0x4000, v); else this.ram[a - 0x4000] = v; }
+  }
+  // ---- memory ----
+  read(a) {
+    this.memCycle(a); this.acc[a < 0x4000 ? 0 : a < 0x8000 ? 1 : 2]++;
+    return this.memRead(a);
+  }
+  write(a, v) {
+    const at = this.memCycle(a); this.acc[a < 0x4000 ? 0 : a < 0x8000 ? 1 : 2]++;
+    if (a < 0x4000 && !this.faulty) return;             // the ROM ignores writes
+    if (a < 0x8000) this.drawTo(this.ftAt(at));         // the picture so far is drawn before the screen memory changes
+    this.memWrite(a, v);
+  }
+  peek(a) { a &= 0xFFFF; return a < 0x4000 ? this.rom[a] : this.ram[a - 0x4000]; }
+  poke(a, v) { a &= 0xFFFF; if (a >= 0x4000) this.ram[a - 0x4000] = v & 0xFF; }
+  // ---- port FE ----
+  // EAR: the MIC/TAPE pin carries the outputs (bit 4 strongly, bit 3 weakly) and the tape input; bit 6 reads the
+  // pin against a threshold. On issue 3 and later boards bit 4 alone reads high; on issue 2, bit 3 does too.
+  earBit() { if (this.faulty && this.fx.ear !== undefined) return this.fx.ear ? 0x40 : 0; const o = this.out; return this.tapeIn() || (o & 0x10) || (this.issue < 3 && (o & 0x08)) ? 0x40 : 0; }
+  keyRows(hi) { let v = 0x1F; for (let r = 0; r < 8; r++) if (!(hi & (1 << r))) v &= ~this.keys[r] & 0x1F; return this.faulty ? v & this.fx.kbAnd | this.fx.kbOr : v; }
+  input(p) {
+    const at = this.ioCycle(p);
+    if (this.faulty) { if (this.fx.ioOff || this.fx.rdOff) return this.z80c.busD(0xFF); p = this.z80c.busA(p); }
+    if (!(p & 1)) {                                     // the ULA drives its data pins, through R1-R8 onto the CPU's bus
+      this.feReads++; this.acc[3]++; let v = this.keyRows(p >> 8) | 0xA0 | this.earBit();
+      if (this.faulty) { v = this.ula.busD(v); this.fx.udHeld.forEach((h, k) => { if (h !== undefined) v = v & ~(1 << k) | h << k; }); v = this.z80c.busD(v); }
+      return v;
+    }
+    const v = this.floating(this.ftAt(at)); return this.faulty ? this.z80c.busD(v) : v;
+  }
+  output(p, v) {
+    const at = this.ioCycle(p);
+    if (this.faulty) { if (this.fx.ioOff || this.fx.wrOff) return; p = this.z80c.busA(p); v = this.ula.busD(this.z80c.busD(v)); }
+    if (p & 1) return; this.acc[3]++;
+    this.drawTo(this.ftAt(at));
+    this.border = v & 7; const was = this.out; this.out = v & 0x18;
+    if ((was ^ this.out) & 0x18) this.soundEdge(at);
+    if (this.rec && ((was ^ this.out) & 0x08)) this.recEdge(at);
+  }
+  // nothing answers an odd port: the data bus floats, and holds what the ULA is reading for the picture, if anything
+  floating(ft) {
+    const r = ft - (SPEC.DISP_T + 2); if (r < 0) return 0xFF;
+    const line = Math.floor(r / SPEC.LINE_T), x = r % SPEC.LINE_T; if (line >= 192 || x >= 128) return 0xFF;
+    const ph = x & 7; if (ph > 3) return 0xFF;
+    const col = (x >> 3) * 2 + (ph >> 1);
+    return this.screenByte(ph & 1 ? 0x1800 + (line >> 3) * 32 + col : ((line & 0xC0) << 5 | (line & 7) << 8 | (line & 0x38) << 2) + col);
+  }
+  // what the ULA reads from the lower RAM at frame T-state ft: in each 8 T-states of a line of the picture, the bitmap
+  // byte, its attribute, the next bitmap byte and its attribute, then 4 T-states left to the CPU (the same timing as
+  // the floating bus). A bitmap byte and its attribute share the low 8 address bits, so one row address (A0-A6) serves
+  // both: two page-mode reads under one RAS. Returns null when the ULA is not reading.
+  ulaFetch(ft) {
+    const r = ft - (SPEC.DISP_T + 2); if (r < 0) return null;
+    const line = Math.floor(r / SPEC.LINE_T), x = r % SPEC.LINE_T; if (line >= 192 || x >= 128) return null;
+    const ph = x & 7; if (ph > 3) return null;
+    const col = (x >> 3) * 2 + (ph >> 1), attr = !!(ph & 1);
+    const off = attr ? 0x1800 + (line >> 3) * 32 + col : ((line & 0xC0) << 5 | (line & 7) << 8 | (line & 0x38) << 2) + col;
+    return { ph, attr, addr: 0x4000 + off, val: this.screenByte(off), line, col };
+  }
+  // a byte of the screen as the ULA reads it: through the lower RAM's chips and the ULA's own data pins
+  screenByte(off) {
+    if (!this.faulty) return this.ram[off];
+    let v = this.lowRead(off, true); this.fx.udHeld.forEach((h, k) => { if (h !== undefined) v = v & ~(1 << k) | h << k; });
+    return this.ula.busD(v);
+  }
+  // ---- the picture: 44 cells of 8 dots (4 T-states) a line, 6 of border each side of the 32 of the picture ----
+  cellT(cell) { const line = SPEC.FIRST + Math.floor(cell / 44), c = cell % 44; return SPEC.DISP_T + (line - 64) * SPEC.LINE_T + (c - 6) * 4; }
+  drawTo(ft) {
+    const total = 44 * SPEC.FH;
+    while (this.cell < total && this.vt <= ft) { this.drawCell(this.cell); this.cell++; if (this.cell < total) this.vt = this.cellT(this.cell); }
+  }
+  drawCell(cell) {
+    const y = Math.floor(cell / 44), c = cell % 44, line = y + SPEC.FIRST - 64, o = y * SPEC.FW + c * 8, fb = this.fb;
+    if (line < 0 || line >= 192 || c < 6 || c >= 38) { fb.fill(this.border, o, o + 8); return; }
+    const col = c - 6, bits = this.screenByte(((line & 0xC0) << 5 | (line & 7) << 8 | (line & 0x38) << 2) + col), at = this.screenByte(0x1800 + (line >> 3) * 32 + col);
+    let ink = (at & 7) | (at & 0x40) >> 3, paper = (at >> 3 & 7) | (at & 0x40) >> 3;
+    if (at & 0x80 && this.flash) { const s = ink; ink = paper; paper = s; }
+    for (let b = 0; b < 8; b++) fb[o + b] = bits & (0x80 >> b) ? ink : paper;
+  }
+  endFrame() {
+    this.drawTo(SPEC.FRAME_T); this.frames++;
+    if (this.feReads > 200) this.readingT = this.t;       // the keyboard takes 8 reads a frame at most: this many is a loader reading EAR
+    this.feReads = 0;
+    if ((this.frames & 15) === 0) this.flash ^= 1;
+    this.cell = 0; this.vt = this.cellT(0);
+  }
+  // ---- running ----
+  step() {
+    this.preStep(); this.syncInt();
+    return this.afterStep(this.cpu.step());
+  }
+  afterStep(cyc) {
+    this.catchUp(); const t = this.ct; this.ftStart = this.ft;       // the frame T-state the instruction started at
+    if (this.cpu.lastEvent === 'INT') this.ints++;
+    this.tapeMove(t);
+    // after an instant load the tape stops by itself once nothing has read it for 2 seconds (a custom loader keeps it going)
+    if (this.tapePlay && this.instantT >= 0 && this.t - Math.max(this.instantT, this.readingT) > 2 * SPEC.CPU_HZ) { this.tapePlay = false; this.instantT = -1; }
+    if (this.rec) this.rec.clock += t;
+    if (this.audioRate) this.audioRun(t);
+    this.t += t; this.ft += t;
+    if (this.ft >= SPEC.FRAME_T) { this.ft -= SPEC.FRAME_T; this.endFrame(); this.drawTo(this.ft); }
+    return t;
+  }
+  intOut() { if (this.faulty && this.fx.ulaInt !== undefined) return this.fx.ulaInt === 0; return this.ft < SPEC.INT_T; }   // INT is low for the first 32 T-states of the frame
+  syncInt() { this.cpu.intLine = this.faulty && this.fx.int !== undefined ? this.fx.int === 0 : this.intOut(); }
+  // where the beam is: line of the frame and T-state in the line, and as a position in the picture kept (fb)
+  beam() { const line = Math.floor(this.ft / SPEC.LINE_T), t = this.ft % SPEC.LINE_T; let x = t < 128 ? 48 + t * 2 : t < 152 ? 304 + (t - 128) * 2 : t >= 200 ? (t - 200) * 2 : -1; const y = (t >= 200 ? line + 1 : line) - SPEC.FIRST; return { line, t, x, y }; }
+  // a line of the picture being drawn, and where in it: what the ULA is doing at this moment
+  ulaState() {
+    const ft = this.ft, line = Math.floor(ft / SPEC.LINE_T), t = ft % SPEC.LINE_T, pic = line >= 64 && line < 256;
+    const what = !pic ? (line < 64 ? 'top border' : 'bottom border') : t < 128 ? 'picture, column ' + (t >> 2) : t < 152 ? 'right border' : t < 200 ? 'line blanking and sync' : 'left border';
+    return { line, t, what, pic, row: pic ? line - 64 : -1 };
+  }
+  run(tStates) { let t = 0; while (t < tStates) t += this.step(); return t; }
+  runFrame() { const f = this.frames; let t = 0; while (this.frames === f) t += this.step(); return t; }
+  key(name, down) { const p = SPEC.KEYPOS[name]; if (!p) return; if (down) this.keys[p[0]] |= 1 << p[1]; else this.keys[p[0]] &= ~(1 << p[1]); }
+  // ---- sound: the speaker follows bit 4 (and a little of bit 3, and the tape signal, through the MIC/TAPE pin) ----
+  level() { if (this.faulty && this.fx.ear !== undefined) return this.fx.ear ? 0.75 : 0; return (this.out & 0x10 ? 0.75 : 0) + (this.out & 0x08 ? 0.1 : 0) + (this.tapePlay && this.tapeIn() ? 0.15 : 0); }
+  soundEdge() { }
+  audioRun(t) {
+    const lv = this.level(); let left = t;
+    while (left > 0) {
+      const need = SPEC.CPU_HZ / this.audioRate - this.audioT, take = Math.min(left, need);
+      this.lvlSum += lv * take; this.lvlN += take; this.audioT += take; left -= take;
+      if (this.audioT >= SPEC.CPU_HZ / this.audioRate - 1e-9) { this.abuf[this.aw++ & 32767] = this.lvlN ? this.lvlSum / this.lvlN : 0; this.lvlSum = 0; this.lvlN = 0; this.audioT -= SPEC.CPU_HZ / this.audioRate; }
+    }
+  }
+  // ---- cassette ----
+  insertTape(bytes, name) {
+    const wav = bytes.length > 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
+    const file = wav ? SpecTape.fromWav(bytes, name) : bytes;
+    this.tape = new SpecTape(file); this.tape.file = file; this.tape.fromWav = wav; this.tapePlay = false; this.tapeSeek(0); return this.tape;
+  }
+  ejectTape() { this.tape = null; this.tapePlay = false; this.tapeLevel = 0; }
+  tapeSeek(seg) { const tp = this.tape; if (!tp) return; this.tapeIdx = Math.min(seg, tp.n); this.tapeRem = tp.dur[this.tapeIdx] || 0; this.tapeLevel = tp.lvl[this.tapeIdx] || 0; this.tapePos = 0; for (let q = 0; q < this.tapeIdx; q++) this.tapePos += tp.dur[q]; }
+  reading() { return this.t - this.readingT < SPEC.CPU_HZ / 2; }     // has a loader been reading the tape in the last half second?
+  tapeIn() { return this.tapePlay && this.tape && this.tapeIdx < this.tape.n ? this.tapeLevel : 0; }
+  tapeMove(t) {
+    const tp = this.tape; if (!tp || !this.tapePlay) return;
+    while (t > 0) {
+      if (this.tapeIdx >= tp.n) { this.tapePlay = false; this.tapeLevel = 0; return; }
+      if (this.tapeRem > t) { this.tapeRem -= t; this.tapePos += t; return; }
+      t -= this.tapeRem; this.tapePos += this.tapeRem; this.tapeIdx++;
+      if (this.tapeIdx < tp.n) { this.tapeRem = tp.dur[this.tapeIdx]; this.tapeLevel = tp.lvl[this.tapeIdx]; }
+      if (tp.stops.has(this.tapeIdx)) { this.tapePlay = false; return; }
+    }
+  }
+  tapeBlock() { const tp = this.tape; if (!tp) return -1; let k = -1; for (let q = 0; q < tp.blocks.length && tp.blocks[q].seg <= this.tapeIdx; q++) k = q; return k; }
+  // recording: the MIC output (bit 3) while REC is down, as the times between its edges
+  recStart() { this.rec = { pulses: [], clock: 0, last: 0, level: (this.out >> 3) & 1 }; }
+  recBusy() { return this.t - (this.recEdgeT ?? -1e12) < SPEC.CPU_HZ / 2; }     // has SAVE written to MIC in the last half second?
+  recEdge(at) { const r = this.rec, l = (this.out >> 3) & 1; if (l === r.level) return; this.recEdgeT = this.t; r.level = l; r.pulses.push(r.clock + at - r.last); r.last = r.clock + at; }
+  recStop() { const r = this.rec; this.rec = null; if (!r) return null; return r.pulses.length ? r.pulses : null; }
+  // ---- instant loading. The ROM reads every tape block with LD-BYTES (0556h: IX address, DE length, A the flag byte,
+  // carry set to load, clear to verify). When the processor is about to run it, the next block on the tape is taken from
+  // the file, checked as the ROM would (flag, length, checksum), copied into RAM, the tape is wound past it, and the
+  // routine returns as if it had read it: carry set if all is well. Programs with loaders of their own do not call it,
+  // and still load from the signal.
+  preStep() {
+    if (!this.instant || !this.tape || this.rec || this.cpu.pc !== 0x0556 || this.rom[0x0556] !== 0x14) return;
+    const tp = this.tape, c = this.cpu, k0 = Math.max(0, this.tapeBlock());
+    let k = -1; for (let q = k0; q < tp.blocks.length; q++) { const bl = tp.blocks[q]; if (bl.data && bl.end > this.tapeIdx) { k = q; break; } }
+    if (k < 0) return;
+    const bl = tp.blocks[k], d = bl.data, want = c.d << 8 | c.e, load = c.f & 1;
+    let ok = d[0] === c.a, x = 0, a = c.ix;
+    if (ok) {
+      for (const v of d) x ^= v;
+      for (let i = 0; i < want && i + 1 < d.length - 1; i++, a = (a + 1) & 0xFFFF) { if (load) this.poke(a, d[i + 1]); else if (this.peek(a) !== d[i + 1]) ok = false; }
+      ok = ok && x === 0 && d.length - 2 >= want;
+    }
+    this.tapeSeek(bl.end); this.instantLoads = (this.instantLoads || 0) + 1; this.instantT = this.t;
+    c.ix = (c.ix + Math.min(want, Math.max(0, d.length - 2))) & 0xFFFF; c.d = c.e = 0;
+    c.f = ok ? c.f | 1 : c.f & ~1;
+    c.pc = this.peek(c.sp) | this.peek((c.sp + 1) & 0xFFFF) << 8; c.sp = (c.sp + 2) & 0xFFFF;   // RET
+  }
+  // ---- snapshots: .SNA (48K) and .Z80 (versions 1-3, 48K) ----
+  loadSnapshot(b, name) {
+    const c = this.cpu, w = i => b[i] | b[i + 1] << 8;
+    if (/\.sna$/i.test(name || '') || b.length === 49179) {
+      if (b.length !== 49179) throw new Error('Only 48K .SNA snapshots (49,179 bytes) can be loaded');
+      c.i = b[0]; c.l_ = b[1]; c.h_ = b[2]; c.e_ = b[3]; c.d_ = b[4]; c.c_ = b[5]; c.b_ = b[6]; c.f_ = b[7]; c.a_ = b[8];
+      c.l = b[9]; c.h = b[10]; c.e = b[11]; c.d = b[12]; c.c = b[13]; c.b = b[14]; c.iy = w(15); c.ix = w(17);
+      c.iff1 = c.iff2 = b[19] & 4 ? 1 : 0; c.r = b[20]; c.f = b[21]; c.a = b[22]; c.sp = w(23); c.im = b[25] & 3; this.border = b[26] & 7;
+      this.ram.set(b.subarray(27, 27 + 0xC000)); c.halted = false;
+      c.pc = this.peek(c.sp) | this.peek(c.sp + 1) << 8; c.sp = (c.sp + 2) & 0xFFFF;     // RETN
+      return 'SNA';
+    }
+    // .Z80
+    c.a = b[0]; c.f = b[1]; c.c = b[2]; c.b = b[3]; c.l = b[4]; c.h = b[5]; let pc = w(6); c.sp = w(8); c.i = b[10];
+    const f12 = b[12] === 255 ? 1 : b[12]; c.r = (b[11] & 0x7F) | (f12 & 1) << 7; this.border = f12 >> 1 & 7;
+    c.e = b[13]; c.d = b[14]; c.c_ = b[15]; c.b_ = b[16]; c.e_ = b[17]; c.d_ = b[18]; c.l_ = b[19]; c.h_ = b[20]; c.a_ = b[21]; c.f_ = b[22];
+    c.iy = w(23); c.ix = w(25); c.iff1 = b[27] ? 1 : 0; c.iff2 = b[28] ? 1 : 0; c.im = b[29] & 3; c.halted = false;
+    const unpack = (src, from, to, out, outOff, outLen) => {
+      let i = from, o = outOff; const end = outOff + outLen;
+      while (i < to && o < end) {
+        if (src[i] === 0xED && src[i + 1] === 0xED) { const n = src[i + 2], v = src[i + 3]; for (let k = 0; k < n && o < end; k++) out[o++] = v; i += 4; }
+        else out[o++] = src[i++];
+      }
+      return o - outOff;
+    };
+    if (pc) {                                           // version 1: 48K, compressed if bit 5 of byte 12
+      if (f12 & 0x20) unpack(b, 30, b.length, this.ram, 0, 0xC000); else this.ram.set(b.subarray(30, 30 + 0xC000));
+      c.pc = pc; return 'Z80 v1';
+    }
+    const hl = w(30), hw = b[34]; pc = w(32); const v = hl === 23 ? 2 : 3;
+    if ((v === 2 && hw > 2) || (v === 3 && hw > 3)) throw new Error('This .Z80 snapshot is not for a 48K Spectrum');
+    let i = 32 + hl;
+    const pages = { 8: 0x0000, 4: 0x4000, 5: 0x8000 };      // page 8: 4000h, 4: 8000h, 5: C000h (as offsets into the RAM)
+    while (i + 3 <= b.length) {
+      const len = w(i), page = b[i + 2]; i += 3;
+      const at = pages[page]; const n = len === 0xFFFF ? 0x4000 : len;
+      if (at !== undefined) { if (len === 0xFFFF) this.ram.set(b.subarray(i, i + 0x4000), at); else unpack(b, i, i + n, this.ram, at, 0x4000); }
+      i += n;
+    }
+    c.pc = pc; return 'Z80 v' + v;
+  }
+  // a 48K .SNA of the machine now (PC pushed on the stack, as the format wants)
+  saveSnapshot() {
+    const c = this.cpu, b = new Uint8Array(49179), sp = (c.sp - 2) & 0xFFFF;
+    const ram = this.ram.slice(); if (sp >= 0x4000) { ram[sp - 0x4000] = c.pc & 0xFF; } if (sp + 1 >= 0x4000 && sp + 1 <= 0xFFFF) ram[sp + 1 - 0x4000] = c.pc >> 8;
+    b.set([c.i, c.l_, c.h_, c.e_, c.d_, c.c_, c.b_, c.f_, c.a_, c.l, c.h, c.e, c.d, c.c, c.b, c.iy & 255, c.iy >> 8, c.ix & 255, c.ix >> 8, c.iff2 ? 4 : 0, c.r, c.f, c.a, sp & 255, sp >> 8, c.im, this.border]);
+    b.set(ram, 27); return b;
+  }
+  // ---- the screen as text, through the ROM's character set (3D00h, space to the copyright sign) ----
+  screenText() {
+    const font = {}; for (let ch = 32; ch < 128; ch++) font[[...this.rom.subarray(0x3D00 + (ch - 32) * 8, 0x3D08 + (ch - 32) * 8)].join()] = ch;
+    const out = [];
+    for (let row = 0; row < 24; row++) {
+      let s = '';
+      for (let col = 0; col < 32; col++) {
+        const pat = []; for (let y = 0; y < 8; y++) { const line = row * 8 + y; pat.push(this.ram[((line & 0xC0) << 5 | (line & 7) << 8 | (line & 0x38) << 2) + col]); }
+        let ch = font[pat.join()]; if (ch === undefined) ch = font[pat.map(v => v ^ 255).join()];
+        s += ch === undefined ? '?' : ch === 127 ? '(c)' : String.fromCharCode(ch);
+      }
+      out.push(s.replace(/\s+$/, ''));
+    }
+    return out;
+  }
+}
+if (typeof BOARD_FAULTS !== 'undefined') Object.assign(SpecMachine.prototype, BOARD_FAULTS);
+if (typeof module !== 'undefined') module.exports = { SpecMachine, SpecTape, SPEC, SPEC_PINOUTS, specCrc32 };
+</script>
+<script>
+// ---- ZX Spectrum ULA 6C001: the same event-driven simulation as ula6c/sim.js, compiled for speed ----
+// Same cells, same delays, same inertial rule and the same order of events, so it gives the same answers as sim.js
+// (ula6c/tb.js runs on either: ULA_ENGINE=fast). The netlist is turned into flat arrays; time is counted in
+// 1/140 ns, so the 14 MHz oscillator's half period (35.714 ns = 5000) and every delay are whole numbers.
+// API (times in ns): set(net, level), get(net), runTo(t), at(t, fn), watch[net] = fn(level, t), drivesPin(net).
+
+const ULA6C_TICK = 140;                            // ticks per ns
+
+class Ula6cFast {
+  constructor(text, opts = {}) {
+    const D = Object.assign({ buf_ef: 4, inv: 1.7, nor: 1.4, or: 1.4, ff: 5, pin: 3, xtal: 1 }, opts.delay || {});
+    const els = [];
+    for (const raw of text.split('\n')) {
+      const line = raw.replace(/#.*/, '').trim(); if (!line) continue;
+      const f = line.split(/\s+/), at = f.findIndex(x => x[0] === '@'); const w = at < 0 ? f : f.slice(0, at);
+      const id = w[0], type = w[1]; let outs, ins;
+      const colon = w.indexOf(':');
+      if (colon >= 0) { outs = w.slice(2, colon); ins = w.slice(colon + 1); }
+      else if (/^(tffs|ctr|lat|dff2)$/.test(type)) { outs = w.slice(2, 4); ins = w.slice(4); }
+      else { outs = [w[2]]; ins = w.slice(3); }
+      els.push({ id, type, outs, inv: ins.map(n => n[0] === '~'), ins: ins.map(n => n.replace(/^~/, '')) });
+    }
+    // nets: 0 = GND, 1 = VCC, 2 = unconnected ('-', reads 0)
+    const netId = new Map([['GND', 0], ['VCC', 1], ['-', 2]]), names = ['GND', 'VCC', '-'];
+    const nid = n => { if (!netId.has(n)) { netId.set(n, names.length); names.push(n); } return netId.get(n); };
+    for (const e of els) { e.outs.forEach(nid); e.ins.forEach(nid); }
+    const NN = names.length; this.netId = netId; this.names = names;
+    const T = { buf_ef: 1, xtal: 1, inv: 2, nor: 3, or: 4, pin_ts: 5, oc: 6, ocn: 7, g4: 8, tapecell: 9, venc: 10, tffs: 11, ctr: 12, lat: 13, dff2: 14 };
+    const NE = els.length;
+    this.typ = new Uint8Array(NE); this.del = new Float64Array(NE); this.ci = new Uint8Array(NE);
+    this.inS = new Int32Array(NE + 1); const inN = [], inI = [];
+    this.outS = new Int32Array(NE + 1); const outN = [];
+    for (let k = 0; k < NE; k++) {
+      const e = els[k], t = /^n?or\d+$/.test(e.type) ? e.type.replace(/\d+$/, '') : e.type;
+      this.typ[k] = T[t] || 0;
+      this.del[k] = Math.round(ULA6C_TICK * (t === 'xtal' ? D.xtal : /^(tffs|ctr|lat|dff2)$/.test(t) ? D.ff : /^(pin_ts|oc|ocn)$/.test(t) ? D.pin
+        : t === 'buf_ef' ? D.buf_ef : t === 'inv' ? D.inv : t === 'nor' ? D.nor : t === 'or' ? D.or : 2));
+      this.ci[k] = t === 'tffs' ? 0 : t === 'ctr' ? 2 : t === 'lat' ? 1 : 2;
+      this.inS[k] = inN.length; e.ins.forEach((n, i) => { inN.push(netId.get(n)); inI.push(e.inv[i] ? 1 : 0); });
+      this.outS[k] = outN.length; e.outs.forEach(n => outN.push(netId.get(n)));
+    }
+    this.inS[NE] = inN.length; this.outS[NE] = outN.length;
+    this.inN = Int32Array.from(inN); this.inI = Uint8Array.from(inI); this.outN = Int32Array.from(outN);
+    const NO = outN.length;
+    // per output: pending event, the level it drives (0, 1, or 2 = lets go), whether open collector
+    this.pend = new Int32Array(NO).fill(-1); this.drv = new Uint8Array(NO).fill(2); this.outEl = new Int32Array(NO);
+    for (let k = 0; k < NE; k++) for (let o = this.outS[k]; o < this.outS[k + 1]; o++) this.outEl[o] = k;
+    this.state = new Uint8Array(NE); this.lastClk = new Uint8Array(NE);
+    // fanout and drivers
+    const fan = Array.from({ length: NN }, () => []), drv = Array.from({ length: NN }, () => []);
+    for (let k = 0; k < NE; k++) {
+      for (let i = this.inS[k]; i < this.inS[k + 1]; i++) { const n = this.inN[i]; if (n > 2 && !fan[n].includes(k)) fan[n].push(k); }
+      for (let o = this.outS[k]; o < this.outS[k + 1]; o++) { const n = this.outN[o]; if (n !== 2) drv[n].push(o); }
+    }
+    const flat = (a) => { const s = new Int32Array(NN + 1), v = []; for (let n = 0; n < NN; n++) { s[n] = v.length; v.push(...a[n]); } s[NN] = v.length; return [s, Int32Array.from(v)]; };
+    [this.fanS, this.fanE] = flat(fan); [this.drvS, this.drvO] = flat(drv);
+    this.multi = new Uint8Array(NN); for (let n = 0; n < NN; n++) this.multi[n] = drv[n].length > 1 ? 1 : 0;
+    this.pin = new Uint8Array(NN); for (let n = 0; n < NN; n++) this.pin[n] = /^PN\d+_/.test(names[n]) ? 1 : 0;
+    this.isOC = new Uint8Array(NO); for (let o = 0; o < NO; o++) { const t = this.typ[this.outEl[o]]; this.isOC[o] = t === 6 || t === 7 ? 1 : 0; }
+    // net levels; outside levels (2 = not set)
+    this.v = new Uint8Array(NN); this.ext = new Uint8Array(NN).fill(2);
+    this.v[1] = 1;
+    const driven = new Uint8Array(NN); for (const o of outN) driven[o] = 1;
+    for (let n = 3; n < NN; n++) if (!driven[n]) { this.v[n] = 1; this.ext[n] = 1; }     // undriven inputs: pins, high
+    // the event queue: a binary heap of event slots, ordered by time then by when they were made
+    this.cap = 4096; this.eT = new Float64Array(this.cap); this.eS = new Float64Array(this.cap); this.eO = new Int32Array(this.cap);
+    this.eV = new Uint8Array(this.cap); this.eDead = new Uint8Array(this.cap); this.eCb = new Array(this.cap);
+    this.free = []; for (let i = this.cap - 1; i >= 0; i--) this.free.push(i);
+    this.heap = new Int32Array(this.cap); this.hn = 0; this.seq = 0; this.tk = 0; this.events = 0;
+    this.wfn = new Array(NN).fill(null);
+    const self = this, wobj = Object.create(null);
+    this.watch = new Proxy(wobj, { set(o, k, f) { o[k] = f; const n = self.netId.get(k); if (n !== undefined) self.wfn[n] = f || null; return true; },
+      deleteProperty(o, k) { delete o[k]; const n = self.netId.get(k); if (n !== undefined) self.wfn[n] = null; return true; } });
+    this.els = els;
+    for (let k = 0; k < NE; k++) this.update(k);
+    this.runTo(500);
+  }
+  get t() { return this.tk / ULA6C_TICK; }
+  // ---- the heap ----
+  alloc() {
+    if (!this.free.length) {
+      const c = this.cap * 2, g = (A) => { const b = new A.constructor(c); b.set(A); return b; };
+      this.eT = g(this.eT); this.eS = g(this.eS); this.eO = g(this.eO); this.eV = g(this.eV); this.eDead = g(this.eDead); this.heap = g(this.heap);
+      this.eCb.length = c; for (let i = c - 1; i >= this.cap; i--) this.free.push(i); this.cap = c;
+    }
+    return this.free.pop();
+  }
+  lt(a, b) { const ta = this.eT[a], tb = this.eT[b]; return ta < tb || (ta === tb && this.eS[a] < this.eS[b]); }
+  push(x) { const h = this.heap; let i = this.hn++; while (i) { const p = (i - 1) >> 1; if (this.lt(h[p], x)) break; h[i] = h[p]; i = p; } h[i] = x; }
+  pop() {
+    const h = this.heap, top = h[0], last = h[--this.hn];
+    if (this.hn) { let i = 0; const n = this.hn; for (;;) { let c = 2 * i + 1; if (c >= n) break; if (c + 1 < n && this.lt(h[c + 1], h[c])) c++; if (this.lt(last, h[c])) break; h[i] = h[c]; i = c; } h[i] = last; }
+    return top;
+  }
+  // ---- cells ----
+  inp(i) { const n = this.inN[i]; const x = n === 2 ? 0 : this.v[n]; return this.inI[i] ? 1 - x : x; }
+  schedule(o, val) {
+    if (this.outN[o] === 2) return;
+    const p = this.pend[o];
+    if (p >= 0) { if (this.eV[p] === val) return; this.eDead[p] = 1; this.pend[o] = -1; }
+    if (val === this.drv[o]) return;
+    const x = this.alloc(); this.eT[x] = this.tk + this.del[this.outEl[o]]; this.eS[x] = this.seq++; this.eO[x] = o; this.eV[x] = val; this.eDead[x] = 0; this.eCb[x] = null;
+    this.pend[o] = x; this.push(x);
+  }
+  update(k) {
+    const t = this.typ[k], s = this.inS[k], n = this.inS[k + 1] - s, o = this.outS[k];
+    switch (t) {
+      case 1: this.schedule(o, this.inp(s)); return;
+      case 2: this.schedule(o, 1 - this.inp(s)); return;
+      case 3: { let r = 1; for (let i = 0; i < n; i++) if (this.inp(s + i)) { r = 0; break; } this.schedule(o, r); return; }
+      case 4: { let r = 0; for (let i = 0; i < n; i++) if (this.inp(s + i)) { r = 1; break; } this.schedule(o, r); return; }
+      case 5: this.schedule(o, this.inp(s + 1) ? this.inp(s) : 2); return;
+      case 6: this.schedule(o, this.inp(s) ? 2 : 0); return;
+      case 7: this.schedule(o, this.inp(s) ? 0 : 2); return;
+      case 8: { const C = this.inp(s), NG = this.inp(s + 1), NE = this.inp(s + 2), NF = this.inp(s + 3); this.schedule(o, ((NF | NE) & (1 - C)) | ((1 - NG) & (1 - NE) & (1 - NF))); return; }
+      case 9: this.schedule(o, this.inp(s + n - 1)); return;
+      case 10: { for (let q = o; q < this.outS[k + 1]; q++) this.schedule(q, 2); return; }
+      case 11: case 12: case 13: case 14: {
+        const clk = this.inp(s + this.ci[k]), rose = clk && !this.lastClk[k]; this.lastClk[k] = clk;
+        if (t === 13) { if (clk) this.state[k] = this.inp(s); }
+        else if (rose) {
+          if (t === 11) this.state[k] = this.inp(s + 1) ? 0 : 1 - this.state[k];
+          else if (t === 12) { const E = this.inp(s), NE = this.inp(s + 1), R = this.inp(s + 3), Q = this.state[k]; this.state[k] = R ? 0 : ((Q && !NE) || (!E && !Q)) ? 0 : 1; }
+          else this.state[k] = this.inp(s) | this.inp(s + 1);
+        }
+        this.schedule(o, this.state[k]); this.schedule(o + 1, 1 - this.state[k]);
+        return;
+      }
+      default: for (let q = o; q < this.outS[k + 1]; q++) this.schedule(q, 0);
+    }
+  }
+  resolve(n) {
+    if (!this.multi[n] && !this.pin[n]) { const s = this.drvS[n]; if (s === this.drvS[n + 1]) return this.ext[n] === 2 ? 0 : this.ext[n]; const d = this.drv[this.drvO[s]]; return d === 2 ? (this.ext[n] === 2 ? 0 : this.ext[n]) : d; }
+    let any = 0, v = 0;
+    for (let i = this.drvS[n]; i < this.drvS[n + 1]; i++) { const o = this.drvO[i], d = this.drv[o]; if (d === 2) continue; if (this.isOC[o]) return 0; any = 1; v |= d; }
+    if (!any) return this.ext[n] !== 2 ? this.ext[n] : (this.pin[n] ? 1 : 0);
+    return v;
+  }
+  change(n, val) {
+    if (this.v[n] === val) return; this.v[n] = val;
+    const w = this.wfn[n]; if (w) w(val, this.tk / ULA6C_TICK);
+    for (let i = this.fanS[n]; i < this.fanS[n + 1]; i++) this.update(this.fanE[i]);
+  }
+  // ---- the outside ----
+  set(name, val) { const n = this.netId.get(name); if (n === undefined) return; this.ext[n] = val; this.change(n, this.resolve(n)); }
+  get(name) { const n = this.netId.get(name); return n === undefined ? undefined : this.v[n]; }
+  drivesPin(name) {    // does a chip cell drive this pin net now (rather than let it go)?
+    const n = this.netId.get(name); for (let i = this.drvS[n]; i < this.drvS[n + 1]; i++) if (this.drv[this.drvO[i]] !== 2) return true; return false;
+  }
+  at(t, cb) { const x = this.alloc(); this.eT[x] = Math.max(Math.round(t * ULA6C_TICK), this.tk); this.eS[x] = this.seq++; this.eO[x] = -1; this.eDead[x] = 0; this.eCb[x] = cb; this.push(x); }
+  runTo(t) {
+    const T = Math.round(t * ULA6C_TICK);
+    while (this.hn && this.eT[this.heap[0]] <= T) {
+      const x = this.pop(); this.free.push(x);
+      if (this.eDead[x]) continue;
+      this.tk = this.eT[x];
+      if (this.eO[x] < 0) { const cb = this.eCb[x]; this.eCb[x] = null; cb(); continue; }
+      this.events++;
+      const o = this.eO[x]; this.pend[o] = -1; this.drv[o] = this.eV[x];
+      const n = this.outN[o]; this.change(n, this.resolve(n));
+    }
+    if (T > this.tk) this.tk = T;
+  }
+}
+
+if (typeof module !== 'undefined') module.exports = { Ula6cFast, ULA6C_TICK };
+</script>
+<script>
+// ---- A ZX Spectrum 48K whose ULA is the real logic: the Z80 core on the board's wiring, the ULA in charge ----
+// Nothing of the ULA is modelled here. The Z80's bus cycles are put on the ULA's pins as waveforms, edge by edge of
+// the clock the ULA itself puts out, so when the ULA holds the clock (contention) the Z80 simply waits. Everything the
+// Z80 and the TV get comes from the ULA's pins: the lower RAM's data (read through the ULA's RAS, CAS and DRAMWE), the
+// ROM select, port FE, the floating bus, INT, and the colour lines that go to the encoder.
+// The ULA is one of the engines of this folder (ula6c/sim.js or ula6c/fastsim.js): set(pin, level), get(pin),
+// runTo(ns), at(ns, fn), watch[net], drivesPin(net), els.
+//
+// The board (Timex's issue 6A circuit diagram), as far as the ULA is concerned:
+//   CLK is pin 32 inverted by TR3. INT is pin 12.
+//   A14, A15, MREQ, RD, WR go straight to the ULA. IORQ goes through R27 (470 ohms) and TR6, an emitter follower from
+//     A0, holds it high while A0 is high: the ULA sees I/O requests for even ports only.
+//   A0-A6 reach the lower RAM's address pins, and the ULA's, through IC3/IC4 and 330 ohms: the ULA's own drive wins.
+//   D0-D7 reach the ULA's data pins, which are the lower RAM's data lines, through 470 ohms (R1-R8).
+//   The lower RAM: eight 4116s, row on RAS falling, column on CAS falling, written when WE and CAS are both low. After
+//     CAS rises the data lines keep the last byte for a while (they hold their charge until something drives them).
+//   The keyboard joins a half-row (A8-A15, the one held low) to KB0-KB4. The EAR pin reads high while the ULA drives
+//     its EAR output (issue 3 and later); there is no tape.
+//   The upper RAM (8000h-FFFFh) and the ROM are on the Z80's side; the ROM answers while ROMCS is low.
+// Z80 timing is the data sheet's shape with fixed delays after each clock edge: address 40 ns, control 30 ns.
+
+const SPECULA_KEYS = [['CAPS SHIFT', 'Z', 'X', 'C', 'V'], ['A', 'S', 'D', 'F', 'G'], ['Q', 'W', 'E', 'R', 'T'], ['1', '2', '3', '4', '5'],
+  ['0', '9', '8', '7', '6'], ['P', 'O', 'I', 'U', 'Y'], ['ENTER', 'L', 'K', 'J', 'H'], ['SPACE', 'SYMBOL SHIFT', 'M', 'N', 'B']];
+const SPECULA_VN = ['N.BURST', 'BLUE*', 'N.RED*', 'N.GREEN*', 'RED*', 'N.GREEN*b', 'BURST*', 'N.BURST*', 'N.BLUE*', 'N.SYNC', "RED'", "BLUE'", "GREEN'", 'N.HL'];
+
+class SpecUla {
+  constructor(Z80, engine, rom, opts = {}) {
+    const u = this.u = engine; this.rom = rom;
+    this.ram = new Uint8Array(0xC000);            // 4000h-FFFFh; the first 16K is the lower RAM (the 4116s)
+    for (let i = 0; i < this.ram.length; i++) this.ram[i] = (i >> 7) & 1 ? 0xFF : 0x00;   // power on: a pattern
+    this.D = Object.assign({ addr: 40, ctl: 30, cac: 100, hold: 150 }, opts.delays || {});
+    this.OSC = 1000 / 14; this.oscT = 0; this.osc = 0;
+    this.keys = new Uint8Array(8);
+    this.P = { A14: 'PN36_A14', A15: 'PN37_A15', MREQ: 'PN38_NMREQ', RD: 'PN3_NRD', WR: 'PN2_NWR', IORQ: 'PN33_NIORQ', CLK: 'PN32_NBCPU',
+      INT: 'PN12_NINT', RAS: 'PN35_NRAS', CAS: 'PN1_NCAS', WE: 'PN4_NDRAMWE', ROMCS: 'PN34_NROMCS', EAR: 'PN28_TAPELS', OSC: 'PN39_OSC' };
+    this.AP = ['PN5_A0', 'PN6_A1', 'PN7_A2', 'PN8_A3', 'PN9_A4', 'PN10_A5', 'PN11_A6'];
+    this.DP = ['PN18_D0', 'PN21_D1', 'PN22_D2', 'PN25_D3', 'PN27_D4', 'PN29_D5', 'PN30_D6', 'PN31_D7'];
+    this.KP = ['PN19_KB0', 'PN20_KB1', 'PN23_KB2', 'PN24_KB3', 'PN26_KB4'];
+    for (const n of ['MREQ', 'RD', 'WR', 'IORQ']) u.set(this.P[n], 1);
+    this.cpuA = 0; this.iorqN = 1; this.cpuOut = null; this.dramOut = null; this.lastA = 0;
+    // counters for the meters
+    this.T = 0; this.ints = 0; this.holds = 0; this.frames = 0; this.cycles = 0;
+    // the clock: CLK = NOT pin 32. Edge handler runs the bus cycle in progress.
+    this.cur = null; this.rises = 0; this.intNow = 1; this.intPrev = 1; this.tRise = 0;
+    u.watch[this.P.CLK] = (v, t) => this.clkEdge(v === 0, t);
+    // the lower RAM
+    this.row = 0; this.rasLow = false; this.casLow = false; this.dseq = 0; this.casOff = 0;
+    u.watch[this.P.RAS] = (v) => { this.rasLow = !v; if (!v) this.row = u.drivesPin(this.AP[0]) ? this.pins(this.AP) : this.cpuA & 0x7F; };
+    u.watch[this.P.CAS] = (v) => this.casEdge(v);
+    u.watch[this.P.WE] = (v) => { if (v === 0 && this.casLow && this.rasLow) this.dramWrite(this.casOff); };
+    // the EAR pin follows the ULA's EAR output (issue 3 and later)
+    const tc = u.els.find(e => e.type === 'tapecell'); this.nLS = tc.ins[0];
+    u.watch[this.nLS] = (v) => u.set(this.P.EAR, v ? 0 : 1); u.set(this.P.EAR, u.get(this.nLS) ? 0 : 1);
+    // the TV: the colour lines into the encoder cell, one sample per dot
+    const ve = u.els.find(e => e.type === 'venc'); const VI = n => ve.ins[SPECULA_VN.indexOf(n)];
+    this.vG = VI("GREEN'"); this.vR = VI("RED'"); this.vB = VI("BLUE'"); this.vHL = VI('N.HL'); this.vSync = VI('N.SYNC');
+    this.W = 448; this.H = 312; this.fb = new Uint8Array(this.W * this.H); this.frame = new Uint8Array(this.W * this.H);
+    this.x = 0; this.y = 0; this.syncLen = 0; this.onFrame = null; this.lastLines = 0; this.dotPhase = 0;
+    this.keysToPins();
+    this.adv(2000);
+    this.cpu = new Z80(this); this.cpu.intVector = 0xFF;
+    const cpu = this.cpu, bus = this;
+    cpu.fetch = function () {                       // the core reads opcodes with read(): mark them as M1 cycles
+      const a = this.pc; bus.m1Next = true; const v = bus.read(a);
+      if (this.log) this.cyc.push({ k: 'M1', a, d: v, rf: (this.i << 8) | this.r });
+      this.pc = (a + 1) & 0xFFFF; this.r = (this.r & 0x80) | ((this.r + 1) & 0x7F); return v;
+    };
+    this.done = 0;
+    this.waitRise();                                // start in step with the clock
+  }
+  // ---- time ----
+  adv(t) {                                          // run the oscillator and the ULA up to time t (ns)
+    const u = this.u, H = this.OSC / 2;
+    for (;;) {
+      const no = this.oscT + H;
+      if (no > t) { u.runTo(t); return; }
+      u.runTo(no); this.oscT = no; this.osc ^= 1; u.set(this.P.OSC, this.osc);
+      if (this.osc) this.sample();
+    }
+  }
+  waitRise() { const r = this.rises; while (this.rises === r) this.adv(this.u.t + this.OSC / 4); }
+  // ---- pins ----
+  pins(names) { let v = 0; for (let n = 0; n < names.length; n++) v |= (this.u.get(names[n]) & 1) << n; return v; }
+  keysToPins() { let k = 0x1F; for (let r = 0; r < 8; r++) if (!(this.cpuA & (0x100 << r))) k &= ~this.keys[r] & 0x1F; for (let n = 0; n < 5; n++) this.u.set(this.KP[n], k >> n & 1); }
+  setA(a) {
+    const u = this.u; this.cpuA = a;
+    u.set(this.P.A14, a >> 14 & 1); u.set(this.P.A15, a >> 15 & 1);
+    for (let n = 0; n < 7; n++) u.set(this.AP[n], a >> n & 1);
+    this.keysToPins(); this.ulaIorq();
+  }
+  ulaIorq() { this.u.set(this.P.IORQ, this.iorqN | (this.cpuA & 1)); }      // TR6
+  dPins() { const v = this.dramOut ?? this.cpuOut ?? 0xFF; for (let n = 0; n < 8; n++) this.u.set(this.DP[n], v >> n & 1); }
+  later(dt, f) { this.u.at(this.u.t + dt, f); }
+  ctl(n, v) { this.later(this.D.ctl, () => { if (n === 'IORQ') { this.iorqN = v; this.ulaIorq(); } else this.u.set(this.P[n], v); }); }
+  // ---- the lower RAM ----
+  casEdge(v) {
+    const u = this.u; this.casLow = !v; const my = ++this.dseq;
+    if (!v) {
+      if (!this.rasLow) return;
+      const col = u.drivesPin(this.AP[0]) ? this.pins(this.AP) : this.cpuA >> 7 & 0x7F; this.casOff = this.row | col << 7;
+      if (u.get(this.P.WE) === 0) { this.dramWrite(this.casOff); return; }
+      this.later(this.D.cac, () => { if (this.dseq === my && this.casLow) { this.dramOut = this.ram[this.casOff]; this.dPins(); } });
+    } else this.later(this.D.hold, () => { if (this.dseq === my) { this.dramOut = null; this.dPins(); } });
+  }
+  dramWrite(off) { this.dramOut = null; this.dPins(); this.dseq++; this.ram[off] = this.pins(this.DP); }
+  // what the Z80 sees on its data lines
+  cpuRead(a) { return a < 0x4000 ? (this.u.get(this.P.ROMCS) === 0 ? this.rom[a] : 0xFF) : a < 0x8000 ? this.pins(this.DP) : this.ram[a - 0x4000]; }
+  // ---- the TV ----
+  sample() {                                        // each oscillator period: the colour lines and sync, as the encoder sees them
+    const u = this.u;
+    if (u.get(this.vSync) === 0) { this.syncLen++; return; }
+    if (this.syncLen) {
+      if (this.syncLen > 300) {                     // a long sync: the vertical sync, the frame ends
+        this.frame.set(this.fb); this.lastLines = this.y; this.fb.fill(0); this.y = 0; this.frames++; if (this.onFrame) this.onFrame(this.frame);
+      } else if (++this.y >= this.H) this.y = 0;
+      this.x = 0; this.syncLen = 0;
+    }
+    const xx = this.x++ >> 1; if (xx >= this.W) return;
+    let c = u.get(this.vG) * 4 + u.get(this.vR) * 2 + u.get(this.vB); if (c && !u.get(this.vHL)) c += 8;
+    this.fb[this.y * this.W + xx] = c;
+  }
+  // ---- the clock and the bus cycles ----
+  clkEdge(rise, t) {
+    if (rise) {
+      this.rises++; this.tRise = t; this.intPrev = this.intNow; this.intNow = this.u.get(this.P.INT);
+      const c = this.cur; if (!c) return;
+      if (++c.T > c.len) { this.cur = null; return; }
+      this.act(c, true);
+    } else if (this.cur) this.act(this.cur, false);
+  }
+  cycle(c) {                                        // run one machine cycle from the clock rise just past; returns at the next cycle's first rise
+    c.T = 1; this.cur = c; this.cycles++;
+    const t0 = this.tRise;
+    if (c.k === 'ID') this.u.at(t0 + this.D.addr, () => this.setA(this.lastA));
+    else this.u.at(t0 + this.D.addr, () => this.setA(c.a));
+    this.act(c, true);
+    while (this.cur) this.adv(this.u.t + this.OSC / 4);
+    this.T += Math.round((this.tRise - t0) / (4 * this.OSC));
+    this.holds += Math.round((this.tRise - t0) / (4 * this.OSC)) - c.len;
+    return c.val;
+  }
+  act(c, rise) {
+    const k = c.k, T = c.T;
+    if (k === 'M1' || k === 'IA') {
+      const w = k === 'IA' ? 2 : 0;
+      if (!rise && T === 1 && !w) { this.ctl('MREQ', 0); this.ctl('RD', 0); }
+      if (!rise && T === 3 && w) this.ctl('IORQ', 0);
+      if (rise && T === 3 + w) {
+        if (k === 'M1') c.val = this.cpuRead(c.a);
+        this.ctl('MREQ', 1); this.ctl('RD', 1); this.ctl('IORQ', 1); this.later(this.D.addr, () => this.setA(c.rf)); this.lastA = c.rf;
+      }
+      if (!rise && T === 3 + w) this.ctl('MREQ', 0);
+      if (!rise && T === 4 + w) this.ctl('MREQ', 1);
+    } else if (k === 'MR' || k === 'MW') {
+      if (!rise && T === 1) { this.ctl('MREQ', 0); if (k === 'MR') this.ctl('RD', 0); else this.later(this.D.ctl, () => { this.cpuOut = c.d; this.dPins(); }); }
+      if (!rise && T === 2 && k === 'MW') this.ctl('WR', 0);
+      if (!rise && T === 3) {
+        if (k === 'MR') c.val = this.cpuRead(c.a);
+        else if (c.a >= 0x8000) this.ram[c.a - 0x4000] = c.d;           // the upper RAM takes the byte as WR rises
+        this.ctl('MREQ', 1); this.ctl('RD', 1); this.ctl('WR', 1); if (k === 'MW') this.later(this.D.ctl + 10, () => { this.cpuOut = null; this.dPins(); });
+        this.lastA = c.a;
+      }
+    } else if (k === 'IR' || k === 'IW') {
+      if (rise && T === 2) { this.ctl('IORQ', 0); if (k === 'IR') this.ctl('RD', 0); else { this.ctl('WR', 0); this.later(this.D.ctl, () => { this.cpuOut = c.d; this.dPins(); }); } }
+      if (!rise && T === 4) {
+        if (k === 'IR') c.val = this.pins(this.DP);
+        this.ctl('IORQ', 1); this.ctl('RD', 1); this.ctl('WR', 1); if (k === 'IW') this.later(this.D.ctl + 10, () => { this.cpuOut = null; this.dPins(); });
+        this.lastA = c.a;
+      }
+    }
+  }
+  // cycles the core logged without calling the bus: idle T-states and the interrupt acknowledge
+  flush() {
+    const cy = this.cpu.cyc;
+    for (; this.done < cy.length; this.done++) {
+      const x = cy[this.done];
+      if (x.k === 'ID') this.cycle({ k: 'ID', len: x.n });
+      else if (x.k === 'IA') { this.ints++; this.cycle({ k: 'IA', len: 6, a: x.a, rf: x.rf }); }
+    }
+  }
+  // ---- the bus as src/z80core.js calls it ----
+  read(a) {
+    this.flush();
+    const m1 = this.m1Next || this.cpu.cyc.length === 0; this.m1Next = false;   // halted and NMI fetches come first in an instruction
+    const v = m1 ? this.cycle({ k: 'M1', len: 4, a, rf: (this.cpu.i << 8) | this.cpu.r }) : this.cycle({ k: 'MR', len: 3, a });
+    this.done++; return v;
+  }
+  write(a, v) { this.flush(); this.cycle({ k: 'MW', len: 3, a, d: v }); this.done++; }
+  input(p) { this.flush(); const v = this.cycle({ k: 'IR', len: 4, a: p }); this.done++; return v; }
+  output(p, v) { this.flush(); this.cycle({ k: 'IW', len: 4, a: p, d: v }); this.done++; }
+  // one instruction. INT as the Z80 samples it: on the rising edge that starts the last T-state of the instruction
+  step() { this.cpu.intLine = this.intPrev === 0; this.done = 0; this.cpu.step(); this.flush(); }
+  run(ns) { const end = this.u.t + ns; while (this.u.t < end) this.step(); }
+  key(name, down) { for (let r = 0; r < 8; r++) { const b = SPECULA_KEYS[r].indexOf(name); if (b >= 0) { this.keys[r] = down ? this.keys[r] | 1 << b : this.keys[r] & ~(1 << b); return true; } } return false; }
+  // take over a machine state from the emulator (src/spectrum.js): RAM and the Z80's registers; the border is written
+  // to the ULA with an OUT cycle
+  adopt(m) {
+    this.ram.set(m.ram);
+    const s = m.cpu.snapshot(); for (const k in s) this.cpu[k] = s[k];
+    this.cpu.eiDelay = false;
+    this.cycle({ k: 'IW', len: 4, a: 0xFE, d: m.border | m.out });
+  }
+}
+if (typeof module !== 'undefined') module.exports = { SpecUla, SPECULA_KEYS, SPECULA_VN };
+</script>
+<script>
+// ---- The picture check: a frame from the ULA's colour lines against the screen in the lower RAM ----
+// frame: colour numbers (0-7, 8-15 bright; bright black is 0), w x h dots, as SpecUla.sample() collects them.
+// ram: 4000h onwards (the lower RAM is ram[0..3FFF]). Finds where the 256 x 192 picture sits in the frame (the first
+// time, by searching, unless the caller gives it; then it keeps that place), and counts the dots that differ from what the bitmap and attributes
+// say. Cells with the flash bit are left out: which phase of the flash the ULA is in depends on when it started.
+let pcPlace = null;
+function pictureExpect(ram, px, py) {
+  const at = ram[0x1800 + (py >> 3) * 32 + (px >> 3)];
+  const bits = ram[((py & 0xC0) << 5) | ((py & 7) << 8) | ((py & 0x38) << 2) | (px >> 3)];
+  if (at & 0x80) return -1;
+  let c = bits & (0x80 >> (px & 7)) ? at & 7 : at >> 3 & 7;
+  if (c && at & 0x40) c += 8;
+  return c;
+}
+function pictureCheck(frame, w, h, ram, reset, place) {
+  if (reset) pcPlace = place || null;
+  if (!frame) return { found: false };
+  const score = (x0, y0, step) => { let bad = 0, n = 0; for (let py = 0; py < 192; py += step) for (let px = (py * 7) % step; px < 256; px += step) { const e = pictureExpect(ram, px, py); if (e < 0) continue; n++; if (frame[(y0 + py) * w + x0 + px] !== e) bad++; } return { bad, n }; };
+  if (!pcPlace) {
+    let best = null;
+    for (let y0 = 0; y0 + 192 <= h; y0++) for (let x0 = 0; x0 + 256 <= w; x0++) { const s = score(x0, y0, 23); if (s.n && (!best || s.bad < best.bad)) best = { x0, y0, bad: s.bad, n: s.n }; }
+    if (!best || best.bad > best.n * 0.05) return { found: false, border: frame[2 * w + 40] };
+    pcPlace = { x0: best.x0, y0: best.y0 };
+  }
+  const s = score(pcPlace.x0, pcPlace.y0, 1);
+  return { found: true, x0: pcPlace.x0, y0: pcPlace.y0, bad: s.bad, n: s.n, border: frame[Math.max(0, pcPlace.y0 - 20) * w + pcPlace.x0 + 100] };
+}
+if (typeof module !== 'undefined') module.exports = { pictureCheck, pictureExpect };
+</script>
+<script>const ULA_NET = "g0 nor3 n1893 n2109 n1895 n1906  @7J\ng1 inv n1881 n225  @7X\ng2 inv n225 n2411  @7U\ng3 inv n1929 n284  @8AL\ng4 inv n509 n1895  @9Q\ng5 inv n1947 n2080  @9T\ng6 inv n1906 n1954  @9G\ng7 inv n2184 n2246  @17AM\ng8 inv n1857 n1811  @5L\ng9 inv n1813 n2342  @4M\ng10 inv n2207 n1886  @9R\ng11 inv n1793 n1833  @6AV\ng12 inv n1930 n1837  @8AI\ng13 inv n1891 n1827  @6AY\ng14 inv n1921 n280  @8AO\ng15 inv n474 n479  @13BK\ng16 inv n1907 n1706  @7AG\ng17 inv n2411 n1742  @5J\ng18 inv n788 n2278  @21V\ng19 inv n1873 n835  @22BX\ng20 inv n239 n1857  @7M\ng21 inv n1887 n1681  @6BB\ng22 inv n1752 n2411  @4K\ng23 inv n2302 n2091  @22BD\ng24 inv n2159 n2185  @17P\ng25 inv n1998 n2147  @11G\ng26 inv n612 n596  @16X\ng27 inv n2185 n674  @18Q\ng28 inv n2165 n628  @16AI\ng29 inv n2356 n668  @18AA\ng30 inv n2087 n512  @14M\ng31 inv n1896 n890  @23BX\ng32 inv n2211 n980  @25U\ng33 inv n1902 n1849  @6AM\ng34 inv n1743 n1843  @4V\ng35 inv n2313 n2091  @22BB\ng36 inv n1418 n1423  @37BT\ng37 inv n596 n594  @16Y\ng38 inv n905 n2300  @23H\ng39 inv n1109 n2729  @29BR\ng40 inv n2451 n1109  @29BT\ng41 inv n935 n2092  @15AS\ng42 inv n1839 n2275  @21BX\ng43 inv n1904 n1761  @6AJ\ng44 inv n2361 n956  @24BJ\ng45 inv n2638 n2369  @26AE\ng46 inv n2644 n2163  @22AY\ng47 inv n1289 n2031  @32CB\ng48 inv n2141 n2161  @13G\ng49 inv n2060 n474  @13BM\ng50 inv n1379 n2569  @35H\ng51 inv n2589 n2547  @43U\ng52 inv n2145 n2144  @15AP\ng53 inv n2246 n2144  @17AN\ng54 inv n913 n2326  @23BT\ng55 inv n2687 n2679  @45AD\ng56 inv n2430 n1073  @28BL\ng57 inv n1521 n2621  @41BT\ng58 inv n1885 n1822  @6BE\ng59 inv n1048 n2399  @27H\ng60 inv n829 n1873  @22BZ\ng61 inv n2116 n1896  @15BZ\ng62 inv n2328 n895  @23U\ng63 nor2 n601 n1726 n1727  @15AG\ng64 inv n2621 n2735  @38BR\ng65 inv n1485 n2162  @39BP\ng66 inv n2513 n2434  @28U\ng67 inv n1804 n1692  @6AP\ng68 inv n2684 n2679  @45AL\ng69 inv n797 n2389  @21BN\ng70 inv n2660 n1529  @41BQ\ng71 inv n1511 n2643  @41H\ng72 inv n2332 n2378  @26AG\ng73 inv n2640 n1485  @39BR\ng74 inv n711 n2206  @19H\ng75 inv n2279 n797  @21BP\ng76 inv n1899 n1690  @6AS\ng77 nor4 n1968 n2109 n1895 n1954 n1978  @10L\ng78 inv n1529 n2733  @41BO\ng79 inv n2301 n1896  @23BZ\ng80 inv n1253 n2500  @31H\ng81 inv n1882 n1746  @6BH\ng82 inv n2331 n1011  @26AA\ng83 nor4 n1922 n1918 n1914 n1729 n1936  @8AG\ng84 inv n2722 n2690  @47M\ng85 inv n2685 n2679  @45AH\ng86 nor2 n2206 n2199 n2211  @18J\ng87 nor3 n827 n2270 n829 n2301  @22CB\ng88 inv n1513 n1514  @41U\ng89 inv n2666 n2667  @42U\ng90 nor2 n1771 n1880 n2198  @4AD\ng91 nor5 n2203 n2184 n2180 n2172 n2080 n601  @18AG\ng92 nor2 n2022 n2024 n2024  @12M\ng93 inv n2071 n2714  @15BC\ng94 nor2 n1944 n1954 n1947  @9X\ng95 nor3 n228 n2347 n2342 n239  @7O\ng96 nor2 n1827 n1933 n1793  @4AY\ng97 nor4 n1746 n1933 n1899 n2283 n1928  @8BA\ng98 nor4 n2198 n2141 n2147 n2109 n2080  @21AC\ng99 nor8 n2092 n1698 n1784 n1713 n1689 n1914 n1702 n2071 n2071  @13AS\ng100 inv n2723 n2688  @47K\ng101 inv n1844 n2357  @6BV\ng102 nor2 n2609 n1471 n2639  @39W\ng103 nor2 n1748 n2342 n2411  @5N\ng104 nor2 n2300 n2295 n2211  @22J\ng105 nor5 n2091 n2034 n1728 n1713 n1918 n2040  @13AU\ng106 nor3 n2073 n2159 n2354 n2356  @15P\ng107 nor2 n2028 n1947 n509  @13Y\ng108 nor4 n895 n2161 n1815 n2316 n2080  @23V\ng109 inv n1312 n2411  @29S\ng110 nor2 n2024 n417 n2042  @12K\ng111 inv n1811 n1813  @5M\ng112 nor2 n2059 n2057 n2057  @13M\ng113 nor2 n2114 n2178 n2178  @17T\ng114 nor2 n2480 n2513 n2665  @31AK\ng115 nor2 n2575 n2403 n2582  @34AZ\ng116 nor2 n1746 n2012 n1885  @4BH\ng117 buf_ef n2199 PN19_KB0  @18E\ng118 nor2 n2354 n2342 n612  @16T\ng119 nor2 n1833 n1719 n1899  @4AV\ng120 nor2 n2449 n2434 n2471  @29AK\ng121 nor2 n1471 n2589 n2613  @39U\ng122 nor2 n1818 n2283 n2278  @4BK\ng123 nor2 n594 n2142 n2142  @16AA\ng124 oc PN21_D1 n905  @23F\ng125 ocn PN19_KB0 n2160  @16F\ng126 nor2 n1886 n228 n2356  @7Q\ng127 nor2 n1849 n1731 n1904  @4AM\ng128 nor2 n280 n1929 n1929  @8AM\ng129 nor2 n678 n1679 n1873  @17BZ\ng130 nor4 n2373 n2342 n2356 n2354 n2326  @24AL\ng131 nor4 n2278 n2161 n1998 n2109 n2080  @21Z\ng132 nor2 n2602 n1413 n2604  @37W\ng133 nor2 n1822 n1953 n1887  @4BE\ng134 nor2 n2454 n2434 n2474  @29AE\ng135 nor4 n1011 n2342 n2347 n2354 n2356  @26AC\ng136 nor2 n1690 n1724 n1804  @4AS\ng137 oc PN22_D2 n1048  @27F\ng138 nor3 n2298 n2347 n2336 n2342  @22AQ\ng139 nor2 n417 n1998 n2141  @12I\ng140 nor2 n1082 n2413 n2729  @28AZ\ng141 oc PN18_D0 n711  @19F\ng142 nor2 n1773 n1744 n1844  @5BU\ng143 nor2 n1316 n2509 n1320  @32BB\ng144 nor2 n1913 n1893 n1886  @8L\ng145 pin_ts PN9_A4 n658 ~n998  @17CD\ng146 nor2 n830 n1727 n2298  @21AS\ng147 nor2 n2270 n1684 n1839  @21BZ\ng148 pin_ts PN11_A6 n827 ~n998  @21CD\ng149 nor2 n2594 n2442 n1404  @36BJ\ng150 nor4 n628 n2175 n2172 n2180 n2184  @16AG\ng151 nor2 n2057 n1893 n1893  @13O\ng152 nor2 n2444 n2434 n2470  @29AN\ng153 nor2 n2697 n2656 n2685  @46AI\ng154 nor2 n1871 n1680 n1896  @7BZ\ng155 nor2 n1706 n2040 n1729  @4AG\ng156 nor4 n980 n2080 n2316 n1815 n2147  @25V\ng157 nor2 n1761 n2040 n1918  @4AJ\ng158 nor2 n284 n1930 n1930  @8AJ\ng159 nor4 n583 n1944 n2028 n601 n2165  @15AK\ng160 buf_ef n1895 PN37_A15  @7E\ng161 nor2 n2569 n2564 n2211  @34J\ng162 nor2 n2481 n2513 n2662  @31AH\ng163 nor2 n2219 n1688 n1839  @19BZ\ng164 nor2 n2708 n2627 n2679  @46AG\ng165 nor3 n2729 n2697 n2708 n2644  @48AH\ng166 nor3 n2369 n2326 n2336 n2342  @23AI\ng167 nor2 n479 n1726 n1726  @13BI\ng168 nor2 n2483 n2513 n2661  @31AE\ng169 nor2 n2450 n2434 n2472  @29AH\ng170 nor2 n2696 n2625 n2679  @46AK\ng171 buf_ef n2080 PN33_NIORQ  @15E\ng172 nor2 n658 n2179 n678  @17CB\ng173 nor2 n749 n1677 n1873  @20BZ\ng174 nor2 n956 n2313 n2403  @24BH\ng175 nor3 n1745 n2347 n2342 n2411  @4Q\ng176 nor2 n2458 n2434 n2466  @29V\ng177 nor2 n2178 n2207 n2207  @17V\ng178 nor3 n2442 n2440 n1316 n1404  @31BG\ng179 nor2 n2032 n2022 n2022  @12O\ng180 nor2 n1413 n2579 n2589  @37U\ng181 buf_ef n1815 PN5_A0  @5CD\ng182 buf_ef n1954 PN36_A14  @9E\ng183 nor2 n1952 n1679 n1896  @10BZ\ng184 nor2 n1681 n1928 n1891  @4BB\ng185 nor3 n189 n1821 n193 n1871  @6CB\ng186 nor3 n2144 n2318 n583 n2203  @15AN\ng187 nor2 n2478 n2513 n2671  @31AN\ng188 nor2 n1320 n2514 n2403  @32AZ\ng189 nor6 n2714 n1928 n1953 n1689 n1719 n2012 n1933  @13BC\ng190 nor2 n2413 n2403 n2729  @27AX\ng191 nor2 n2378 n2374 n2374  @25AG\ng192 nor2 n2259 n2172 n830  @21AU\ng193 buf_ef n2109 PN38_NMREQ  @5E\ng194 nor2 n1912 n1728 n1839  @8BZ\ng195 nor2 n2700 n2679 n2628  @46AC\ng196 nor3 n401 n1988 n406 n2035  @12CB\ng197 nor2 n2160 n788 n2283  @21T\ng198 nor2 n2399 n2398 n2211  @26J\ng199 nor3 n1978 n2084 n2105 n1702  @15BE\ng200 nor2 n2699 n2649 n2687  @46AE\ng201 buf_ef n2147 PN3_NRD  @11E\ng202 nor3 n2058 n2060 n2060 n2060  @13BO\ng203 nor2 n2553 n2733 n2530  @33BR\ng204 nor2 n2163 n2101 n2090  @15AY\ng205 nor2 n1306 n2442 n1316  @32BJ\ng206 nor2 n2374 n2373 n2373  @25AI\ng207 nor2 n1740 n1837 n1843  @4Y\ng208 nor2 n149 n2054 n2054  @13BT\ng209 nor2 n2459 n2434 n2477  @29Y\ng210 nor2 n737 n2219 n749  @19CB\ng211 nor2 n2142 n1881 n1881  @16AB\ng212 nor2 n2587 n2561 n2547  @36U\ng213 nor2 n2440 n2406 n1082  @28BB\ng214 nor2 n2334 n2285 n2313  @23BH\ng215 buf_ef n2295 PN20_KB1  @22E\ng216 nor2 n2031 n1895 n1954  @12S\ng217 inv BOND_BLACKS n1195  @46CD\ng218 nor2 n1373 n2571 n2589  @35U\ng219 nor2 n1073 n2440 n2442  @28BJ\ng220 nor2 n2179 n1914 n1839  @16BZ\ng221 buf_ef n106 n110  @3G\ng222 nor2 n2455 n2434 n2475  @29AB\ng223 nor2 n1797 n1773 n1809  @4BQ\ng224 nor3 n2530 n2733 n2729 n2735  @34AT\ng225 nor2 n1821 n149 n1839  @5BZ\ng226 nor2 n2406 n2403 n2413  @26AZ\ng227 nor2 n2514 n2733 n2403  @31AX\ng228 oc PN25_D3 n1253  @31F\ng229 nor2 n1408 n2582 n2735  @37AZ\ng230 nor2 n1404 n2575 n1408  @36BB\ng231 nor2 n668 n2172 n1843  @18Y\ng232 nor3 n2101 n1914 n1729 n1918  @13AY\ng233 buf_ef PN12_NINT n935  @23CD\ng234 pin_ts PN10_A5 n737 ~n998  @19CD\ng235 nor2 n193 n1680 n1873  @6BZ\ng236 buf_ef n2161 PN2_NWR  @13E\ng237 nor2 n406 n1784 n1873  @12BZ\ng238 pin_ts PN7_A2 n401 ~n998  @12CD\ng239 nor2 n2639 n2563 n2547  @40U\ng240 nor2 n1733 n1880 n2198  @4AB\ng241 inv n998 n2259  @26CA\ng242 pin_ts PN5_A0 n189 ~n998  @5CD\ng243 nor2 n2485 n2513 n2528  @31AB\ng244 inv n2318 n2342  @8Z\ng245 nor2 n2035 n1677 n1896  @13BZ\ng246 buf_ef n2541 PN25_D3  @33F\ng247 nor2 n2604 n2574 n2547  @38U\ng248 buf_ef n2564 PN26_KB4  @34E\ng249 nor2 n1852 n1809 n2355  @6BQ\ng250 nor3 n2065 n2032 n2066 n2073  @13S\ng251 nor2 n2679 n1797 n1852  @5BO\ng252 nor2 n2582 n2403 n2735  @36AX\ng253 pin_ts PN35_NRAS n1913 ~n1968  @26CD\ng254 nor2 n2500 n2495 n2211  @30J\ng255 nor2 n2042 n2059 n2059  @13K\ng256 buf_ef n2381 PN21_D1  @25F\ng257 nor2 n1988 n1720 n1839  @11BZ\ng258 pin_ts PN6_A1 n301 ~n998  @9CD\ng259 nor3 n301 n1912 n305 n1952  @9CB\ng260 nor2 n2586 n1373 n2587  @35W\ng261 nor2 n1809 n1773 n2355  @5BS\ng262 nor2 n2084 n1953 n2012  @13BE\ng263 inv PN32_NBCPU n2145  @34CD\ng264 nor2 n2162 n1922 n2714  @15BA\ng265 buf_ef n2495 PN24_KB3  @30E\ng266 nor2 n2704 n2623 n2684  @46AM\ng267 buf_ef n2280 PN18_D0  @21F\ng268 buf_ef n2614 PN29_D5  @39F\ng269 nor2 n305 n1698 n1873  @9BZ\ng270 oc PN30_D6 n1511  @41F\ng271 buf_ef PN1_NCAS n2279  @28CD\ng272 buf_ef PN4_NDRAMWE n2087 n2087  @30CD\ng273 inv n2172 n1978  @13W\ng274 nor2 n890 n2275 n913  @23BV\ng275 nor2 n2643 n2211 n2645  @40J\ng276 buf_ef n2577 PN27_D4  @37F\ng277 buf_ef n2398 PN23_KB2  @26E\ng278 nor4 n2066 n2356 n2354 n2326 n2114  @14R\ng279 nor2 n2034 n1921 n1921  @8AP\ng280 oc PN27_D4 n1379  @35F\ng281 nor2 n2488 n2513 n2527  @31Y\ng282 buf_ef PN34_NROMCS n1289  @32CD\ng283 nor2 n2521 n2729 n2530  @31BT\ng284 buf_ef n2448 PN22_D2  @29F\ng285 nor2 n835 n2326 n2275  @22BV\ng286 nor2 n2650 n1513 n2589  @41W\ng287 pin_ts PN8_A3 n537 ~n998  @14CD\ng288 nor2 n512 n2042 n2161  @14K\ng289 nor4 n1739 n2336 n2347 n2342 n2411  @4T\ng290 nor2 n2663 n2666 n2589  @43W\ng291 nor4 n2735 n2699 n2700 n2644 n2714  @48AD\ng292 inv n1195 n2442  @30BL\ng293 nor4 n2434 n2318 n2326 n2177 n2336  @24AA\ng294 buf_ef n2675 PN31_D7  @45F\ng295 nor2 n2055 n2058 n2058  @13BQ\ng296 buf_ef n2670 PN30_D6  @43F\ng297 nor3 n2090 n2034 n2040 n1918  @13AW\ng298 nor2 n540 n1689 n1873  @14BZ\ng299 nor2 n2487 n2513 n2401  @31V\ng300 nor2 n674 n2326 n2326  @18S\ng301 inv n2498 n2411  @31S\ng302 nor3 n537 n2083 n540 n2116  @14CB\ng303 nor4 n2733 n2704 n2696 n2644 n2714  @48AL\ng304 inv n2275 n2239  @20BT\ng305 nor2 n2083 n1713 n1839  @14BZ\ng306 inv n1543 n2610  @43AT\ng307 nor2 n1692 n1723 n1902  @4AP\ng308 nor2 n2054 n2055 n2055  @13BR\ng309 nor2 n2509 n2733 n2514  @30AZ\ng310 nor2 n1423 n2530 n2735  @37BR\ng311 inv n1032 n2065  @26BF  note=mk7_CAS_delay_1\ng312 inv n1030 n1032  @26BH  note=mk7_CAS_delay_2\ng313 inv n1027 n1030  @26BJ  note=mk7_CAS_delay_3\ng314 inv n2389 n1027  @26BL  note=mk7_CAS_delay_4\ng315 inv n2239 n2207 n2207  @19BT  note=mk7_ADSEL_delay_1\nb0 tffs n1744 - ~n17 -  @1BY\nb1 tffs n17 - ~n19 -  @1BV\nb2 tffs n19 - ~n21 -  @1BS\nb3 tffs n21 - ~n23 -  @1BP\nb4 tffs n23 - ~n1818 -  @1BM\nb5 ctr n2105 n2283 n1746 n1882 ~n1771 GND  @1BJ\nb6 ctr n1677 n2012 n1822 n1885 ~n1771 -  @1BG\nb7 ctr n1679 n1953 n1681 n1887 ~n1771 -  @2BD\nb8 ctr n1680 n1928 n1827 n1891 ~n1771 n1746  @2BA\nb9 ctr n1684 n1933 n1833 n1793 ~n1771 n1746  @2AX\nb10 ctr n1688 n1719 n1690 n1899 ~n1771 n1746  @2AU\nb11 ctr n1784 n1723 n1849 n1902 ~n1733 -  @2AO\nb12 ctr n1689 n1724 n1692 n1804 ~n1733 -  @2AR\nb13 ctr n1702 n1918 n1706 n1907 ~n1733 n1761  @2AI\nb14 ctr n1914 n2040 n1713 n1729 ~n1733 n1761  @2AF\nb15 tffs n1720 n1880 ~n1740 -  @2Z\nb16 tffs n1727 n1843 ~n1739 -  @2T\nb17 tffs n1728 n1837 ~n1743 -  @2W\nb18 tffs n1726 n2336 ~n1745 -  @2Q\nb19 tffs n2326 n2347 ~n1748 -  @2N\nb20 tffs - n2342 ~n1752 -  @2L\nb21 tffs n1742 - ~n106 -  @2I\nb22 g4 n1936 n1720 n1880 n1843 n1837  @8AB\nb23 lat n2285 n2403 n1698 ~n2162  @14BK\nb24 lat n2316 n2180 n2080 ~n2246  @19AK\nb25 lat - n2175 n2109 ~n2246  @19AI\nb26 lat n2560 - n2280 ~n2331  @22N\nb27 lat n2561 - n2280 ~n2328  @22O\nb28 lat - n2339 n2280 ~n2332  @22L\nb29 lat n2556 - n2381 ~n2331  @25N\nb30 lat n2574 - n2381 ~n2328  @25O\nb31 lat - n2401 n2381 ~n2332  @25L\nb32 lat n2563 - n2448 ~n2328  @28P\nb33 lat n2559 - n2448 ~n2331  @28N\nb34 lat - n2527 n2448 ~n2332  @28L\nb35 dff2 n2355 - n2444 n2478 ~n1312  @29AO\nb36 dff2 - n2470 n2449 n2480 ~n1312  @29AL\nb37 dff2 - n2471 n2450 n2481 ~n1312  @29AI\nb38 dff2 - n2472 n2454 n2483 ~n1312  @29AF\nb39 dff2 - n2474 n2455 n2485 ~n2498  @29AC\nb40 dff2 - n2475 n2459 n2488 ~n2498  @29Z\nb41 dff2 - n2477 n2458 n2487 ~n2498  @29W\nb42 lat n2571 - n2541 ~n2331  @31N\nb43 lat n2690 - n2541 ~n2328  @31O\nb44 lat - n2528 n2541 ~n2332  @31L\nb45 lat n2688 - n2577 ~n2328  @34P\nb46 lat - n2661 n2577 ~n2332  @34L\nb47 lat n2579 - n2577 ~n2331  @34N\nb48 lat n2613 - n2614 ~n2331  @37N\nb49 lat - n2662 n2614 ~n2332  @37L\nb50 lat n2357 - n2663 ~n2638  @38AN\nb51 lat n2610 - n2650 ~n2638  @38AL\nb52 lat n2623 - n2609 ~n2638  @38AJ\nb53 lat n2656 - n2602 ~n2638  @38AH\nb54 lat n2649 - n2586 ~n2638  @38AF\nb55 lat n2625 - n2559 ~n2638  @38AD\nb56 lat n2627 - n2556 ~n2638  @38AA\nb57 lat n2628 - n2560 ~n2638  @39Y\nb58 lat n1514 - n2670 ~n2331  @41N\nb59 lat - n2665 n2670 ~n2332  @41L\nb60 lat - n2671 n2675 ~n2332  @44L\nb61 lat n2667 - n2675 ~n2331  @44N\nXTAL xtal n110 : PN39_OSC  @3E\nTAPECELL tapecell n2645 : n2723 n2722 PN28_TAPELS  @47D\nVENC venc PN15_U PN16_V PN17_NY : n2302 n1418 n2521 n2553 n2430 n1306 n2334 n2361 n2594 n2640 n2451 n1521 n2660 n1543  @35CA\nb106 dff2 n2466 n1160 n2513 n2339 ~n2498  @29T\nb107 ctr n1698 n1731 n1761 n1904 ~n1733 -  @2AL\nb108 tffs n1713 n1729 ~n1733 n1761  @2AC\nb109 lat n2547 n2177 n1978 ~n1843  @10W\n";</script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id), T_HZ = 3.5e6, FRAME_T = 69888;
+  const RGB = SPEC.RGB, PLACE = { x0: 85, y0: 60 };   // where the 256 x 192 picture sits in SpecUla's frame (found by ula6c/runspec.js)
+  let rom = null, m = null, running = false, ranT = 0, speed = 0, snap = null, snapName = '';
+  const pc = { checks: 0, bad: 0, last: null };
+  const say = (t, cls) => { $('msg').textContent = t; $('msg').className = 'msg' + (cls ? ' ' + cls : ''); };
+
+  function build() {
+    m = new SpecUla(Z80, new Ula6cFast(ULA_NET), rom);
+    const mode = $('start').value;
+    if (snap || mode === 'boot') {
+      const e = new SpecMachine(); e.loadRom(rom); e.reset();
+      if (snap) e.loadSnapshot(snap, snapName); else e.run(3.5e6 * 2.5);
+      m.adopt(e);
+    }
+    let first = true; m.onFrame = () => { if (first) first = false; else pc.fresh = true; };   // the first frame is only part of one
+    m.T0 = m.T; ranT = 0; drawn = -1; pictureCheck(null, 0, 0, null, true, PLACE); Object.assign(pc, { checks: 0, bad: 0, last: null });
+    for (const b of ['btnRun', 'btnReset']) $(b).disabled = false;
+  }
+  function setRunning(on) { running = on; $('btnRun').textContent = on ? 'Pause' : 'Run'; if (on) { last = performance.now(); requestAnimationFrame(loop); } else { draw(); meters(); } }
+
+  // ---- keys ----
+  const press = (name, down) => { if (m) m.key(name, down); const b = document.querySelector(`#kbd button[data-k="${name}"]`); if (b) b.classList.toggle('down', down); };
+  const keyNames = e => {
+    if (e.key === 'Enter') return ['ENTER']; if (e.key === ' ') return ['SPACE']; if (e.key === 'Shift') return ['CAPS SHIFT'];
+    if (e.key === 'Control' || e.key === 'Alt') return ['SYMBOL SHIFT']; if (e.key === 'Backspace') return ['CAPS SHIFT', '0'];
+    const arr = { ArrowLeft: '5', ArrowDown: '6', ArrowUp: '7', ArrowRight: '8' }[e.key]; if (arr) return ['CAPS SHIFT', arr];
+    if (/^[a-z0-9]$/i.test(e.key)) return [e.key.toUpperCase()]; return null;
+  };
+  $('tv').addEventListener('keydown', e => { const k = keyNames(e); if (!k) return; e.preventDefault(); for (const n of k) press(n, true); });
+  $('tv').addEventListener('keyup', e => { const k = keyNames(e); if (!k) return; e.preventDefault(); for (const n of k) press(n, false); });
+  $('tv').addEventListener('blur', () => { for (const r of SPECULA_KEYS) for (const k of r) press(k, false); });
+  let latch = null; const held = new Set();
+  { const rows = [[3, 4], [2, 5], [1, 6], [0, 7]], kb = $('kbd');          // 1-5 6-0, Q-T Y-P, A-G H-ENTER, CAPS-V B-SPACE
+    for (const [l, r] of rows) for (const k of [...SPECULA_KEYS[l], ...SPECULA_KEYS[r].slice().reverse()]) {
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.k = k;
+      b.textContent = k === 'CAPS SHIFT' ? 'CAPS' : k === 'SYMBOL SHIFT' ? 'SYMB' : k; b.title = k;
+      b.addEventListener('pointerdown', e => { e.preventDefault(); if (k.endsWith('SHIFT')) { if (latch === k) { latch = null; press(k, false); } else { if (latch) press(latch, false); latch = k; press(k, true); } return; } press(k, true); held.add(k); });
+      const up = () => { if (!held.has(k)) return; held.delete(k); setTimeout(() => { press(k, false); if (latch) { press(latch, false); latch = null; } }, 400); };
+      b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); kb.appendChild(b);
+    } }
+
+  // ---- the run loop: as fast as it goes, 14 ms of work per screen refresh ----
+  let last = 0;
+  function loop(now) {
+    if (!running) return;
+    const dt = Math.max(1, now - last); last = now;
+    const t0 = performance.now(), T0 = m.T;
+    try { while (performance.now() - t0 < 14) m.run(20000); }
+    catch (e) { say('The machine stopped: ' + e.message, 'err'); setRunning(false); return; }
+    ranT += m.T - T0; speed = speed * 0.8 + 0.2 * ((m.T - T0) / T_HZ) / (dt / 1000);
+    if (pc.fresh) { pc.fresh = false; check(); }
+    draw(); meters();
+    requestAnimationFrame(loop);
+  }
+
+  // ---- the picture: the last whole frame, with the frame in progress laid over it (it is slow to finish one) ----
+  const tv = $('tv').getContext('2d'), img = tv.createImageData(352, 288); let drawn = -1;
+  function draw() {
+    if (!m) return;
+    const d = img.data, W = m.W, place = PLACE, X0 = Math.max(0, place.x0 - 48), Y0 = Math.max(0, place.y0 - 48);
+    for (let y = 0, i = 0; y < 288; y++) { const fy = Y0 + y, src = fy < m.y ? m.fb : m.frame;
+      for (let x = 0; x < 352; x++, i += 4) { const c = fy < m.H ? src[fy * W + X0 + x] : 0, rgb = RGB[c] ?? 0; d[i] = rgb >> 16; d[i + 1] = rgb >> 8 & 255; d[i + 2] = rgb & 255; d[i + 3] = 255; } }
+    tv.putImageData(img, 0, 0);
+  }
+  function check() {
+    const r = pictureCheck(m.frame, m.W, m.H, m.ram); pc.checks++; pc.last = r;
+    const pill = $('pcPill');
+    if (!r.found) { pill.className = 'pill warn'; pill.textContent = 'no picture'; $('pcText').textContent = 'The 256 × 192 picture was not found in the last frame (a blank or changing screen).'; return; }
+    if (r.bad) pc.bad++;
+    pill.className = 'pill ' + (r.bad ? 'bad' : 'ok'); pill.textContent = r.bad ? r.bad + ' dots differ' : 'matches';
+    $('pcText').textContent = `${r.n} dots compared (frame ${m.frames}); ${pc.bad} of ${pc.checks} frames checked had differences.`;
+  }
+  function meters() {
+    if (!m) return;
+    $('mSpeed').textContent = running ? (speed * 100).toFixed(1) + '% of a Spectrum' : 'paused';
+    $('mTime').textContent = (ranT / T_HZ).toFixed(2) + ' s'; $('mFrames').textContent = m.frames; $('mLines').textContent = m.lastLines || '–';
+    $('mInt').textContent = m.ints; $('mHold').textContent = m.holds.toLocaleString(); $('mEv').textContent = m.u.events.toLocaleString();
+    $('mPc').textContent = m.cpu.pc.toString(16).toUpperCase().padStart(4, '0') + 'h';
+  }
+
+  // ---- files ----
+  function crc32(b) { let c = ~0; for (let i = 0; i < b.length; i++) { c ^= b[i]; for (let k = 0; k < 8; k++) c = c >>> 1 ^ (c & 1 ? 0xEDB88320 : 0); } return (~c >>> 0).toString(16).toUpperCase().padStart(8, '0'); }
+  function useRom(u) {
+    if (u.length !== 16384) { say('That is not a 48K ROM image: it should be 16,384 bytes.', 'err'); return; }
+    rom = u; try { localStorage.setItem('specula-rom', btoa(String.fromCharCode(...u))); } catch (e) {}
+    build(); say(`ROM loaded (CRC32 ${crc32(u)}).` + ($('start').value === 'boot' && !snap ? ' The emulator ran the start-up; the gate-level machine has taken over at the copyright message.' : ' Starting from power-on: the memory test takes a few seconds of Spectrum time, which here is minutes.'), 'ok');
+    setRunning(true);
+  }
+  $('romFile').onchange = async e => { const f = e.target.files[0]; if (f) useRom(new Uint8Array(await f.arrayBuffer())); };
+  $('snaFile').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return; snap = new Uint8Array(await f.arrayBuffer()); snapName = f.name;
+    if (!rom) { say('Load the ROM first; the snapshot will start then.'); return; }
+    try { build(); say(`Snapshot ${f.name} loaded into the gate-level machine.`, 'ok'); setRunning(true); } catch (err) { snap = null; say('That snapshot could not be read: ' + err.message, 'err'); }
+  };
+  $('btnRun').onclick = () => setRunning(!running);
+  $('btnReset').onclick = () => { snap = null; build(); say('Started again.'); if (!running) setRunning(true); };
+  $('start').onchange = () => { if (rom) { snap = null; build(); say('Started again.'); if (!running) setRunning(true); } };
+  $('btnReport').onclick = () => {
+    if (!m) return;
+    $('report').value = ['Spectrum ULA Test Bench report', 'Design version: ' + $('ver').textContent, 'Logic: gate-level netlist (6c001.net), fast engine',
+      'ROM: CRC32 ' + (rom ? crc32(rom) : 'none'), 'Start: ' + (snap ? 'snapshot ' + snapName : $('start').value), 'Spectrum time run: ' + (ranT / T_HZ).toFixed(2) + ' s',
+      'Frames: ' + m.frames + ', lines between vertical syncs: ' + m.lastLines, 'Interrupts: ' + m.ints + ', T-states held: ' + m.holds, 'PC: ' + m.cpu.pc.toString(16).toUpperCase() + 'h',
+      'Picture check: ' + pc.checks + ' frames checked, ' + pc.bad + ' with differences' + (pc.last && pc.last.found ? `; the last: ${pc.last.bad} of ${pc.last.n} dots differ` : ''),
+      'Browser: ' + navigator.userAgent].join('\n');
+  };
+  $('btnCopy').onclick = () => { const t = $('report').value; if (!t) return; navigator.clipboard.writeText(t).then(() => say('Report copied.', 'ok'), () => { $('report').select(); say('Select-all done: press Ctrl+C to copy.'); }); };
+  try { const s = localStorage.getItem('specula-rom'); if (s) { const u = Uint8Array.from(atob(s), c => c.charCodeAt(0)); if (u.length === 16384) { rom = u; build(); say(`ROM remembered from last time (CRC32 ${crc32(u)}). Press Run.`); draw(); } } } catch (e) {}
+})();
+</script>
+</body>
+</html>

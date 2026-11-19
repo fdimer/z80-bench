@@ -119,6 +119,7 @@ class Ula6cSim {
     }
     this.t = t;
   }
+  drivesPin(n) { return (this.drivers[n] || []).some(([e, i]) => e.drive[i] !== null); }   // does a chip cell drive this pin net now?
   at(t, cb) { this.push({ t: Math.max(t, this.t), s: this.seq++, cb, dead: false }); }   // call cb at time t (for a testbench)
   settle(limit = 500) { for (const e of this.els) this.update(e); this.runTo(this.t + limit); }
   venc() { const e = this.els.find(x => x.type === 'venc'); return e ? e.ins.map((n, i) => this.in(e, i)) : null; }

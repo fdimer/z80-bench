@@ -39,7 +39,9 @@ m.cpu.pc = 0x8000;
 while (m.cpu.pc !== 0x8004) m.step();                    // to the HALT: the replay starts in step with the frame
 
 // ---- the gate-level ULA ----
-const sim = new Ula6cSim(fs.readFileSync(path.join(__dirname, '6c001.net'), 'utf8'));
+// the engine: ula6c/sim.js, or the same simulation compiled for speed (ULA_ENGINE=fast, ula6c/fastsim.js)
+const sim = process.env.ULA_ENGINE === 'fast' ? new (require('./fastsim.js').Ula6cFast)(fs.readFileSync(path.join(__dirname, '6c001.net'), 'utf8'))
+  : new Ula6cSim(fs.readFileSync(path.join(__dirname, '6c001.net'), 'utf8'));
 const OSC = 1000 / 14, P = 4 * OSC;                       // ns per oscillator period, per T-state
 const D = { addr: +(process.env.TB_ADDR || 40), ctl: +(process.env.TB_CTL || 30), cac: +(process.env.TB_CAC || 100), off: +(process.env.TB_HOLD || 150) };
 const PIN = { A14: 'PN36_A14', A15: 'PN37_A15', MREQ: 'PN38_NMREQ', RD: 'PN3_NRD', WR: 'PN2_NWR', IORQ: 'PN33_NIORQ',
@@ -48,8 +50,7 @@ const AP = ['PN5_A0', 'PN6_A1', 'PN7_A2', 'PN8_A3', 'PN9_A4', 'PN10_A5', 'PN11_A
 const DP = ['PN18_D0', 'PN21_D1', 'PN22_D2', 'PN25_D3', 'PN27_D4', 'PN29_D5', 'PN30_D6', 'PN31_D7'];
 const KP = ['PN19_KB0', 'PN20_KB1', 'PN23_KB2', 'PN24_KB3', 'PN26_KB4'];
 for (const n of ['MREQ', 'RD', 'WR', 'IORQ']) sim.set(PIN[n], 1);
-const aDriver = sim.drivers[AP[0]].map(([e]) => e).find(e => e.type === 'pin_ts');
-const ulaDrivesA = () => aDriver.drive[0] !== null;
+const ulaDrivesA = () => sim.drivesPin(AP[0]);
 const pinsVal = (names) => names.reduce((v, n, i) => v | ((sim.get(n) ?? 1) & 1) << i, 0);
 
 // the CPU's address: A14, A15 straight to the ULA; A0-A6 through IC3/IC4 and 330 ohms (the ULA's own drive wins);
