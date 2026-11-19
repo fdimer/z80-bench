@@ -4,7 +4,7 @@
 // same page without the document wrapper (for a preview host).
 const fs = require('fs'), path = require('path'), { execSync } = require('child_process');
 const here = f => path.join(__dirname, f), read = f => fs.readFileSync(here(f), 'utf8');
-let ver = 'unknown'; try { ver = execSync('git log -1 --format=%h\\ %cs', { cwd: __dirname }).toString().trim(); } catch (e) {}
+let ver = 'unknown'; try { ver = execSync("git log -1 --format='%h %cs' -- . ':!spectrum-ula.html'", { cwd: __dirname }).toString().trim(); } catch (e) {}
 let page = read('page.src.html').replace(/\/\*INCLUDE:([^*]+)\*\//g, (_, f) => { const s = read(f); if (s.includes('</script')) throw new Error(f + ' contains a script end tag'); return '\n' + s; })
   .replace('/*NET*/', () => JSON.stringify(read('6c001.net'))).replace('__VERSION__', ver);
 const cut = page.indexOf('</style>') + 8;      // the title, fonts and style go in the head of the standalone page
