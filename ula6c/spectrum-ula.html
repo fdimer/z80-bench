@@ -106,7 +106,7 @@ footer { border-top: 1px solid var(--line); padding-top: 14px; display: flex; fl
 
   <footer>
     <p class="small"><b>What is checked elsewhere.</b> The testbench in the repository runs the emulator's Z80 against this ULA and compares cycle by cycle: contention (every hold agrees with Fuse's figures), the floating bus, port FE, ROM select, the CPU's reads of the lower RAM, the ULA's screen reads and the picture. Its README says where it stands.</p>
-    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6790/ULA6C001/1 revision 3 (10 October 1983, the copy marked in red for mark 7) and the cell circuits 6C001/2, /3 and /4, from the Ferranti archive catalogued in 2026 by Happy Little Diodes (<a href="https://youtu.be/jiW3P1rJRMc">watch the video about the archive</a>); the board from Timex's issue 6A circuit diagram. The netlist, the simulation and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/spectrum-ULA/ula6c">spectrum-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">b68510b 2026-11-19</span>.</p>
+    <p class="small"><b>Sources.</b> Ferranti logic diagram LD6790/ULA6C001/1 revision 3 (10 October 1983, the copy marked in red for mark 7) and the cell circuits 6C001/2, /3 and /4, from the Ferranti archive catalogued in 2026 by Happy Little Diodes (<a href="https://youtu.be/jiW3P1rJRMc">watch the video about the archive</a>); the board from Timex's issue 6A circuit diagram. The netlist, the simulation and how they were checked are in the <a href="https://github.com/fdimer/z80-bench/tree/spectrum-ULA/ula6c">spectrum-ULA branch of fdimer/z80-bench</a>. Design version: <span id="ver">4f39a33 2026-11-19</span>.</p>
     <p class="small"><b>Terms of use.</b> The archive's documents are for preserving material of historical interest and for non-commercial, educational and archival research only; commercial use of them or their contents, including in connection with the manufacture, marketing or sale of goods, is prohibited by Sky UK Limited. This page and the netlist are made from those contents and carry the same terms: strictly not for commercial use of any kind. The code is under the PolyForm Noncommercial License 1.0.0. The Spectrum ROM is not part of this project.</p>
     <p class="small"><b>Not modelled.</b> The tape, the speaker's sound, the colour encoder's analogue side (the picture is the colour lines into it), and the upper RAM's own chips. The gate delays are nominal (the archive has none for the 6C000 series), and the Z80's timing follows the data sheet's shape with fixed delays.</p>
   </footer>
@@ -1139,16 +1139,18 @@ class SpecMachine {
   ftAt(ct) { return (this.ft + ct) % SPEC.FRAME_T; }
   memCycle(a) { this.catchUp(); const t0 = this.ct, h0 = this.waits; this.cont(a); this.wq.push([this.waits - h0, t0]); return this.ct; }
   // an I/O cycle (4 T-states). The ULA is selected by A0 low and holds the clock from the second T-state; an address
-  // in 4000h-7FFFh is held as for memory, at each T-state if the ULA is not selected
+  // in 4000h-7FFFh is held as for memory, at each T-state if the ULA is not selected. Returns when the data is taken:
+  // for a port the ULA answers, after its hold; for an odd port, 3 T-states in, where the floating bus is read (as in
+  // Fuse, and as the gate-level ULA on the spectrum-ULA branch gives it)
   ioCycle(p) {
     this.catchUp(); const hi = SpecMachine.contendedAddr(p), ula = !(p & 1), t0 = this.ct, h0 = this.waits;
     const c1 = () => { if (this.log) this.log.push([this.ct, p, 'io']); const d = this.delay(this.ftAt(this.ct)); this.ct += d; this.waits += d; };
     const free = () => { };
     let at;
-    if (!hi && !ula) { free(); at = this.ct + 1; this.ct += 4; }
+    if (!hi && !ula) { free(); at = this.ct + 3; this.ct += 4; }
     else if (!hi && ula) { free(); this.ct += 1; c1(); at = this.ct; this.ct += 3; }
     else if (hi && ula) { c1(); this.ct += 1; c1(); at = this.ct; this.ct += 3; }
-    else { for (let k = 0; k < 4; k++) { c1(); if (k === 1) at = this.ct; this.ct += 1; } }
+    else { for (let k = 0; k < 4; k++) { c1(); if (k === 3) at = this.ct; this.ct += 1; } }
     this.wq.push([this.waits - h0, t0]); return at;
   }
   // The chips: IC1 the ULA, IC2 the Z80, IC5 the ROM, IC6-IC13 the lower RAM (4116, D0-D7 in order, row A0-A6 and
