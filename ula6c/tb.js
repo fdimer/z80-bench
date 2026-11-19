@@ -194,11 +194,9 @@ function act(c, rise) {
     if (!rise && T === 4) {
       if (k === 'IR') {
         const v = pinsVal(DP);
-        if (c.a & 1) {   // the floating bus: Fuse reads it 3 T-states into the I/O cycle (src/spectrum.js at 1)
-          const fs = m.floating(((Math.round(c.emuT) + 3) % SPEC.FRAME_T + SPEC.FRAME_T) % SPEC.FRAME_T);
-          rep.floatN++; if (fs !== 0xFF || v !== 0xFF) rep.floatData = (rep.floatData || 0) + 1;
-          if (v !== fs) rep.floatBad.push({ emuT: Math.round(c.emuT) % SPEC.FRAME_T, fuse: fs.toString(16), ula: v.toString(16) });
-          if (v !== c.d) rep.floatEmu = (rep.floatEmu || 0) + 1;
+        if (c.a & 1) {   // the floating bus: Fuse reads it 3 T-states into the I/O cycle, after any holds; so does src/spectrum.js
+          rep.floatN++; if (c.d !== 0xFF || v !== 0xFF) rep.floatData = (rep.floatData || 0) + 1;
+          if (v !== c.d) rep.floatBad.push({ emuT: Math.round(c.emuT) % SPEC.FRAME_T, port: c.a.toString(16), emu: c.d.toString(16), ula: v.toString(16) });
         }
         else { rep.feN++; if ((v & 0x5F) !== (c.d & 0x5F)) rep.ioBad.push({ port: c.a.toString(16), emu: c.d.toString(16), ula: v.toString(16) }); }
       }
@@ -252,7 +250,7 @@ console.log(`INT: falls at T`, iF, 'rises at T', iR, `(T-state 0 is placed where
 console.log(`CPU reads of the lower RAM: ${rep.lowN}, ${rep.dataBad.length} differ`, rep.dataBad.slice(0, 4));
 console.log(`ROM select: ${rep.romcsBad.length} memory cycles wrong`, rep.romcsBad.slice(0, 3));
 console.log(`port FE reads: ${rep.feN}, ${rep.ioBad.length} differ (bits 0-4, 6)`, rep.ioBad.slice(0, 4));
-console.log(`floating bus (odd ports): ${rep.floatN} reads, ${rep.floatData || 0} of them with screen data; ${rep.floatBad.length} differ from Fuse's timing (the byte the ULA is fetching 3 T-states into the I/O cycle)`, rep.floatBad.slice(0, 4), `; src/spectrum.js reads it 2 T-states earlier and differs in ${rep.floatEmu || 0}`);
+console.log(`floating bus (odd ports): ${rep.floatN} reads, ${rep.floatData || 0} of them with screen data; ${rep.floatBad.length} differ from the emulator (which, like Fuse, takes the byte the ULA is fetching 3 T-states into the I/O cycle, after any holds)`, rep.floatBad.slice(0, 4));
 // the ULA's screen reads against the emulator's: each fetch's frame T-state (from CAS falling) and address
 const fT = fetches.map(f => ({ ft: ((hwT(f.t) - off0) % SPEC.FRAME_T + SPEC.FRAME_T) % SPEC.FRAME_T, a: 0x4000 + f.off }));
 let fBest = null;

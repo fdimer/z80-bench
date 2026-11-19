@@ -339,16 +339,18 @@ class SpecMachine {
   ftAt(ct) { return (this.ft + ct) % SPEC.FRAME_T; }
   memCycle(a) { this.catchUp(); const t0 = this.ct, h0 = this.waits; this.cont(a); this.wq.push([this.waits - h0, t0]); return this.ct; }
   // an I/O cycle (4 T-states). The ULA is selected by A0 low and holds the clock from the second T-state; an address
-  // in 4000h-7FFFh is held as for memory, at each T-state if the ULA is not selected
+  // in 4000h-7FFFh is held as for memory, at each T-state if the ULA is not selected. Returns when the data is taken:
+  // for a port the ULA answers, after its hold; for an odd port, 3 T-states in, where the floating bus is read (as in
+  // Fuse, and as the gate-level ULA on the spectrum-ULA branch gives it)
   ioCycle(p) {
     this.catchUp(); const hi = SpecMachine.contendedAddr(p), ula = !(p & 1), t0 = this.ct, h0 = this.waits;
     const c1 = () => { if (this.log) this.log.push([this.ct, p, 'io']); const d = this.delay(this.ftAt(this.ct)); this.ct += d; this.waits += d; };
     const free = () => { };
     let at;
-    if (!hi && !ula) { free(); at = this.ct + 1; this.ct += 4; }
+    if (!hi && !ula) { free(); at = this.ct + 3; this.ct += 4; }
     else if (!hi && ula) { free(); this.ct += 1; c1(); at = this.ct; this.ct += 3; }
     else if (hi && ula) { c1(); this.ct += 1; c1(); at = this.ct; this.ct += 3; }
-    else { for (let k = 0; k < 4; k++) { c1(); if (k === 1) at = this.ct; this.ct += 1; } }
+    else { for (let k = 0; k < 4; k++) { c1(); if (k === 3) at = this.ct; this.ct += 1; } }
     this.wq.push([this.waits - h0, t0]); return at;
   }
   // The chips: IC1 the ULA, IC2 the Z80, IC5 the ROM, IC6-IC13 the lower RAM (4116, D0-D7 in order, row A0-A6 and

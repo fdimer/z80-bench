@@ -86,7 +86,8 @@ INT falls). With that (`SPEC_ROM=... node ula6c/tb.js 4`):
   cycles to 4000h-7FFFh held 6, 5, 4, 3, 2, 1, 0, 0 from T-state 14,335, and I/O cycles as Fuse has them (even ports
   N:1 C:3, odd ports N:4, contended high byte C:1 C:3 or C:1 C:1 C:1 C:1);
 - the floating bus: every read of an odd port returns what Fuse returns (the byte the ULA is fetching 3 T-states into
-  the I/O cycle). The emulator in `src/spectrum.js` looks 2 T-states earlier than Fuse, so it differs;
+  the I/O cycle, after any holds), and the same as the emulator in `src/spectrum.js`. (The emulator used to look 2
+  T-states earlier; this testbench found it, and it was corrected on the `spectrum` branch.);
 - 448 dots a line, 312 lines a frame (19.968 ms); INT 32 T-states once a frame; 3.5 MHz CPU clock when uncontended;
 - two RAS cycles of two CAS each per fetch, as on Ferranti's timing sheet; every one of the ULA's screen reads goes to
   the address the emulator expects;
